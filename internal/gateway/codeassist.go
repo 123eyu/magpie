@@ -567,6 +567,12 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 		// for them, or any asked to draw (a plugin's that says it does)
 		gen["responseModalities"] = []string{"TEXT", "IMAGE"}
 	}
+	if len(r.ImageConfig) > 0 {
+		// the size and shape a Gemini client asked its image drawn at, as
+		// it asked them: left out, the model drew at its default size
+		// (#3820)
+		gen["imageConfig"] = r.ImageConfig
+	}
 	if len(gen) > 0 {
 		req["generationConfig"] = gen
 	}
