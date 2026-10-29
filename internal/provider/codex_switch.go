@@ -425,6 +425,8 @@ func KeepOnAnAccountWithRoom(ctx context.Context) {
 		c, cancel := context.WithTimeout(ctx, time.Minute)
 		noteCodexUsedUp(CodexUsedUp(c))
 		cancel()
+		// Codex's own sign-in refused for good, or signed in again since
+		noteCodexGoneNow()
 		t.Reset(codexLookEvery(knownLoginUsage("codex")))
 	}
 }

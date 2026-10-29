@@ -1129,8 +1129,14 @@ func codexTokenRenewing(ctx context.Context, dir, stale string) (tok, accountID 
 	accountID = codexAccountID(a)
 	tok, err = codexRefresh(ctx, raw)
 	if err != nil {
+		// OpenAI refused this sign-in for good: Codex is signed out to
+		// magpie's wiring until it is signed in again (#4308)
+		if errors.As(err, new(codexRefreshGoneError)) {
+			noteCodexSignInGone(dir, a.Tokens.RefreshToken)
+		}
 		return "", "", err
 	}
+	forgetCodexSignInGone(dir)
 	// keep every other field as Codex wrote it. auth.json is the user's
 	// own sign-in, which Codex CLI and the Codex app read: written beside
 	// it, flushed and renamed in, never truncated in place, so a machine
@@ -1197,7 +1203,12 @@ func codexRefresh(ctx context.Context, raw map[string]any) (string, error) {
 		RefreshToken string `json:"refresh_token"`
 	}
 	if res.StatusCode != 200 || json.Unmarshal(b, &fresh) != nil || fresh.AccessToken == "" {
-		return "", refreshFailed(res.StatusCode, "Codex", "Codex is signed out (token refresh failed); run codex login")
+		err := refreshFailed(res.StatusCode, "Codex", "Codex is signed out (token refresh failed); run codex login")
+		if res.StatusCode != 200 && codexRefreshGone(res.StatusCode, b) {
+			// refused for good, by Codex's own rule (#4308)
+			err = codexRefreshGoneError{err}
+		}
+		return "", err
 	}
 	toks["access_token"] = fresh.AccessToken
 	if fresh.IDToken != "" {

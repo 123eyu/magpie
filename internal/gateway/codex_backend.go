@@ -1971,6 +1971,21 @@ func (s *Server) askCodexList(rctx context.Context, h http.Header, query string,
 func (s *Server) codexModels(w http.ResponseWriter, r *http.Request) {
 	var own []any
 	body, etag, deny, denyBody := s.codexBackendList(r)
+	// A sign-in the backend calls revoked (401 token_revoked, "Encountered
+	// invalidated oauth token", provider.SignInRevoked) is answered as a
+	// backend that didn't answer: Codex's last list of its own, magpie's
+	// models after it. Passed through, Codex tried one refresh, which
+	// fails for good for such a sign-in (openai/codex login/src/auth/
+	// manager.rs: refresh_token_expired, _reused, _invalidated), and kept
+	// its bundled list, so magpie's models were gone from the picker until
+	// the user signed in again (jjt on Discord, #4308). Nothing is kept of
+	// it: the next ask goes to the backend again, so a sign-in made again
+	// has its list at once, and Codex still learns of the dead sign-in on
+	// a turn of its own models, whose 401 goes to it as it came. Any other
+	// 401 or 403 ("token expired", for a refresh to mend) is Codex's to see.
+	if deny != nil && provider.SignInRevoked(deny.StatusCode, denyBody) {
+		deny, body, etag = nil, nil, ""
+	}
 	if deny != nil {
 		// a sign-in to renew is Codex's to see
 		w.Header().Set("Content-Type", deny.Header.Get("Content-Type"))

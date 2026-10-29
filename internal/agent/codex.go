@@ -2468,7 +2468,18 @@ func codexChatGPTKnown(dir string) (signedIn, known bool) {
 		// valid JSON that isn't an object: not a sign-in Codex wrote
 		return false, false
 	}
-	return a.Tokens != nil && a.Tokens.Access != "", true
+	if a.Tokens == nil || a.Tokens.Access == "" {
+		return false, true
+	}
+	// a sign-in OpenAI refused to refresh for good (revoked, or failed for
+	// good, #4308): Codex keeps its auth.json, but beside it every turn
+	// fails at Codex's workspace routing discovery, magpie's models too.
+	// None to magpie, as forced api above, until it is signed in again
+	// (another refresh token). A record that can't be read says nothing.
+	if gone, known := provider.CodexSignInGone(dir, b); !known || gone {
+		return false, known
+	}
+	return true, true
 }
 
 // codexReached reads Codex's newest model request since a time — the

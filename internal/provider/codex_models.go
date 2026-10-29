@@ -67,6 +67,8 @@ func codexModels(ctx context.Context, sign func(context.Context, *http.Request, 
 // the models a flag of OpenAI's names unless Codex reads its list from a
 // file. An error when Codex is not signed in to ChatGPT, the backend
 // doesn't answer 200, or its answer lists no model: never an empty list.
+// CodexListRevoked tells one that is the backend calling the sign-in
+// revoked.
 func CodexLiveList(ctx context.Context) ([]byte, error) {
 	home, _ := os.UserHomeDir()
 	p, ok := codexAccount(home)
@@ -92,7 +94,8 @@ func CodexLiveList(ctx context.Context) ([]byte, error) {
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("ChatGPT models: %s", resp.Status)
+		// what it said, for CodexListRevoked
+		return nil, fmt.Errorf("ChatGPT models: %w", &accountStatusError{status: resp.StatusCode, body: b[:min(len(b), 64<<10)]})
 	}
 	var list struct {
 		Models []json.RawMessage `json:"models"`
@@ -776,3 +779,8 @@ func CodexTiers(m *catalog.Model, e Entry, members func(id string) []Member) {
 
 // codexFastTier is Fast's service tier as Codex sends it.
 const codexFastTier = "priority"
+
+// CodexListRevoked says err, from CodexLiveList, is the backend calling
+// Codex's sign-in revoked (SignInRevoked), not a refusal a refresh mends,
+// a 5xx or a network error.
+func CodexListRevoked(err error) bool { return codexRevoked(err) }
