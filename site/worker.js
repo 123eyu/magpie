@@ -309,10 +309,15 @@ function translate(res, lang) {
   return rw.transform(out);
 }
 
-// beacon adds Cloudflare Web Analytics to a page. The dashboard's automatic
-// injection skips whatever a worker returns, and every page passes through
-// this one.
-const BEACON = `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "c09e76abf16b40b2aa5571c196efb847"}'></script>`;
+// beacon adds Cloudflare Web Analytics and PostHog's Web Analytics to a page.
+// The dashboard's automatic injection skips whatever a worker returns, and
+// every page passes through this one. PostHog runs cookieless (nothing in
+// cookies or storage; the project's cookieless tracking setting must be on,
+// or its events are dropped), sends page views and page leaves only, and
+// isn't loaded under Do Not Track or Global Privacy Control (respect_dnt
+// alone doesn't stop a cookieless capture). Its project is the daily count's.
+const WEB_ANALYTICS = `<script>if(!(navigator.doNotTrack=="1"||window.doNotTrack=="1"||navigator.globalPrivacyControl)){!function(t,e){var o,n,p,r;e.__SV||(window.posthog&&window.posthog.__loaded)||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+" (stub)"},o="capture register unregister opt_out_capturing opt_in_capturing has_opted_out_capturing set_config".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);posthog.init("${POSTHOG_KEY}",{api_host:"https://us.i.posthog.com",cookieless_mode:"always",person_profiles:"identified_only",capture_pageview:true,capture_pageleave:true,autocapture:false,capture_dead_clicks:false,disable_session_recording:true,disable_surveys:true,advanced_disable_flags:true,respect_dnt:true})}</script>`;
+const BEACON = `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "c09e76abf16b40b2aa5571c196efb847"}'></script>` + WEB_ANALYTICS;
 
 function beacon(res) {
   if (!(res.headers.get("Content-Type") || "").startsWith("text/html")) return res;
