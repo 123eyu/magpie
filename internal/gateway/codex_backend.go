@@ -1040,6 +1040,8 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 				window = cmp.Or(provider.CodexWindow(user, model), catalog.ContextOf(model))
 			}
 			s.trace.update(tr, func(t *Route) {
+				// what masking took: magpie's own time isn't split here
+				t.Masking = maskingMs(r.Context(), 0)
 				// the last try: the turn asked again for an overload has one each
 				try := &t.Tries[len(t.Tries)-1]
 				try.Done, try.Status, try.Millis, try.Error = true, status, time.Since(try.Start).Milliseconds(), msg
@@ -1468,7 +1470,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		Provider: servedProvider, Host: provider.HostOf(base), ProviderAccount: servedAccount, Model: call.Model,
 		Requested: call.Model, Served: served,
 		Input: uu.Input, Output: uu.Output, CacheRead: uu.CacheRead, CacheWrite: uu.CacheWrite,
-		Reasoning: uu.Reasoning, Effort: effort, Millis: call.Millis,
+		Reasoning: uu.Reasoning, Effort: effort, Millis: call.Millis, Masking: maskingMs(r.Context(), 0),
 		// Codex's own sign-in: the request goes as Codex sent it
 		TierAsked: bodyTier(provider.Responses, body), TierSent: bodyTier(provider.Responses, body), TierServed: uu.Tier, TTFT: call.TTFT, FirstText: call.FirstText, ReasoningHidden: call.ReasoningHidden, Flow: call.Flow, Status: call.Status, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
 		RequestID: requestID(res.Header), ResponseID: uu.ResponseID, Endpoint: r.URL.Path}

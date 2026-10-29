@@ -11,12 +11,15 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/yetone/magpie/internal/codexcat"
+	"github.com/yetone/magpie/internal/gwmw"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -1284,3 +1287,42 @@ func TestCodexOwnSignInTellsWhereItsTimeWent(t *testing.T) {
 	}
 }
 
+// A turn on Codex's own sign-in that was masked keeps what masking took,
+// on its route and in its usage record, as a routed one does: the
+// Routing page showed no masking time for it.
+func TestCodexOwnSignInKeepsItsMaskingTime(t *testing.T) {
+	setup(t, provider.Chat, &fake{t: t})
+	if err := settings.Save(settings.Settings{Redact: true}); err != nil {
+		t.Fatal(err)
+	}
+	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, sse(`data: {"type":"response.completed","response":{"id":"r1","usage":{"input_tokens":9,"output_tokens":2}}}`))
+	})
+	withoutMasker(t)
+	m := heldMasker{let: make(chan struct{}), entered: make(chan struct{}), once: new(sync.Once)}
+	t.Cleanup(gwmw.Mask(m))
+	const hold = 120 * time.Millisecond
+	go func() {
+		<-m.entered
+		time.Sleep(hold)
+		close(m.let)
+	}()
+	s := New()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", CodexPath+"/responses", strings.NewReader(`{"model":"gpt-5.5","stream":true,"input":"hi"}`))
+	req.Header.Set("Authorization", "Bearer chatgpt-token")
+	s.Handler().ServeHTTP(rec, req)
+	st := s.Trace(t.Context(), 0, 0)
+	if rec.Code != 200 || len(st.Routes) != 1 {
+		t.Fatalf("%d %+v", rec.Code, st.Routes)
+	}
+	if got := st.Routes[0].Masking; got < hold.Milliseconds() {
+		t.Fatalf("route's masking %d ms, held %s", got, hold)
+	}
+	recs := usage.Load(time.Time{})
+	if len(recs) == 0 || recs[len(recs)-1].Masking != st.Routes[0].Masking {
+		t.Fatalf("usage records %+v, route's masking %d", recs, st.Routes[0].Masking)
+	}
+}

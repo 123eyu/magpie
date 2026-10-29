@@ -122,7 +122,8 @@ type Route struct {
 	Queued  int64 `json:"queued,omitempty"`
 	// Phase: "redact" while it is being masked and not yet done
 	// (noteRedacting), so its row says masking rather than routing;
-	// Masking: the ms of Own that went on masking it (maskingMs)
+	// Masking: the ms of Own that went on masking it, all of it when Own
+	// is unknown (maskingMs)
 	Phase   string `json:"phase,omitempty"`
 	Masking int64  `json:"masking,omitempty"`
 	// Held: the file name, in HeldDir, of the report saved of a request
