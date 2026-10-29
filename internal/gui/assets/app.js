@@ -126,6 +126,7 @@ async function api(path, body, heads, signal) {
     body: body === undefined ? undefined : JSON.stringify(body),
     signal,
   });
+  if (body === undefined) await skelHold();
   heads?.(res.headers);
   if (had && res.ok && res.headers.get("X-Magpie-Same")) return had.data;
   if (res.status === 204) return null;
@@ -8507,6 +8508,16 @@ function skelSeen() {
 // left, and with the bird turned off neither runs (a 1-core server:
 // Yayoi_no_yume on X).
 let skelSince = 0, skelFlying = false, skelTick = 0;
+// Once the bird has come it lands at least once (the owner, 10-30: a load
+// done as it came had it streak off over no skeleton): a read back before
+// then waits for it, and is let go as it leaves. At most 1.5s, for a frame
+// a hidden window never draws.
+let skelGate = null, skelWaiting = 0;
+async function skelHold() {
+  if (!skelGate) return;
+  skelWaiting++;
+  try { await skelGate; } finally { skelWaiting--; }
+}
 const skelAdded = new MutationObserver((recs) => {
   for (const r of recs) for (const n of r.addedNodes) if (n.nodeType === 1 && (n.matches(SKEL) || n.querySelector(SKEL))) return skelWatch();
 });
@@ -8529,6 +8540,9 @@ function skelWatch() {
 skelWatch();
 async function skelBird() {
   skelFlying = true;
+  let release;
+  const gate = skelGate = new Promise((ok) => { release = () => { if (skelGate === gate) skelGate = null; ok(); }; });
+  setTimeout(release, 1500);
   const b = el("div", "sk-bird roam");
   b.innerHTML = BIRD;
   document.body.append(b);
@@ -8549,17 +8563,24 @@ async function skelBird() {
     const after = seen.filter((t) => s.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_FOLLOWING);
     return after[0] || seen[0];
   };
-  let s = next(null);
-  if (!s) return void (b.remove(), (skelFlying = false));
+  let s = next(null), quiet = false;
+  if (!s) return void (b.remove(), release(), (skelFlying = false));
   try {
     let at = spot(s);
     put({ x: at.x - 24, y: at.y - 40, f: 1 });
+    b.animate([{ opacity: 0 }, { opacity: 1 }], 120);
     await tween(300, (e, t) => put({ x: at.x - 24 + 24 * t, y: at.y - 40 + 40 * e, sx: 1 - .05 * t, sy: 1 + .08 * t }), easeIn);
+    // its bar gone before it landed: it fades where it is, never flying
+    // over what came instead
+    if (!s.isConnected) return void (quiet = true);
     for (let hops = 0; hops < 400; hops++) {
       // it lands: the bar dips under it and springs back
       s.animate([{ transform: "none" }, { transform: "translateY(3px)", offset: .3 }, { transform: "translateY(-1.2px)", offset: .6 }, { transform: "translateY(.4px)", offset: .8 }, { transform: "none" }], { duration: 560, easing: "ease-out" });
       await tween(130, (e) => put({ y: at.y + 3 * e, sx: 1 + .14 * e, sy: 1 - .18 * e }), easeOut);
       await tween(90, (e) => put({ y: at.y + 3 * (1 - e), sx: 1.14 - .14 * e, sy: .82 + .18 * e }), easeIn);
+      // landed once: a read held for it means the load is done
+      if (!hops && skelWaiting) break;
+      if (!hops) release();
       const to = birdOff() ? null : next(s);
       if (!to) break;
       const from = { x, y }, go = spot(to), h = 16 + Math.min(40, Math.hypot(go.x - from.x, go.y - from.y) * .15);
@@ -8572,10 +8593,12 @@ async function skelBird() {
       s = to; at = { x, y };
     }
   } finally {
+    release();
     // nothing left to stand on: it flies off, up and away
+    if (quiet) await b.animate([{ opacity: 1 }, { opacity: 0, transform: b.style.transform + " scale(.6)" }], { duration: 160, easing: "ease-in", fill: "forwards" }).finished;
     b.dataset.flap = "";
     const from = { x, y };
-    await tween(480, (e) => put({ x: from.x + (innerWidth + 60 - from.x) * e, y: from.y - (from.y + 80) * e, f: 1, r: -14, sx: 1, sy: 1 }), easeIn);
+    if (!quiet) await tween(480, (e) => put({ x: from.x + (innerWidth + 60 - from.x) * e, y: from.y - (from.y + 80) * e, f: 1, r: -14, sx: 1, sy: 1 }), easeIn);
     b.remove();
     skelFlying = false;
     skelSince = 0;

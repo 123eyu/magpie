@@ -2,7 +2,8 @@
 // What is loading has magpie's bird on it (the owner, 10-26): skeletons
 // still up after a moment, as on a slow page, get the bird, which hops from
 // bar to bar, each bar dipping under it, and flies off once they are gone.
-// A quick load never sees it, and with reduced motion no bird comes.
+// A quick load never sees it, and with reduced motion no bird comes. Once
+// it has come it lands once before the page fills (the owner, 10-30).
 // Settings' Loading bird (Yayoi_no_yume on X, a 1-core server) turns it
 // off: no bird comes and nothing looks for skeletons. With it on, the look
 // every 250ms runs only while a skeleton is in the page.
@@ -94,6 +95,29 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert(feet.w > 10 && feet.h > 10, `the bird is drawn: ${JSON.stringify(feet)}`);
     release();
     await page.waitForFunction(() => !document.querySelector("#view-plugins .pm-card.ghost"));
+    await page.waitForFunction(() => !document.querySelector(".sk-bird"), null, { timeout: 2000 });
+    assert.deepEqual(errors, []);
+  });
+
+  test(engine + ": a load done as the bird comes keeps its skeletons until the bird has landed once", async (t) => {
+    const browser = await launch();
+    t.after(() => browser.close());
+    let release;
+    const held = new Promise((r) => { release = r; });
+    const { page, errors } = await open(browser, false, () => held);
+    await page.locator("#view-plugins .pm-card.ghost").first().waitFor();
+    // how many bars had dipped under the bird when the last skeleton went
+    await page.evaluate(() => new MutationObserver((ms, o) => {
+      if (document.querySelector("#view-plugins .pm-card.ghost")) return;
+      seen.dipsAtGone = seen.dips; seen.goneAt = performance.now(); o.disconnect();
+    }).observe(document.body, { childList: true, subtree: true }));
+    await page.locator(".sk-bird.roam").waitFor({ state: "attached", timeout: 3000 });
+    const at = await page.evaluate(() => performance.now());
+    release();
+    await page.waitForFunction(() => seen.goneAt, null, { timeout: 3000 });
+    const { dipsAtGone, goneAt } = await page.evaluate(() => seen);
+    assert.ok(dipsAtGone > 0, "the bird landed on a bar before the skeletons went");
+    assert.ok(goneAt - at < 1500, `the load waited at most for one landing (${Math.round(goneAt - at)}ms)`);
     await page.waitForFunction(() => !document.querySelector(".sk-bird"), null, { timeout: 2000 });
     assert.deepEqual(errors, []);
   });
