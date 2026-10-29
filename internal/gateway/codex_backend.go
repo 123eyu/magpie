@@ -10,10 +10,12 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/http/httptrace"
 	"regexp"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tidwall/gjson"
@@ -977,6 +979,10 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	// a turn goes in the Routing view's live trace as the others do, to
 	// the one it can go to: Codex's own sign-in, or its key
 	var tr *Route
+	// where the try now going spent its time (TryNet): the request goes
+	// out through magpie's own client, as a routed try's does, so the
+	// Routing page says whose time a slow turn was here too
+	nt := &netTrace{}
 	first := firstToken{start: start} // the reply's first tokens (#196), counted as ms are
 	served := ""                      // the model the reply says answered
 	var uu Usage
@@ -1037,7 +1043,18 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 				// the last try: the turn asked again for an overload has one each
 				try := &t.Tries[len(t.Tries)-1]
 				try.Done, try.Status, try.Millis, try.Error = true, status, time.Since(try.Start).Milliseconds(), msg
-				try.TTFT, try.FirstText = ttft, text
+				// the try's first token from its own Start, as its timing's
+				// first byte is: a turn asked again for an overload began
+				// after the request did
+				before := try.Start.Sub(start).Milliseconds()
+				fromTry := func(ms int64) int64 {
+					if ms <= 0 {
+						return 0 // none came
+					}
+					return max(ms-before, 1)
+				}
+				try.TTFT, try.FirstText = fromTry(ttft), fromTry(text)
+				try.Net = nt.timing(try.Start, 0)
 				t.ReasoningHidden = first.hidesReasoning(provider.Responses)
 				try.ReasoningHidden = t.ReasoningHidden
 				t.Done, t.Status, t.Error, t.Millis, t.Tokens = true, status, msg, ms, tokens
@@ -1082,6 +1099,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 			try := &t.Tries[len(t.Tries)-1]
 			try.Done, try.Status, try.Error, try.Fail = true, status, msg, failOther
 			try.Millis, try.Again = time.Since(try.Start).Milliseconds(), wait.Milliseconds()
+			try.Net = nt.timing(try.Start, 0)
 		})
 		servedProvider, servedAccount := codexServed(base, r.Header, on)
 		rec := usage.Record{RouteID: tr.ID, Time: began, Agent: callerOf(r).agent, Provider: servedProvider, Host: provider.HostOf(base),
@@ -1102,7 +1120,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 			end(status, msg, 0, 0)
 			return false
 		}
-		began = time.Now()
+		began, nt = time.Now(), &netTrace{}
 		s.trace.update(tr, func(t *Route) {
 			again := t.Tries[0]
 			t.Tries = append(t.Tries, Try{ID: again.ID, Model: again.Model, Effort: again.Effort, Start: began})
@@ -1129,9 +1147,13 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		attempt, cancel := context.WithCancel(r.Context())
 		defer cancel()
 		for tries := 0; ; tries++ {
-			ctx := provider.ViaSignedIn(attempt, "codex")
+			// a request asked again within the try (a reset spent, a
+			// dropped one, an item taken out) is its Before
+			var asking, asked, wrote atomic.Int64
+			traced := httptrace.WithClientTrace(attempt, nt.hooks(&asking, &asked, &wrote))
+			ctx := provider.ViaSignedIn(traced, "codex")
 			if on != nil {
-				ctx = on.Via(attempt)
+				ctx = on.Via(traced)
 			}
 			req, err := http.NewRequestWithContext(ctx, r.Method, u, bytes.NewReader(body))
 			if err != nil {

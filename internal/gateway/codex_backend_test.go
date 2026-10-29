@@ -1250,3 +1250,37 @@ func TestRenamedProviderAnsweredItsLead(t *testing.T) {
 		t.Fatalf("answers %+v", a)
 	}
 }
+
+// A turn on Codex's own sign-in goes out through magpie's client as a
+// routed try does, so its try says where its time went as one does
+// (TryNet): the Routing page showed nothing for it (Discord, lute: some
+// requests showed magpie's and the vendor's time and some didn't). The
+// backend's wait before its headers is the vendor's.
+func TestCodexOwnSignInTellsWhereItsTimeWent(t *testing.T) {
+	setup(t, provider.Chat, &fake{t: t})
+	const hold = 200 * time.Millisecond
+	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		time.Sleep(hold)
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, sse(`data: {"type":"response.completed","response":{"id":"r1","usage":{"input_tokens":9,"output_tokens":2}}}`))
+	})
+	s := New()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", CodexPath+"/responses", strings.NewReader(`{"model":"gpt-5.5","stream":true,"input":"hi"}`))
+	req.Header.Set("Authorization", "Bearer chatgpt-token")
+	s.Handler().ServeHTTP(rec, req)
+	st := s.Trace(t.Context(), 0, 0)
+	if rec.Code != 200 || len(st.Routes) != 1 || len(st.Routes[0].Tries) != 1 {
+		t.Fatalf("%d %+v", rec.Code, st.Routes)
+	}
+	n := st.Routes[0].Tries[0].Net
+	if n == nil {
+		t.Fatal("no timing for a turn on Codex's own sign-in")
+	}
+	holdMs := float64(hold.Milliseconds())
+	if n.Asks != 1 || n.Wait < holdMs-1 || n.Head < n.Wait {
+		t.Fatalf("timing %+v for a %v hold", *n, hold)
+	}
+}
+
