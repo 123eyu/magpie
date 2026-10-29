@@ -2571,10 +2571,10 @@ func held(h http.Handler) http.Handler {
 			// and collected under GOGC 25 while it runs: a poll's reads
 			// allocated ~330 MB to keep ~105 MB, and at the default 100 the
 			// heap grew to twice what it kept before a collection, ~320 MB
-			// in Activity Monitor during a poll. The memory limit the
-			// warm-up's read takes too isn't taken here: held as close as
-			// heldMemory, every poll collected over and over, 5x the CPU.
-			defer tightenGC(false)()
+			// in Activity Monitor during a poll. No memory limit: held as
+			// close as what Go held, every poll collected over and over,
+			// 5x the CPU.
+			defer tightenGC()()
 		}
 		if !(api && r.Method == http.MethodGet) {
 			// anything that may have written drops what was held, once it
