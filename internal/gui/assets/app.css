@@ -548,6 +548,12 @@ body:not(.side-nav) .side-toggle .st-pane { opacity: 0; }
    Only then: Chromium holds the wheel even in a box that doesn't overflow.
    :where() weighs nothing, so .mchips in a short window still passes it on */
 :where(.holds) { overscroll-behavior-y: contain; }
+/* a page scrolls rather than squeeze what is on it: as a flex column, a
+   view taller than its window shrank every box of a set height, so opening
+   the Gateway page's models took a header from 26px to 21 and moved the
+   head over them up (the owner, 10-29). :where() weighs nothing, so a box
+   that sets its own flex keeps it */
+:where(.view) > * { flex-shrink: 0; }
 @keyframes view-in { from { opacity: 0; transform: translateY(5px); } }
 @media (prefers-reduced-motion: reduce) { .view { animation-name: fade-in; } }
 body.window .view { padding: 2px max(0px, calc(16px - var(--bar, 0px))) 8px 16px; }
