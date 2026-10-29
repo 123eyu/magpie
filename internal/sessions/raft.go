@@ -35,6 +35,9 @@ func raftFiles() []file { return raftFilesIn(SlockDir()) }
 
 // raftFilesIn are the Pi sessions of the agents in a Raft folder.
 func raftFilesIn(dir string) []file {
+	if !Reads("raft") {
+		return nil
+	}
 	var paths []string
 	for _, sub := range []string{".pi-sessions", ".builtin-sessions"} {
 		more, _ := filepath.Glob(filepath.Join(dir, "agents", "*", sub, "*.jsonl"))

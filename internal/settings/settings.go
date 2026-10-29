@@ -221,6 +221,13 @@ type Settings struct {
 	// GatewayConversations is local, opt-in recording of session traffic.
 	// Only SetGatewayConversations changes it; other saves keep local consent.
 	GatewayConversations bool `json:"gatewayConversations,omitempty"`
+	// SessionReads is which agents' own session files magpie may read
+	// (RustCats on X: a first open listed every agent's history unasked).
+	// Nil is not settled yet (sessions.SettleReads decides it once). Only
+	// SetSessionReads changes it; other saves keep what the file holds,
+	// and it is this computer's own (KeepOwn): its agents and their files
+	// are this computer's.
+	SessionReads *SessionReads `json:"sessionReads,omitempty"`
 	// CodexWarmup starts a ChatGPT account's next window as soon as the
 	// last one resets, with one tiny request, so it counts from then (a
 	// Codex window starts at its first use): "" off, "week" the weekly
@@ -1164,6 +1171,7 @@ func (s Settings) Compact() int {
 // shows it; Lullaby: sharing turned on at home came on at work).
 func (s *Settings) KeepOwn(cur Settings) {
 	s.GatewayConversations = cur.GatewayConversations
+	s.SessionReads = cur.SessionReads
 	s.UIFont, s.CodeFont = cur.UIFont, cur.CodeFont
 	s.Window, s.Proxy, s.Port, s.Dock, s.DockWindow, s.Lightweight = cur.Window, cur.Proxy, cur.Port, cur.Dock, cur.DockWindow, cur.Lightweight
 	s.DockNever, s.DockSettled = cur.DockNever, cur.DockSettled
@@ -1469,10 +1477,53 @@ func SavedAddr() string {
 	return fmt.Sprintf("127.0.0.1:%d", p)
 }
 
-// Save validates and writes the settings, preserving current recording consent.
+// Save validates and writes the settings, preserving current recording
+// consent and which agents' sessions may be read.
 func Save(s Settings) error {
 	defer lockFile()()
 	return save(s, false)
+}
+
+// SessionReads is the user's answer to which agents' session files magpie
+// reads. Before it is asked (Asked false) no agent's are read. Then an
+// agent named in Agents is read as it says, and any other as All says:
+// "allow all" is All with no Agents, so an agent installed later is read
+// too, and "allow selected" names each agent found then.
+type SessionReads struct {
+	Asked  bool            `json:"asked"`
+	All    bool            `json:"all,omitempty"`
+	Agents map[string]bool `json:"agents,omitempty"`
+}
+
+// Reads says whether agent's session files may be read.
+func (r *SessionReads) Reads(agent string) bool {
+	if r == nil || !r.Asked {
+		return false
+	}
+	if on, ok := r.Agents[agent]; ok {
+		return on
+	}
+	return r.All
+}
+
+// SetSessionReads changes which agents' sessions may be read, as edit
+// returns it from what the file holds now (nil when not settled), so a
+// save elsewhere from an older snapshot neither undoes nor brings it
+// back. A settings file that can't be read is left as it is, with the
+// error.
+func SetSessionReads(edit func(*SessionReads) *SessionReads) error {
+	defer lockFile()()
+	s, err := loadChecked()
+	if err != nil {
+		return err
+	}
+	var cur *SessionReads
+	if s.SessionReads != nil {
+		c := s.clone().SessionReads
+		cur = c
+	}
+	s.SessionReads = edit(cur)
+	return saveOwn(s, false, true)
 }
 
 // SetGatewayConversations changes local recording consent without overwriting
@@ -1586,7 +1637,11 @@ func UseRedactModel(name string) error {
 }
 
 // save is called under fileMu. Only the consent setter may replace recording.
-func save(s Settings, recording bool) error {
+func save(s Settings, recording bool) error { return saveOwn(s, recording, false) }
+
+// saveOwn is save; reads says s's SessionReads is the one to write, where
+// any other save keeps the file's.
+func saveOwn(s Settings, recording, reads bool) error {
 	defer filememo.Forget() // read again, where a request holds it
 	// what is written is settled: a Settings read from an older file was
 	// settled as it was read, and one made without reading has its Dock
@@ -1772,6 +1827,7 @@ func save(s Settings, recording bool) error {
 	// Load may have returned defaults or only part of an unreadable file.
 	// Do not replace it, including its permissions, with those values.
 	consent := false
+	var storedReads *SessionReads
 	if b, err := steady.ReadFile(Path()); err == nil {
 		b = bytes.TrimPrefix(b, []byte("\xef\xbb\xbf"))
 		if len(bytes.TrimSpace(b)) != 0 {
@@ -1787,12 +1843,16 @@ func save(s Settings, recording bool) error {
 				_ = json.Unmarshal(bytes.TrimPrefix(bak, []byte("\xef\xbb\xbf")), &stored)
 			}
 			consent = stored.GatewayConversations
+			storedReads = stored.SessionReads
 		}
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("could not read settings at %s: %w", Path(), err)
 	}
 	if !recording {
 		s.GatewayConversations = consent
+	}
+	if !reads {
+		s.SessionReads = storedReads
 	}
 	// the file there now is kept first, before anything below can make
 	// one: as the last good generation, or aside when it doesn't read

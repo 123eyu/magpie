@@ -19470,6 +19470,8 @@ function setSetTab(tab, remember) {
     $("#setPage-" + id).hidden = !on;
   }
   setShown = tab;
+  // each agent's row is read only where it is shown
+  if (view === "settings" && tab === "privacy" && !setQuery) loadSessionReads();
   $("#setTabs").setAttribute("aria-label", t("Settings"));
   $("#setQ").setAttribute("aria-label", t("Find a setting"));
   if (view === "settings") syncURL();
@@ -19812,6 +19814,7 @@ function renderSettings() {
   renderDisabledModels(s);
   renderRedact(s, keep);
   renderDiscovery(s);
+  renderSessionReads(s);
   renderOTel(s, keep);
   renderPort(s);
   renderBareIds(s);
@@ -21775,6 +21778,59 @@ function renderDiscovery(s) {
   r.append(who, val);
   box.replaceChildren(r);
 }
+// renderSessionReads: which agents' own session history magpie reads
+// (RustCats on X: a new install showed every agent's sessions before
+// anyone agreed). The Sessions page asks once; here it changes later.
+// "Agents found later" is whether an agent with no row of its own is
+// read, and drawn from the settings at once; each agent found on this
+// computer has a row of its own, read from /api/sessions/reads when the
+// Privacy part is shown (loadSessionReads).
+let sessionReads = null; // /api/sessions/reads, as last read
+let sessionReadsSeq = 0;
+function renderSessionReads(s) {
+  const box = $("#sessionReadsList");
+  const r = sessionReads || { asked: !!s?.sessionReads?.asked, all: !!s?.sessionReads?.all, found: [] };
+  const save = (body) => {
+    const n = ++sessionReadsSeq;
+    writingPrefs(api("sessions/reads", body))
+      .then((got) => { if (n === sessionReadsSeq) { sessionReads = got; renderSessionReads(prefs); } })
+      .catch((e) => { status(t(e.message), "err"); renderSessionReads(prefs); });
+  };
+  const row = (name, sub, on, fn) => {
+    const rw = el("div", "row pref");
+    const who = el("div", "who");
+    who.append(el("div", "name", name));
+    if (sub) who.append(el("div", "sub", sub));
+    const val = el("div", "val");
+    val.append(segs([["off", t("Off")], ["on", t("On")]], on ? "on" : "off", (v) => {
+      if ((v === "on") !== on) fn(v === "on");
+    }));
+    rw.append(who, val);
+    return rw;
+  };
+  const rows = [row(t("Agents found later"), t("Read the session history of an agent with no row here, one installed later too. Off, magpie reads only the agents turned on below; what its gateway served is counted either way"),
+    r.asked && r.all, (on) => {
+      // the agents with a row keep what their rows show
+      const agents = {};
+      for (const a of r.found || []) agents[a.agent] = !!a.on;
+      save(Object.keys(agents).length ? { all: on, agents } : { all: on });
+    })];
+  for (const a of r.found || []) {
+    const rw = row(a.name, "", a.on, (on) => save({ agents: { [a.agent]: on } }));
+    rw.dataset.agent = a.agent;
+    rows.push(rw);
+  }
+  box.replaceChildren(...rows);
+}
+function loadSessionReads() {
+  const n = ++sessionReadsSeq;
+  api("sessions/reads").then((got) => {
+    if (n !== sessionReadsSeq) return;
+    sessionReads = got;
+    renderSessionReads(prefs);
+  }).catch(() => {}); // the row drawn from the settings stays
+}
+
 // what turning discovery off stops: the subscriptions signed in now, by
 // name, the Providers list read for it when no page has yet
 async function discoveryOffWarning() {
