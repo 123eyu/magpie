@@ -232,7 +232,7 @@ covers them), and `sessions/manage` carries the same as `reads`. While
 the sessions plugin): each agent found with a switch, off; Allow selected
 saves `all: false` with each agent picked or not, Allow all `all: true`.
 Settings › Privacy, *Agents' session history* (`renderSessionReads` in
-app.js), has *Agents found later* (`all`, sent with each listed agent
+the sessions plugin's `settings.js`), has *Agents found later* (`all`, sent with each listed agent
 at the value its row shows) and a row per agent.
 `magpie sessions read [on|off all|<agent>…]` shows and changes the same
 choice from the CLI (`sessionReadsTo`); while it is not asked,
