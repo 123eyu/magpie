@@ -82,7 +82,11 @@ func renewLogins(ctx context.Context, every time.Duration, atOnce int) []Renewal
 			continue
 		}
 		tried++
-		if _, _, err := renewSavedLogin(ctx, l.Agent, l.User, true); err != nil {
+		why := ctx
+		if every > 0 {
+			why = refreshingFor(ctx, codexRefreshScheduled)
+		}
+		if _, _, err := renewSavedLogin(why, l.Agent, l.User, true); err != nil {
 			r.Err = err.Error()
 			var refused refreshRefused
 			r.Lapsed = errors.As(err, &refused)

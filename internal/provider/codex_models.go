@@ -422,16 +422,70 @@ func levelRank(e string) int {
 	return len(Levels)
 }
 
-// codexFetchSaved asks for the models of each saved ChatGPT account that
-// stands behind the one Codex is signed in to, with that account's own
-// sign-in, so the gateway doesn't send one a model its plan lacks. One that
-// can't be asked now keeps what it listed last.
+// codexSavedListAge is how old a saved account's list is before it is
+// asked for again, and codexSavedAtOnce how many of those one fetch of the
+// active account's list asks. The active account's list is asked every
+// accountListAge (KeepAccountsListed) as Codex asks its own; asking every
+// switched-on saved account's beside it each hour was a burst of N
+// /codex/models calls from one address for accounts no Codex was using
+// (the audit after owl's deactivated accounts, 10-30). A plan's models
+// change seldom: once a day, one account a look, so they drift apart.
+const (
+	codexSavedListAge = 24 * time.Hour
+	codexSavedAtOnce  = 1
+)
+
+// codexSavedAsked is when each saved account's list was last asked for,
+// fetched or not, so one that keeps failing (a deactivated account) waits
+// its day like the others instead of being first every look.
+var codexSavedAsked = struct {
+	sync.Mutex
+	m map[string]time.Time
+}{m: map[string]time.Time{}}
+
+// codexSavedNow is codexFetchSaved's clock; a var so tests can move it.
+var codexSavedNow = time.Now
+
+// codexFetchSaved asks for the models of the saved ChatGPT accounts that
+// stand behind the one Codex is signed in to, with each account's own
+// sign-in, so the gateway doesn't send one a model its plan lacks. An
+// account with no list yet is asked at once; of the rest, the one asked
+// longest ago, once codexSavedListAge has passed, and no more than
+// codexSavedAtOnce of them. One that can't be asked now keeps what it
+// listed last.
 func codexFetchSaved(ctx context.Context) {
-	for _, l := range Logins("codex") {
+	now := codexSavedNow()
+	type due struct {
+		user string
+		at   time.Time
+	}
+	var fresh, stale []due
+	ls := Logins("codex")
+	codexSavedAsked.Lock()
+	for _, l := range ls {
 		if l.Active || !l.On {
 			continue
 		}
-		user := l.User
+		_, at, ok := catalog.Live(accountModels("codex", l.User))
+		if !ok {
+			fresh = append(fresh, due{l.User, at})
+			continue
+		}
+		if a := codexSavedAsked.m[strings.ToLower(l.User)]; a.After(at) {
+			at = a
+		}
+		if now.Sub(at) >= codexSavedListAge {
+			stale = append(stale, due{l.User, at})
+		}
+	}
+	sort.SliceStable(stale, func(i, j int) bool { return stale[i].at.Before(stale[j].at) })
+	ask := append(fresh, stale[:min(len(stale), codexSavedAtOnce)]...)
+	for _, d := range ask {
+		codexSavedAsked.m[strings.ToLower(d.user)] = now
+	}
+	codexSavedAsked.Unlock()
+	for _, d := range ask {
+		user := d.user
 		sign := codexSign(func(ctx context.Context) (string, string, error) { return savedLoginToken(ctx, "codex", user) })
 		// through the account's own proxy, if it has one
 		if ms, err := codexModels(ViaLogin(ctx, "codex", user), sign); err == nil {

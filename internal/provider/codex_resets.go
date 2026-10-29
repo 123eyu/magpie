@@ -159,7 +159,7 @@ func codexResets(ctx context.Context, base, token, accountID string, count int) 
 	ctx, cancel := context.WithTimeout(ctx, codexResetDetailsTimeout)
 	defer cancel()
 	var w codexResetCreditsWire
-	if accountJSON(ctx, base+"/wham/rate-limit-reset-credits", token, map[string]string{"chatgpt-account-id": accountID}, &w) == nil {
+	if accountJSON(ctx, base+"/wham/rate-limit-reset-credits", token, codexAccountHeaders(accountID), &w) == nil {
 		out.Until = w.soonest()
 		// listed only when they are the ones counted: a list that says
 		// otherwise isn't put on the card as if it were
@@ -218,7 +218,7 @@ func useCodexReset(ctx context.Context, user, why string) (ResetOutcome, error) 
 	// which of them to spend is named, as Codex itself does: left to the
 	// vendor, it may be one that lasts longer
 	var w codexResetCreditsWire
-	if err := accountJSON(ctx, base+"/wham/rate-limit-reset-credits", tok, map[string]string{"chatgpt-account-id": accountID}, &w); err != nil {
+	if err := accountJSON(ctx, base+"/wham/rate-limit-reset-credits", tok, codexAccountHeaders(accountID), &w); err != nil {
 		return ResetOutcome{}, fmt.Errorf("couldn't read which reset runs out first, so none was used: %w", err)
 	}
 	credit, _ := w.first()
@@ -297,8 +297,10 @@ func consumeCodexReset(ctx context.Context, base, token, accountID, credit, id s
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/json")
-	if accountID != "" {
-		req.Header.Set("chatgpt-account-id", accountID)
+	for k, v := range codexAccountHeaders(accountID) {
+		if v != "" {
+			req.Header.Set(k, v)
+		}
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
