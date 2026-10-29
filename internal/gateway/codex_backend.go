@@ -256,6 +256,18 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 			s.serveAgent(w, r, provider.Responses, body)
 			return
 		}
+		// a turn on Codex's own sign-in that masking would change goes
+		// to the model the user set for that, as written, as one through
+		// magpie's accounts does in serve (maskRouteFor)
+		if to := codexMaskRoute(r, rest, body); to != "" {
+			body, compact := codexInputAs(withModel(body, to), true, s.nativeCompactionFor(to))
+			if compact {
+				s.codexCompact(w, r, body)
+				return
+			}
+			s.serveAgent(w, r, provider.Responses, body)
+			return
+		}
 		body, _ = codexInput(body, false)
 		if r.Header.Get(AccountHeader) != "" {
 			// relayed as it came, it would go to Codex's own sign-in only

@@ -163,6 +163,13 @@ type Settings struct {
 	// as written whatever finds them, each whole, in any case (#1977).
 	RedactActions map[string]string `json:"redactActions,omitempty"`
 	RedactAllow   []string          `json:"redactAllow,omitempty"`
+	// RedactRouteTo is the model an agent's request goes to, as written,
+	// when masking would change it (jessyoungyu on X: 「百度这家公司怎么样」
+	// reached a cloud model as a placeholder): "" masks it as before. Only
+	// a model whose every route the user set to go unmasked counts
+	// (provider.SkipsRedaction, the gateway's unredactedRoute), judged on
+	// each request; one that isn't now is as unset, masked.
+	RedactRouteTo string `json:"redactRouteTo,omitempty"`
 	// LAN shares the gateway on the local network; remote callers must use
 	// named caller keys. LANKey is retained for older Magpie versions.
 	// LAN is this computer's own (KeepOwn; Lullaby on Discord: sharing
@@ -1758,6 +1765,10 @@ func saveOwn(s Settings, recording, reads bool) error {
 	s.CodexSubagentModel = strings.TrimSpace(s.CodexSubagentModel)
 	if s.CodexSubagentModel != "" && !strings.Contains(s.CodexSubagentModel, "/") {
 		return fmt.Errorf("the model for Codex's subagents must be a model's id such as codex/gpt-5.5, not %q", s.CodexSubagentModel)
+	}
+	s.RedactRouteTo = strings.TrimSpace(s.RedactRouteTo)
+	if s.RedactRouteTo != "" && !strings.Contains(s.RedactRouteTo, "/") {
+		return fmt.Errorf("the model for requests masking would change must be a model's id such as ollama/qwen3, not %q", s.RedactRouteTo)
 	}
 	s.DesktopSubagentModel = strings.TrimSpace(s.DesktopSubagentModel)
 	if s.DesktopSubagentModel != "" && !strings.Contains(s.DesktopSubagentModel, "/") {
