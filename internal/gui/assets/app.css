@@ -2718,7 +2718,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc-line > :is(.amodels:not(.set), .acap:not(.set), .alane:not(.set)):not(.open):not(:focus-visible) { max-width: 0; padding-left: 0; padding-right: 0; margin-left: -9px; box-shadow: none; opacity: 0; }
 /* ⋯: a hover brings it out, beside what ends the row */
 .acc .acc-more { flex: none; display: inline-grid; place-items: center; width: 22px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--muted); cursor: default; opacity: 0; transition: opacity .15s, background .12s, color .12s; }
-.acc:hover .acc-more, .acc .acc-more:focus-visible, .acc.tools-open .acc-more { opacity: 1; }
+.acc:hover .acc-more, .acc.tools-open .acc-more { opacity: 1; }
+.acc .acc-more:focus-visible { opacity: 1; } /* its own rule: Safari before 15.4 drops a list holding it */
 .acc .acc-more:hover { color: var(--fg); background: var(--pill-hover); }
 .acc.tools-open .acc-more { color: var(--fg); background: var(--pill); }
 /* and its line, under the quota, lined up with it */
