@@ -2,6 +2,8 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Its plugin sent this request itself, so magpie can't split its time": "此请求由插件自行发出，magpie 无法拆分它的耗时",
+    "Claude Code sent this request itself, so magpie can't split its time": "此请求由 Claude Code 自行发出，magpie 无法拆分它的耗时",
     "magpie is masking this request before routing it (Settings › Privacy), so who takes it isn't picked yet.": "magpie 正在给这个请求脱敏（设置 › 隐私），脱敏完才路由，所以还没选出由谁处理。",
     "magpie hasn't routed this request yet, so who takes it isn't picked yet.": "magpie 还没开始路由这个请求，所以还没选出由谁处理。",
     "Nothing took this request: {error}": "没有谁处理这个请求：{error}",
@@ -592,6 +594,8 @@ magpie.strings({
     "Open Folder": "打开文件夹",
   },
   "zh-TW": {
+    "Its plugin sent this request itself, so magpie can't split its time": "此請求由外掛自行發出，magpie 無法拆分它的耗時",
+    "Claude Code sent this request itself, so magpie can't split its time": "此請求由 Claude Code 自行發出，magpie 無法拆分它的耗時",
     "magpie is masking this request before routing it (Settings › Privacy), so who takes it isn't picked yet.": "magpie 正在為這個請求脫敏（設定 › 隱私），脫敏完才路由，所以還沒選出由誰處理。",
     "magpie hasn't routed this request yet, so who takes it isn't picked yet.": "magpie 還沒開始路由這個請求，所以還沒選出由誰處理。",
     "Nothing took this request: {error}": "沒有誰處理這個請求：{error}",
@@ -1182,6 +1186,8 @@ magpie.strings({
     "Open Folder": "打開資料夾",
   },
   ja: {
+    "Its plugin sent this request itself, so magpie can't split its time": "このリクエストはプラグインが自ら送信したため、magpie では時間の内訳を出せません",
+    "Claude Code sent this request itself, so magpie can't split its time": "このリクエストは Claude Code が自ら送信したため、magpie では時間の内訳を出せません",
     "magpie is masking this request before routing it (Settings › Privacy), so who takes it isn't picked yet.": "magpie はルーティングの前にこのリクエストをマスクしています（設定 › プライバシー）。誰が処理するかはまだ決まっていません。",
     "magpie hasn't routed this request yet, so who takes it isn't picked yet.": "magpie はまだこのリクエストをルーティングしていないため、誰が処理するかはまだ決まっていません。",
     "Nothing took this request: {error}": "このリクエストを処理したものはありません: {error}",
@@ -1772,6 +1778,8 @@ magpie.strings({
     "Open Folder": "フォルダを開く",
   },
   de: {
+    "Its plugin sent this request itself, so magpie can't split its time": "Diese Anfrage hat die Erweiterung selbst gesendet, daher kann magpie ihre Zeit nicht aufschlüsseln",
+    "Claude Code sent this request itself, so magpie can't split its time": "Diese Anfrage hat Claude Code selbst gesendet, daher kann magpie ihre Zeit nicht aufschlüsseln",
     "magpie is masking this request before routing it (Settings › Privacy), so who takes it isn't picked yet.": "magpie maskiert diese Anfrage vor der Weiterleitung (Einstellungen › Datenschutz), daher steht noch nicht fest, wer sie übernimmt.",
     "magpie hasn't routed this request yet, so who takes it isn't picked yet.": "magpie hat diese Anfrage noch nicht weitergeleitet, daher steht noch nicht fest, wer sie übernimmt.",
     "Nothing took this request: {error}": "Niemand hat diese Anfrage übernommen: {error}",

@@ -3150,7 +3150,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		ended = time.Now()
 		try := Try{ID: c.rest, Model: c.model, Effort: wentAt, Picked: picked, Fixed: fixed, RuleEffort: ruled, Fast: fast, Start: began, Done: true, Status: call.Status, Millis: ended.Sub(began).Milliseconds(), Error: call.Error, Queued: queued,
 			Served: call.Usage.Served, Upstream: call.Usage.Upstream, Pin: c.p.ClinePassAsked(c.model), Tier: wentTier, TierServed: call.Usage.Tier, Auto: autoPicked(),
-			Net: nt.timing(began, queued)}
+			Net: nt.timing(began, queued), SentBy: sentBy(c.p)}
 		if resetFirst != nil {
 			// the reset spent for it before it was asked
 			try.Reset, resetFirst = resetFirst, nil

@@ -1206,6 +1206,11 @@ function routingPage(part) {
     return out;
   }
   const WHO = { magpie: "magpie {ms}", net: "network {ms}", vendor: "vendor {ms}" };
+  // why a try that went out some other way has no split (gateway.sentBy)
+  const SENT_BY = {
+    plugin: "Its plugin sent this request itself, so magpie can't split its time",
+    claude: "Claude Code sent this request itself, so magpie can't split its time",
+  };
   function timeSaid(tr) {
     const parts = timeParts(tr);
     if (!parts.length) return "";
@@ -2887,6 +2892,9 @@ function routingPage(part) {
       const timed = i === 0 && r.masking > 0 ? { ...tr, masking: r.masking } : tr;
       const when = tr.done && timeSaid(timed);
       if (when) items.push([when, "aside time", timed]);
+      // a plugin or Claude Code sent it, out of magpie's sight: said, so
+      // its missing split doesn't read as a request that lost it (lute)
+      if (tr.done && !tr.net && tryOk(tr) && SENT_BY[tr.sentBy]) items.push([t(SENT_BY[tr.sentBy]), "aside"]);
       // each model Copilot's Auto picked for it, where from, and whether
       // Copilot refused it, on which API and with Auto's session token or
       // without (#256)
