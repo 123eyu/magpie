@@ -8508,10 +8508,8 @@ function skelSeen() {
 // left, and with the bird turned off neither runs (a 1-core server:
 // Yayoi_no_yume on X).
 let skelSince = 0, skelFlying = false, skelTick = 0;
-// Once the bird has come it lands at least once (the owner, 10-30: a load
-// done as it came had it streak off over no skeleton): a read back before
-// then waits for it, and is let go as it leaves. At most 1.5s, for a frame
-// a hidden window never draws.
+// Once come, the bird lands three times (~1.6s) before a read goes in (the
+// owner, 10-30). At most 3s: a hidden window draws no frames.
 let skelGate = null, skelWaiting = 0;
 async function skelHold() {
   if (!skelGate) return;
@@ -8542,7 +8540,7 @@ async function skelBird() {
   skelFlying = true;
   let release;
   const gate = skelGate = new Promise((ok) => { release = () => { if (skelGate === gate) skelGate = null; ok(); }; });
-  setTimeout(release, 1500);
+  setTimeout(release, 3000);
   const b = el("div", "sk-bird roam");
   b.innerHTML = BIRD;
   document.body.append(b);
@@ -8570,17 +8568,20 @@ async function skelBird() {
     put({ x: at.x - 24, y: at.y - 40, f: 1 });
     b.animate([{ opacity: 0 }, { opacity: 1 }], 120);
     await tween(300, (e, t) => put({ x: at.x - 24 + 24 * t, y: at.y - 40 + 40 * e, sx: 1 - .05 * t, sy: 1 + .08 * t }), easeIn);
-    // its bar gone before it landed: it fades where it is, never flying
-    // over what came instead
+    // its bar gone mid-drop: it fades, never flying over the content
     if (!s.isConnected) return void (quiet = true);
     for (let hops = 0; hops < 400; hops++) {
       // it lands: the bar dips under it and springs back
       s.animate([{ transform: "none" }, { transform: "translateY(3px)", offset: .3 }, { transform: "translateY(-1.2px)", offset: .6 }, { transform: "translateY(.4px)", offset: .8 }, { transform: "none" }], { duration: 560, easing: "ease-out" });
       await tween(130, (e) => put({ y: at.y + 3 * e, sx: 1 + .14 * e, sy: 1 - .18 * e }), easeOut);
       await tween(90, (e) => put({ y: at.y + 3 * (1 - e), sx: 1.14 - .14 * e, sy: .82 + .18 * e }), easeIn);
-      // landed once: a read held for it means the load is done
-      if (!hops && skelWaiting) break;
-      if (!hops) release();
+      // third landing: held reads go in; it stands while the page fills,
+      // and leaves only when no bar is left
+      if (hops === 2) {
+        const held = skelWaiting;
+        release();
+        if (held) await new Promise((ok) => setTimeout(ok, 160));
+      }
       const to = birdOff() ? null : next(s);
       if (!to) break;
       const from = { x, y }, go = spot(to), h = 16 + Math.min(40, Math.hypot(go.x - from.x, go.y - from.y) * .15);

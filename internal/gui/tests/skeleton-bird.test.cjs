@@ -3,7 +3,8 @@
 // still up after a moment, as on a slow page, get the bird, which hops from
 // bar to bar, each bar dipping under it, and flies off once they are gone.
 // A quick load never sees it, and with reduced motion no bird comes. Once
-// it has come it lands once before the page fills (the owner, 10-30).
+// it has come it lands three times before the page fills (the owner,
+// 10-30), and a read of something else never sends it off early.
 // Settings' Loading bird (Yayoi_no_yume on X, a 1-core server) turns it
 // off: no bird comes and nothing looks for skeletons. With it on, the look
 // every 250ms runs only while a skeleton is in the page.
@@ -99,7 +100,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.deepEqual(errors, []);
   });
 
-  test(engine + ": a load done as the bird comes keeps its skeletons until the bird has landed once", async (t) => {
+  test(engine + ": a load done as the bird comes keeps its skeletons until the bird has landed three times", async (t) => {
     const browser = await launch();
     t.after(() => browser.close());
     let release;
@@ -117,8 +118,32 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await page.waitForFunction(() => seen.goneAt, null, { timeout: 3000 });
     const { dipsAtGone, goneAt } = await page.evaluate(() => seen);
     assert.ok(dipsAtGone > 0, "the bird landed on a bar before the skeletons went");
-    assert.ok(goneAt - at < 1500, `the load waited at most for one landing (${Math.round(goneAt - at)}ms)`);
+    // drop 300ms, three landings 220ms each, two hops 340ms each: ~1.64s
+    assert.ok(goneAt - at > 1300, `the load waited for three landings (${Math.round(goneAt - at)}ms)`);
+    assert.ok(goneAt - at < 3500, `and no longer (${Math.round(goneAt - at)}ms)`);
     await page.waitForFunction(() => !document.querySelector(".sk-bird"), null, { timeout: 2000 });
+    assert.deepEqual(errors, []);
+  });
+
+  test(engine + ": a read of something else, as the bird lands, doesn't send it off while skeletons are up", async (t) => {
+    const browser = await launch();
+    t.after(() => browser.close());
+    let release;
+    const held = new Promise((r) => { release = r; });
+    const { page, errors } = await open(browser, false, () => held);
+    await page.locator("#view-plugins .pm-card.ghost").first().waitFor();
+    await page.locator(".sk-bird.roam").waitFor({ state: "attached", timeout: 3000 });
+    // reads the page makes as the bird drops and lands, none of them the
+    // one the skeletons wait for
+    await page.evaluate(() => { for (const ms of [0, 100, 250, 400]) setTimeout(() => api("/api/state"), ms); });
+    await page.waitForTimeout(2500);
+    assert.equal(await page.evaluate(() => seen.birds), 1, "one bird, still on the skeletons");
+    assert.ok(await page.locator(".sk-bird.roam").count(), "it is still there");
+    assert.ok(await page.evaluate(() => seen.places.size > 30 && seen.dips > 0), "it hops bar to bar");
+    release();
+    await page.waitForFunction(() => !document.querySelector("#view-plugins .pm-card.ghost"));
+    await page.waitForFunction(() => !document.querySelector(".sk-bird"), null, { timeout: 2000 });
+    assert.equal(await page.evaluate(() => seen.birds), 1);
     assert.deepEqual(errors, []);
   });
 
