@@ -357,7 +357,7 @@ func (idx *requestIndex) fromDisk(want map[string]sessions.CallSource) {
 		}
 		c.Source = s
 		c.serial = nextChunkSerial()
-		c.Used = idx.tick
+		c.used = useAt(idx.tick)
 		idx.chunks[s.Path] = c
 		return true
 	})

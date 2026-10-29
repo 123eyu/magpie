@@ -6,6 +6,7 @@ package usage
 // complete ledger explicitly. This cache is disposable and bounded.
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
@@ -122,9 +123,12 @@ type rowChunk struct {
 	dict             map[string]uint32
 	Source           sessions.CallSource
 	Bytes            int64
-	Used             uint64
-	Count            int
-	Latest           time.Time
+	// used is the tick of the latest read that used the chunk, for trim:
+	// a counter of its own, so a read marks a published chunk used without
+	// writing the chunk under another read's page (use)
+	used   *atomic.Uint64
+	Count  int
+	Latest time.Time
 	// Computer is the other computer whose day this is (#542), by id
 	Computer string
 	// serial names the chunk as made, for the cells a page keeps of it
@@ -937,8 +941,10 @@ func readRequestBlocks(idx *requestIndex, st requestState, p Period, now time.Ti
 	if c := probeChunk(snapshot.probes, gatewaySince, renames, snapshot.hosts); c != nil {
 		gateways = append(gateways, c) // listed, never counted (SourceProbe)
 	}
-	on := map[string]bool{}
-	var chunks []*rowChunk
+	// made to size: a map of every session file grown a path at a time was
+	// ~96 MB of a minute and a third of polls, and the list beside it (#2278)
+	on := make(map[string]bool, len(sources))
+	chunks := make([]*rowChunk, 0, len(sources))
 	// made once a session file is to be read again, shared by the readers:
 	// it is only read after
 	resolver := sync.OnceValue(func() *sessionResolver { return newSessionResolver([]sessions.Call{{}}) })
@@ -1003,7 +1009,7 @@ func readRequestBlocks(idx *requestIndex, st requestState, p Period, now time.Ti
 			c.serial = nextChunkSerial()
 			built++
 			builtRows += c.Count
-			c.Used = idx.tick
+			c.used = useAt(idx.tick)
 			put = spill.put(c, i)
 		} else {
 			c = idx.use(c)
@@ -1041,7 +1047,7 @@ func readRequestBlocks(idx *requestIndex, st requestState, p Period, now time.Ti
 			c.dict, c.shapeIDs = nil, nil
 			c = c.pack()
 			c.serial = nextChunkSerial()
-			c.Used = idx.tick
+			c.used = useAt(idx.tick)
 		} else {
 			c = idx.use(c)
 		}
@@ -1089,18 +1095,39 @@ func (idx *requestIndex) adopt(st requestState) {
 	}
 }
 
-// use is c, a chunk of idx's, as used by this read. A chunk another read
-// published is copied, since that read's page may still hold it; one this
-// read made (fromDisk) is its own. Both the map and the page take the one
-// chunk: a copy for each was 13.5 MB of the live heap after 34k sessions'
-// start (#2278).
+// use is c, a chunk of idx's, as used by this read. Both the map and the
+// page take the one chunk: a copy for each was 13.5 MB of the live heap
+// after 34k sessions' start (#2278). The read is marked on c's own counter,
+// never by a copy: a copy of every published chunk on every read was
+// 255 MB of 5.4 GB allocated in 80s of polls while a session was written
+// (#2278).
 func (idx *requestIndex) use(c *rowChunk) *rowChunk {
-	if c.Used == idx.tick {
-		return c
+	if c.used == nil {
+		next := *c
+		next.used = useAt(idx.tick)
+		return &next
 	}
-	next := *c
-	next.Used = idx.tick
-	return &next
+	for {
+		was := c.used.Load()
+		if was >= idx.tick || c.used.CompareAndSwap(was, idx.tick) {
+			return c
+		}
+	}
+}
+
+// useAt is a chunk's use counter, made by a read of tick.
+func useAt(tick uint64) *atomic.Uint64 {
+	u := new(atomic.Uint64)
+	u.Store(tick)
+	return u
+}
+
+// lastUse is the tick of the latest read that used c, 0 for none.
+func (c *rowChunk) lastUse() uint64 {
+	if c.used == nil {
+		return 0
+	}
+	return c.used.Load()
 }
 
 // private is a copy of idx's metadata and chunk map to read into without
@@ -1123,7 +1150,7 @@ func (idx *requestIndex) keep(read *requestIndex, on map[string]bool) bool {
 	}
 	for path, c := range read.chunks {
 		prev := idx.chunks[path]
-		if prev != nil && prev.Used > c.Used {
+		if prev != nil && prev.lastUse() > c.lastUse() {
 			continue
 		}
 		if prev != nil && prev.serial == c.serial && prev.pagesRank() > c.pagesRank() {
@@ -1233,17 +1260,14 @@ func (idx *requestIndex) trim(bound int64) {
 		path string
 		row  *rowChunk
 	}
-	var kept []cachedChunk
+	kept := make([]cachedChunk, 0, len(idx.chunks))
 	for path, c := range idx.chunks {
 		bytes += c.Bytes
 		kept = append(kept, cachedChunk{path: path, row: c})
 	}
 	slices.SortFunc(kept, func(a, b cachedChunk) int {
-		if a.row.Used < b.row.Used {
-			return -1
-		}
-		if a.row.Used > b.row.Used {
-			return 1
+		if a, b := a.row.lastUse(), b.row.lastUse(); a != b {
+			return cmp.Compare(a, b)
 		}
 		return strings.Compare(a.path, b.path)
 	})
@@ -1264,7 +1288,16 @@ func visibleLocal(chunks []*rowChunk) map[rowRef]bool {
 	// the decoded chunk's string: a long history's ~400k ids held ~7MB of
 	// copies at the start's peak, and a key of these is a string header's
 	// size. Two ids alike in both are ~1e-28 likely.
-	seen := map[[2]uint64]struct{}{}
+	// made to size, as many as the rows that can have an id (a Codex call
+	// has none): grown an id at a time, it was ~250 MB of a minute and a
+	// third of polls (#2278)
+	n := 0
+	for _, c := range chunks {
+		if c.Source.Agent != "codex" {
+			n += c.Count
+		}
+	}
+	seen := make(map[[2]uint64]struct{}, n)
 	rows := lentRows()
 	defer rows.release()
 	for _, c := range chunks {
