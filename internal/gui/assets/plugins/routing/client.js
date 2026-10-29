@@ -5016,7 +5016,15 @@ function routingPage(part) {
     renderGroups();
     return true;
   };
-  const groupIcons = (g) => [...new Map((g.memberInfo || []).filter((i) => i.icon).map((i) => [i.provider || i.icon, i.icon])).values()];
+  // offIn: the members of a group magpie found whose provider is switched
+  // off (XYenon on Discord). magpie keeps them in the group so agents on it
+  // aren't moved while one is off (#2671), but the gateway skips them, so a
+  // found group's card and logos leave them out, as every model list leaves
+  // a provider switched off out, and say how many in a tag; the editor still
+  // has them, greyed with why. A group of the user's lists what they put in.
+  const offIn = (g) => g.auto ? (g.memberInfo || []).filter((i) => i.providerOff && g.members.includes(i.id)) : [];
+  const shownMembers = (g) => { const off = offIn(g).map((i) => i.id); const left = g.members.filter((id) => !off.includes(id)); return left.length ? left : g.members; };
+  const groupIcons = (g) => { const shown = shownMembers(g); return [...new Map((g.memberInfo || []).filter((i) => i.icon && shown.includes(i.id)).map((i) => [i.provider || i.icon, i.icon])).values()]; };
   // offOf: a member whose provider is switched off (groupsState's
   // providerOff), said by its provider's name and model rather than a bare
   // id: the group skips it until the provider is on again
@@ -5491,7 +5499,7 @@ function routingPage(part) {
     const main = el("div", "main"), nm = el("div", "nm");
     nm.append(el("b", "", g.name), el("code", "mdl", g.ref || "group/" + g.id));
     if (g.auto) nm.append(el("small", "auto", t("found by magpie")));
-    main.append(nm, el("div", "mem", g.members.map((id) => memberLabel(g, id)).join(g.routing === "order" ? " → " : " · ")));
+    main.append(nm, el("div", "mem", shownMembers(g).map((id) => memberLabel(g, id)).join(g.routing === "order" ? " → " : " · ")));
     row.append(cb, ics, main);
     return row;
   }
@@ -5549,7 +5557,7 @@ function routingPage(part) {
     if (g.auto) nm.append(el("small", "auto", t("found by magpie")));
     const manual = g.routing === "manual";
     const sep = g.routing === "order" ? " → " : " · ";
-    const mem = manual ? pickRow(g) : el("div", "mem", g.members.map((id) => memberLabel(g, id) + (g.off?.includes(id) ? ` (${t("off")})` : "")).join(sep));
+    const mem = manual ? pickRow(g) : el("div", "mem", shownMembers(g).map((id) => memberLabel(g, id) + (g.off?.includes(id) ? ` (${t("off")})` : "")).join(sep));
     main.append(nm, mem);
     for (const p of g.patterns || []) {
       const line = el("div", "mem pat" + (p.models ? "" : " none"));
@@ -5586,6 +5594,12 @@ function routingPage(part) {
       const r = el("span", "tag" + (manual ? " idle" : ""), t(g.rules.length === 1 ? "1 rule" : "{n} rules", { n: g.rules.length }));
       r.title = (manual ? t("The rules wait while you pick the model by hand.") + "\n" : "") + g.rules.map((x, i) => `${i + 1}. ${ruleText(x)} → ${x.pause ? t("pause") + " " : ""}${rUses(x).map((u) => memberLabel(g, u)).join(", ")}${x.useEffort ? " · " + t("{level} reasoning", { level: x.useEffort }) : ""}`).join("\n");
       tags.append(r);
+    }
+    const offs = manual ? [] : offIn(g);
+    if (offs.length && shownMembers(g).length < g.members.length) {
+      const k = el("span", "tag idle rt-goff", t("{n} switched off", { n: offs.length }));
+      k.title = offs.map(offWords).join("\n");
+      tags.append(k);
     }
     if (g.disabled) tags.append(el("span", "tag idle", t("switched off")));
     else if (!g.ready) tags.append(el("span", "tag bad", t("no member ready")));
