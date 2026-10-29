@@ -1552,6 +1552,10 @@
       requestAnimationFrame(step);
     });
     const easeIn = (t) => t * t * t, easeOut = (t) => 1 - (1 - t) ** 3;
+    // a README waits for three landings (the owner, 10-30), 3s at most
+    let ready;
+    box.ready = new Promise((ok) => { ready = ok; });
+    setTimeout(ready, 3000);
     (async () => {
       await new Promise(requestAnimationFrame);
       if (!box.isConnected || gone) return;
@@ -1583,6 +1587,7 @@
           await tween(90, (e) => { put({ y: top + deep * (1 - e), sx: 1.16 - .16 * e, sy: .8 + .3 * e }); l.d = y - top; }, easeIn);
           l.hold = false;
           l.v = -deep * 14;
+          if (i === 2) ready();
           const xa = x, ya = y;
           if (i + 1 < L.length) {
             const xb = at[i + 1] * W, yb = L[i + 1].y - 5;
@@ -1597,7 +1602,7 @@
           }
         }
       }
-    })().catch(() => {});
+    })().catch(() => {}).finally(ready);
     box.leave = () => {
       if (off) return box.remove();
       gone = true;
@@ -1690,7 +1695,9 @@
     // the README takes the skeleton's place, and the dialog grows to it on
     // the spring it opened on, centred as it goes, not in one jump; the
     // bird flies off over it
-    const fill = (n) => {
+    const fill = async (n) => {
+      await readme.querySelector(".pm-bounce")?.ready;
+      if (!ed.isConnected) return;
       const d = ed.parentElement, h = d.offsetHeight, y = d.style.top, wait = readme.querySelector(".pm-bounce");
       const m = d.parentElement, at = wait?.getBoundingClientRect(), o = m.getBoundingClientRect();
       readme.replaceChildren(n);
