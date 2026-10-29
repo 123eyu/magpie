@@ -2750,6 +2750,11 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
   .accts.keys .acc:not(:hover) > .alane:not(.set):not(.open):not(:focus) { margin-left: -9px; }
 }
 .accts.keys .acc .using, .accts.keys .acc > .text:not(.quiet) { flex: none; white-space: nowrap; }
+/* Switch off on hover, beside Remove (wei_VC on X): in a narrow weighted
+   list the weight pill and Make first leave no room for it, and the name
+   went to nothing; there the tick dot alone switches an on key off */
+.accts.keys { container-type: inline-size; }
+@container (max-width: 520px) { .accts.keys.weighted .acc > .key-switch.quiet { display: none; } }
 #gatewayKeys .acc { min-width: 0; }
 #gatewayKeys .acc .plan { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* a gateway key's own limit (#585): the badge, what it used under the
