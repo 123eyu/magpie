@@ -797,7 +797,10 @@ func queryPageOf(p Period, f Filter, offset, limit int, readSource func(sessions
 	if building != nil {
 		building()
 	}
-	page = buildRequestBlocksIn(p, f, offset, limit, now, b.gateways, b.chunks, b.others, names, codexIdentities, cache)
+	func() {
+		defer holdBigBuild(b.gateways, b.chunks, b.others)() // on a panic too
+		page = buildRequestBlocksIn(p, f, offset, limit, now, b.gateways, b.chunks, b.others, names, codexIdentities, cache)
+	}()
 	ownStrings(reflect.ValueOf(&page).Elem())
 	b.priced.release()
 	shared.Lock()
@@ -853,8 +856,13 @@ func codexEffortOfIndex(st requestState, p Period, now time.Time) map[string][]s
 	b := readRequestBlocks(idx, st, p, now, sessions.ReadCallSource, true)
 	defer b.priced.release()
 	sums := effortSums{}
-	ps, next := pairRowsMemo(p, now, b.gateways, b.chunks, b.others, st.codexIdentities, memo)
-	ps.visitActors(func(r *Row) { sums.add(r) })
+	var next *pairMemo
+	func() {
+		defer holdBigBuild(b.gateways, b.chunks, b.others)()
+		var ps *pairedRows
+		ps, next = pairRowsMemo(p, now, b.gateways, b.chunks, b.others, st.codexIdentities, memo)
+		ps.visitActors(func(r *Row) { sums.add(r) })
+	}()
 	b.priced.release()
 	shared.Lock()
 	if shared.keep(idx, b.on) {
@@ -864,6 +872,30 @@ func codexEffortOfIndex(st requestState, p Period, now time.Time) map[string][]s
 	}
 	shared.Unlock()
 	return sums.values()
+}
+
+// bigBuilds is held while a page pairs and adds up bigBuildRows rows or
+// more. On a cold start the Usage page's heatmap and requests each paired
+// a year of calls side by side, ~350 MB held at once and most of the
+// footprint's peak (#2278). A smaller page, Today's, goes beside them.
+var bigBuilds sync.Mutex
+
+var bigBuildRows = 1 << 17
+
+// holdBigBuild holds bigBuilds when the chunks have bigBuildRows rows or
+// more, and is what lets it go.
+func holdBigBuild(sets ...[]*rowChunk) (let func()) {
+	n := 0
+	for _, set := range sets {
+		for _, c := range set {
+			n += rowsIn(c)
+		}
+	}
+	if n < bigBuildRows {
+		return func() {}
+	}
+	bigBuilds.Lock()
+	return bigBuilds.Unlock
 }
 
 // requestBlocks are what a page of a period is worked out from: the
