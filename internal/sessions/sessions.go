@@ -627,15 +627,35 @@ func allFiles() []file {
 	if filesHook != nil {
 		filesHook()
 	}
-	var out []file
-	for _, fs := range [][]file{callFiles(), openCodeFiles(), piFiles(), raftFiles(),
-		wslFiles("pi", "raft", "omp", "kimi"), zcodeFiles(), dshFiles(), clineFiles(), ccFiles("qoder", QoderDir("qoder")), ccFiles("qoder-cn", QoderDir("qoder-cn")),
-		grokFiles(), workbuddyFiles(), codebuddyFiles(), droidFiles(), ompFiles(), cursorFiles(), hermesFiles(), almaFiles(), kimiFiles(), agyFiles()} {
-		out = append(out, fs...)
-	}
 	// each lister asked Reads already; a file listed under another
 	// agent's name is held to that agent too
-	return allowed(distinctPaths(out))
+	return allowed(distinctOf(append(callFileLists(codexFiles()), openCodeFiles(), piFiles(), raftFiles(),
+		wslFiles("pi", "raft", "omp", "kimi"), zcodeFiles(), dshFiles(), clineFiles(), ccFiles("qoder", QoderDir("qoder")), ccFiles("qoder-cn", QoderDir("qoder-cn")),
+		grokFiles(), workbuddyFiles(), codebuddyFiles(), droidFiles(), ompFiles(), cursorFiles(), hermesFiles(), almaFiles(), kimiFiles(), agyFiles())...))
+}
+
+// distinctOf is lists one after another with each path kept once, the
+// first time it is listed (distinctPaths), in one slice and one set made
+// at their size: a file is ~200 bytes, and the call files were copied and
+// a set of them made once, then copied and a set made again with the
+// other agents' (allFiles, callSources), ~10 MB on each of a poll's
+// several passes over ~34k sessions (#2278).
+func distinctOf(lists ...[]file) []file {
+	n := 0
+	for _, fs := range lists {
+		n += len(fs)
+	}
+	out := make([]file, 0, n)
+	seen := make(map[string]struct{}, n)
+	for _, fs := range lists {
+		for _, f := range fs {
+			if _, ok := seen[f.path]; !ok {
+				seen[f.path] = struct{}{}
+				out = append(out, f)
+			}
+		}
+	}
+	return out
 }
 
 // distinctPaths is fs with each path kept once, the first time it is
@@ -1435,27 +1455,21 @@ func listSessions(limit int) []Session {
 	defer useDBs()()
 	files := allFiles()
 	groups := byKey(files, nil)
-	// each session's latest file, beside its key: a map of them was
-	// ~72 MB of eight Sessions polls over 34k sessions (#2278)
-	type keyed struct {
-		key    string
-		latest time.Time
-	}
-	order := make([]keyed, 0, len(groups))
-	for k, fs := range groups {
-		o := keyed{key: k}
-		for _, f := range fs {
-			if f.mod.After(o.latest) {
-				o.latest = f.mod
-			}
+	latest := map[string]time.Time{}
+	for _, f := range files {
+		if f.mod.After(latest[f.key]) {
+			latest[f.key] = f.mod
 		}
-		order = append(order, o)
 	}
-	slices.SortFunc(order, func(a, b keyed) int {
-		if c := b.latest.Compare(a.latest); c != 0 {
-			return c
+	keys := make([]string, 0, len(groups))
+	for k := range groups {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if !latest[keys[i]].Equal(latest[keys[j]]) {
+			return latest[keys[i]].After(latest[keys[j]])
 		}
-		return strings.Compare(a.key, b.key)
+		return keys[i] < keys[j]
 	})
 	// the keys are not truncated yet: assemble below drops an empty
 	// session, and a nonempty one must take its place rather than the
@@ -1471,11 +1485,8 @@ func listSessions(limit int) []Session {
 	copyIDs := copiesByKeeper(copies, groups)
 
 	price, titles := pricer(), codexTitleOf()
-	// made to size: grown by append, a list of every session was copied
-	// through each size it grew past, ~130 MB of eight polls (#2278)
-	out := make([]Session, 0, min(limit, len(order)))
-	for _, o := range order {
-		k := o.key
+	out := []Session{}
+	for _, k := range keys {
 		if copies[k] != "" {
 			continue
 		}
