@@ -104,7 +104,7 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			out.Dirs = append(out.Dirs, tilde(d))
 		}
 		list := sessions.List(sessions.All)
-		nativeKeys := map[string]bool{}
+		nativeKeys := make(map[string]bool, len(list))
 		for _, s := range list {
 			for _, k := range sessions.GatewayKeys(s) {
 				nativeKeys[k] = true
@@ -140,6 +140,9 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			}
 		}
 		vias := usage.Vias(since.Add(-time.Minute))
+		// made to size: up to sessions.All rows, grown by append each poll
+		// was copied through every size on the way, ~140 MB of eight (#2278)
+		out.Sessions = make([]sessionJSON, 0, len(list))
 		for _, s := range list {
 			j := sessionJSON{Session: s, Name: s.Agent, Icon: "generic", Via: viaOf(vias, s)}
 			if a := agents[s.Agent]; a != nil {

@@ -1435,21 +1435,27 @@ func listSessions(limit int) []Session {
 	defer useDBs()()
 	files := allFiles()
 	groups := byKey(files, nil)
-	latest := map[string]time.Time{}
-	for _, f := range files {
-		if f.mod.After(latest[f.key]) {
-			latest[f.key] = f.mod
-		}
+	// each session's latest file, beside its key: a map of them was
+	// ~72 MB of eight Sessions polls over 34k sessions (#2278)
+	type keyed struct {
+		key    string
+		latest time.Time
 	}
-	keys := make([]string, 0, len(groups))
-	for k := range groups {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		if !latest[keys[i]].Equal(latest[keys[j]]) {
-			return latest[keys[i]].After(latest[keys[j]])
+	order := make([]keyed, 0, len(groups))
+	for k, fs := range groups {
+		o := keyed{key: k}
+		for _, f := range fs {
+			if f.mod.After(o.latest) {
+				o.latest = f.mod
+			}
 		}
-		return keys[i] < keys[j]
+		order = append(order, o)
+	}
+	slices.SortFunc(order, func(a, b keyed) int {
+		if c := b.latest.Compare(a.latest); c != 0 {
+			return c
+		}
+		return strings.Compare(a.key, b.key)
 	})
 	// the keys are not truncated yet: assemble below drops an empty
 	// session, and a nonempty one must take its place rather than the
@@ -1465,8 +1471,11 @@ func listSessions(limit int) []Session {
 	copyIDs := copiesByKeeper(copies, groups)
 
 	price, titles := pricer(), codexTitleOf()
-	out := []Session{}
-	for _, k := range keys {
+	// made to size: grown by append, a list of every session was copied
+	// through each size it grew past, ~130 MB of eight polls (#2278)
+	out := make([]Session, 0, min(limit, len(order)))
+	for _, o := range order {
+		k := o.key
 		if copies[k] != "" {
 			continue
 		}
