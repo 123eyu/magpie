@@ -2212,7 +2212,11 @@ func SamePriceIn(s settings.Settings, providerID, model string) (catalog.Price, 
 // price they set for that model, or for every model of that provider, or for
 // that model from any provider (settings' ModelPrices), else the provider's own list price, else its
 // maker's, else the maker's of the model the user said it is the same as
-// (SamePriceIn), each at the provider's price rate (PriceRate). The second return is false only when no price is known at all,
+// (SamePriceIn), each at the provider's price rate (PriceRate), and again
+// at the rate of the time-of-day window the call falls in (RateWindows,
+// #2463) — the window's rate on a price the user set as well, the price
+// rate alone leaving it as set. The second return is false only when no
+// price is known at all,
 // which is not the same as a price of zero: that one is set, deliberately.
 //
 // A price here is the provider's tariff, not the model's: the same model
@@ -2227,31 +2231,70 @@ func EffectivePrice(providerID, model string) (catalog.Price, bool) {
 // the list is one snapshot of the prices rather than a reading per row, and
 // a price changed while it is read takes effect in the next call.
 func EffectivePriceIn(s settings.Settings, providerID, model string) (catalog.Price, bool) {
+	return EffectivePriceAt(s, providerID, model, time.Now())
+}
+
+// EffectivePriceAt is EffectivePriceIn at the time given: a record's own
+// time when one is priced, now for a price shown before a call. A caller
+// pricing many records takes BasePriceIn once per model and multiplies
+// each record's window rate on itself, so one read of the prices serves
+// every time of day.
+func EffectivePriceAt(s settings.Settings, providerID, model string, at time.Time) (catalog.Price, bool) {
 	// A price is keyed by the id the provider has now, so one written before
 	// a rename is read under the id it has. Only an id, or one the provider
 	// was renamed from, resolves; anything else is looked up as given, so a
 	// key under a display name counts only for a caller naming that name
 	// too. Nothing writes such a key — SetModelPrice re-keys the way
 	// SetModelName does — which is what keeps the two from drifting.
-	return priceIn(s, All(), providerID, model)
+	return priceIn(s, All(), providerID, model, at)
 }
 
 // priceIn is EffectivePriceIn with the providers read already, for a
 // caller pricing many models at once: All() copies every provider each
 // time it is read, so a list read it once a model, 30 providers' copies
 // for each of hundreds of models (EntryPricer).
-func priceIn(s settings.Settings, all []Provider, providerID, model string) (catalog.Price, bool) {
+func priceIn(s settings.Settings, all []Provider, providerID, model string, at time.Time) (catalog.Price, bool) {
 	p, known := byIDOrWasIn(all, providerID)
 	if !known {
 		p = Provider{ID: providerID}
 	}
-	return priceOf(s, p, known, model)
+	return priceOf(s, p, known, model, at)
 }
 
-// priceOf is EffectivePriceIn for a provider already looked up, for a
+// BasePriceIn is EffectivePriceAt without a rate window's rate: what the
+// provider bills outside every window, and the third return is its
+// windows, for RateAt to read each record's time against. A caller
+// pricing many records holds both and multiplies the rates itself, as
+// the usage ledger's Pricer does, so one read serves every time of day.
+func BasePriceIn(s settings.Settings, providerID, model string) (catalog.Price, bool, []RateWindow) {
+	p, known := byIDOrWas(providerID)
+	if !known {
+		p = Provider{ID: providerID}
+	}
+	pr, ok := priceOf(s, p, known, model, time.Time{})
+	return pr, ok, p.RateWindows
+}
+
+// priceOf is EffectivePriceAt for a provider already looked up, for a
 // caller pricing many models at once: byIDOrWas reads every provider's
-// accounts each time.
-func priceOf(s settings.Settings, p Provider, known bool, model string) (catalog.Price, bool) {
+// accounts each time. The window's rate scales every price the call is
+// counted at, a price the user set for the model included (#2463); the
+// price rate alone leaves that price as set. A zero at prices without a
+// rate window's rate, as BasePriceIn asks for.
+func priceOf(s settings.Settings, p Provider, known bool, model string, at time.Time) (catalog.Price, bool) {
+	pr, ok := tariffOf(s, p, known, model)
+	if ok && !at.IsZero() {
+		if w := p.RateAt(at); w > 0 && w != 1 {
+			pr = pr.Times(w)
+		}
+	}
+	return pr, ok
+}
+
+// tariffOf is a price without a rate window's rate: what the user set
+// for the model as they set it, else the provider's list price, else its
+// maker's, each at the price rate.
+func tariffOf(s settings.Settings, p Provider, known bool, model string) (catalog.Price, bool) {
 	id := p.ID
 	// then what they said the model costs from any provider (*/model):
 	// still the user's word, so before any list price
@@ -2306,10 +2349,18 @@ func EntryPriceIn(st settings.Settings, find func(string) (Group, []Member, bool
 // read of the providers it makes: what a /v1/models or an agent's model
 // file prices row by row.
 func EntryPricer(st settings.Settings, find func(string) (Group, []Member, bool)) func(Entry) (catalog.Price, bool) {
+	// one time for the whole list, as the providers are one read too:
+	// a rate window (#2463) holds or not for every row alike
+	return entryPricerAt(st, find, time.Now())
+}
+
+// entryPricerAt is EntryPricer with a provider's rate window taken at
+// now, or left out for a zero now.
+func entryPricerAt(st settings.Settings, find func(string) (Group, []Member, bool), now time.Time) func(Entry) (catalog.Price, bool) {
 	all := All()
 	return func(e Entry) (catalog.Price, bool) {
 		if e.Group == "" {
-			return priceIn(st, all, e.Provider.ID, e.Model)
+			return priceIn(st, all, e.Provider.ID, e.Model, now)
 		}
 		_, ms, ok := find(e.ID)
 		if !ok || len(ms) == 0 {
@@ -2317,7 +2368,7 @@ func EntryPricer(st settings.Settings, find func(string) (Group, []Member, bool)
 		}
 		var first catalog.Price
 		for i, m := range ms {
-			pr, ok := priceIn(st, all, m.Provider.ID, m.Model)
+			pr, ok := priceIn(st, all, m.Provider.ID, m.Model, now)
 			if !ok || m.Fast || i > 0 && !pr.Same(first) {
 				return catalog.Price{}, false
 			}
@@ -2337,8 +2388,15 @@ func EntryPricer(st settings.Settings, find func(string) (Group, []Member, bool)
 // every call to the group at 0. A first member in a fast mode, or with no
 // known price, leaves the group unpriced, as before. The list is read
 // afresh at each Sync, so the price follows the group's members.
+//
+// A provider's rate window (#2463) is left out: the file holds whatever
+// was written at the last Sync, which nothing rewrites when a window
+// opens or closes, so a window's price taken then would stay on through
+// the hours outside it. magpie's own count (Usage, a key's budget) takes
+// each call's window.
 func AgentPricer(st settings.Settings, find func(string) (Group, []Member, bool)) func(Entry) (catalog.Price, bool) {
-	same, all := EntryPricer(st, find), All()
+	var base time.Time
+	same, all := entryPricerAt(st, find, base), All()
 	return func(e Entry) (catalog.Price, bool) {
 		if pr, ok := same(e); ok || e.Group == "" {
 			return pr, ok
@@ -2347,7 +2405,7 @@ func AgentPricer(st settings.Settings, find func(string) (Group, []Member, bool)
 		if !ok || len(ms) == 0 || ms[0].Fast {
 			return catalog.Price{}, false
 		}
-		return priceIn(st, all, ms[0].Provider.ID, ms[0].Model)
+		return priceIn(st, all, ms[0].Provider.ID, ms[0].Model, base)
 	}
 }
 

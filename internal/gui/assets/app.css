@@ -4539,6 +4539,21 @@ body .row.agent .ag-prefs .row.pref .who { display: block; }
 :is(.ag-prefs, .agent-prefs) .compact-at { flex: 0 1 auto; min-width: 0; flex-wrap: wrap; row-gap: 6px; }
 /* Settings' search finds them; not searching, the links stay out */
 #view-settings:not(.set-searching) #agentPrefLinks { display: none; }
+
+/* a provider's rate windows (#2463): the editor's rows, a day chip each,
+   a span and a rate beside them */
+.rate-windows > .rate-win:last-child + button { align-self: start; }
+.rate-win { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.rate-win .day-chips { display: flex; gap: 2px; }
+.rate-win .day-chip { min-width: 24px; height: 24px; padding: 0 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--muted); font: inherit; font-size: 11px; }
+.rate-win .day-chip.on { color: var(--fg); background: var(--seg-thumb); box-shadow: var(--seg-edge); }
+.rate-win input { width: 64px; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--card); color: var(--fg); font: inherit; font-size: 12px; }
+.rate-win .rate-rate { width: 56px; }
+.rate-win .rate-dash { color: var(--muted); }
+.rate-win .rate-win-del { flex: none; padding: 0 6px; color: var(--muted); }
+.rate-win .rate-win-del:hover { color: var(--red); }
+.rate-win .rate-time { width: 86px; height: 28px; justify-content: space-between; padding: 0 8px; flex: none; }
+.rate-win .rate-time[data-value=""] span { color: var(--muted); }
 .sess-pick.led-more { padding: 0 6px; }
 .sess-pick.led-more svg { transform: none; }
 .sess-tools .led-rename { flex: none; width: 180px; height: 26px; padding: 0 8px; border-radius: 7px; font-size: 12px; }

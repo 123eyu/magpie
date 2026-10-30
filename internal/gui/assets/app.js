@@ -6320,6 +6320,11 @@ function renderProviders() {
     if (p.off) name.append(el("span", "badge off", t("Switched off")));
     if (p.move && p.move.state !== "plugin") name.append(deprecatedBadge());
     const n = p.models.filter((m) => m.on).length;
+    // rate windows: what it bills at now (#2463)
+    if (p.rateNow > 0) {
+      const rate = "×" + (p.rateNow < 0.01 ? "<0.01" : +p.rateNow.toFixed(2));
+      name.append(Object.assign(el("span", "badge rate-now", rate), { title: t("Bills at {rate} now: the price rate times this hour's window", { rate }) }));
+    }
     // a provider that only draws images (Settings → Image generation) says so
     const models = n ? t(n === 1 ? "{n} model" : "{n} models", { n })
       : p.draws ? t(p.draws === 1 ? "{n} image model" : "{n} image models", { n: p.draws }) : t(p.noModels ? "usage only" : "no models exposed");
@@ -7907,6 +7912,12 @@ function priceRateField() {
   box.oninput = () => { draft.priceRate = box.value; };
   return field(t("Price rate"), box, t("Costs are counted at the official price times this, as a relay bills, like 0.8 or 1.5; a price you set for a model stays as set"));
 }
+// a provider's hours at its own rate (#2463), drawn by ratewindows.js
+function rateWindowsField() {
+  const box = el("div", "stack rate-windows"), d = draft;
+  import("./ratewindows.js").then(() => rateWindowsPaint(box, d), statusErr);
+  return field(t("Rate windows"), box);
+}
 // pluginOptionsField: the switches a plugin declares for its provider
 // (auth.options, #2038, Vocllum), each an Off/On beside the plugin's own
 // words for it, put in as text. One the plugin asks to confirm is asked
@@ -8038,6 +8049,7 @@ function advancedSet(d, p) {
   return (d.headers || []).some(([k]) => (k || "").trim()) || !!(d.extraBody || "").trim() || !!(d.replyHeaders || "").trim() ||
     !!d.proxyMode || Object.values(d.accountProxies || {}).some((x) => x?.mode) ||
     [d.concurrency, d.queueLimit, d.queueWait, d.maxRPM, d.priceRate, d.contexts, d.outputs, d.compacts].some((v) => String(v ?? "").trim()) ||
+    !!d.rateWindows?.length ||
     !!(d.searches || d.authHeader || d.passUserAgent || d.unredacted || d.pinUpstream || d.nativeCompaction || d.balanceToken || d.limitRestOff) ||
     !!d.fallback?.length || !!p?.balanceToken?.set;
 }
@@ -8822,13 +8834,11 @@ $("#modal").addEventListener("keydown", (e) => {
 // relative top and a cap on its height. A change made in the page is held
 // before it is drawn (a mutation's microtask); a resize a frame later.
 const modalHold = { off: 0, at: null, y: 0, cap: null, capSet: "", touched: false };
-// how far down the dialog an element sits, to the fraction of a pixel,
-// what moves it in an animation (a row coming in) left out. An element
-// that scales (a Copy button's pop, a segment pressed) is measured by its
-// own top as drawn unscaled, round its transform-origin: measured by what
-// holds it, a pressed segment read 2px above where it was marked, and the
-// dialog went 2px down at every click (the owner, 10-23). One that turns
-// or skews is measured by what holds it.
+// how far down the dialog an element sits, its animation (a row coming
+// in) left out. One that scales (a Copy pop, a pressed segment) counts by
+// its own unscaled top: by its holder's, a pressed segment read 2px high
+// and the dialog crept down at each click (the owner, 10-23). One that
+// turns or skews counts by its holder.
 function modalDepth(a, d) {
   if (!a?.isConnected || !d.contains(a) || a === d || !a.offsetParent) return null;
   if (getComputedStyle(d).transform === "none") {
@@ -9047,18 +9057,10 @@ const modalBackdrop = backdropClick($("#modal"));
 $("#modal").onclick = (e) => { if (modalBackdrop(e)) cancelEdit(); };
 
 // ---------- sliding thumb ----------
-// Pills (the nav, every segmented control) have one thumb that glides to the
-// selected option instead of each option lighting up on its own.
-//
-// A thumb glides only when the option picked changes, and only from where
-// it is on the screen. Most controls are drawn again on every save (all of
-// Settings is), and a redrawn control takes the thumb of the one it
-// replaces, the glide under way with it: the same element, so nothing about
-// its motion is worked out again. It glides on to the option picked if that
-// is another (a save refused puts one back), and otherwise is left as it
-// is. A thumb is placed only where the control is laid out: one drawn
-// hidden (Settings at start, a tab not shown) is put under its option,
-// still, when it is shown or sized again (thumbFit).
+// Pills (the nav, every segmented control) have one thumb that glides to
+// the selected option, only when the pick changes and from where it is on
+// screen: a control redrawn on save (all of Settings is) takes the old one's
+// thumb, glide and all. One drawn hidden is placed once shown (thumbFit).
 const thumbs = new Map(); // control position → { th, pick, to }: its thumb, the option it is under or going to, and where that is
 const THUMB_MS = 280, THUMB_EASE = "cubic-bezier(.2, .8, .2, 1)"; // --ease
 const thumbKeys = new WeakMap(); // box → its key, for thumbFit
@@ -9206,7 +9208,7 @@ function baseAPIOf(p) {
 
 // draftOf is a saved provider as its editor's form holds it.
 function draftOf(p) {
-  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, best: !!p.bestInFamily, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), replyHeaders: (p.replyHeaders || []).join(", "), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, hiddenDrawers: [...(p.hiddenDrawers || [])], searches: !!p.searches, unredacted: !!p.unredacted, insecureTLS: !!p.insecureTLS, limitRestOff: !!p.limitRestOff, nativeCompaction: !!p.nativeCompaction, passUserAgent: !!p.passUserAgent, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", balanceMethod: p.balanceMethod || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p) };
+  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, best: !!p.bestInFamily, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), replyHeaders: (p.replyHeaders || []).join(", "), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, hiddenDrawers: [...(p.hiddenDrawers || [])], searches: !!p.searches, unredacted: !!p.unredacted, insecureTLS: !!p.insecureTLS, limitRestOff: !!p.limitRestOff, nativeCompaction: !!p.nativeCompaction, passUserAgent: !!p.passUserAgent, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", balanceMethod: p.balanceMethod || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p), rateWindows: (p.rateWindows || []).map((w) => ({ ...w })) };
 }
 
 // duplicateProvider opens the Add form on a copy of p (#268): its URLs,
@@ -9512,7 +9514,7 @@ function drawEditor(p, presetID) {
     if (perAccount) proxies.append(perAccount);
     advIn.append(...field(t("Proxy"), proxies));
     advIn.append(...concurrencyField(p));
-    advIn.append(...priceRateField());
+    advIn.append(...priceRateField(), ...rateWindowsField());
     if (p.cline) advIn.append(...upstreamField());
     ed.append(...pluginOptionsField(subOf(a.agent)));
     // a plugin's provider is reached inside magpie: its plugin:// URLs go
@@ -9550,10 +9552,12 @@ function drawEditor(p, presetID) {
       if (queue.bad) return queueError(ed, queue.bad);
       const priceRate = priceRateOfDraft();
       if (priceRate === undefined) return priceRateError(ed);
+      const rateWindows = self.rateWindowsOfDraft?.();
+      if (rateWindows === false) return rateWindowsError(ed);
       if (priceTypedError(ed)) return;
       const picked = accountModelsDraft(p);
       if (picked === false) return pickError();
-      const body = { id: p.id, models: chosenIds(), noModels: noneChosen(), bestInFamily: bestChosen(), unlisted: draft.unlisted, hiddenDrawers: draft.hiddenDrawers, fallback: draft.fallback, contexts: cx.map, outputs: ox.map, compacts: cpx.map, proxy, accountProxies: own.map, maxConcurrency, ...queue, priceRate, modelPrefs: modelPrefsOfDraft(), pinUpstream: !!draft.pinUpstream, ...(p.carriesCompaction ? { nativeCompaction: !!draft.nativeCompaction } : {}), ...routingOfDraft(p) };
+      const body = { id: p.id, models: chosenIds(), noModels: noneChosen(), bestInFamily: bestChosen(), unlisted: draft.unlisted, hiddenDrawers: draft.hiddenDrawers, fallback: draft.fallback, contexts: cx.map, outputs: ox.map, compacts: cpx.map, proxy, accountProxies: own.map, maxConcurrency, ...queue, priceRate, rateWindows, modelPrefs: modelPrefsOfDraft(), pinUpstream: !!draft.pinUpstream, ...(p.carriesCompaction ? { nativeCompaction: !!draft.nativeCompaction } : {}), ...routingOfDraft(p) };
       saving(saveBtn, t("Saving…"));
       saveAccountModelsDraft(picked).then(() => savePluginOptions(subOf(a.agent))).then(() => providerAction("save", body, t("{name} saved", { name: p.name })), (e) => { doneSaving(saveBtn); editorError(e.message || String(e)); }); };
     bar.append(cancel, saveBtn);
@@ -9736,7 +9740,7 @@ function drawEditor(p, presetID) {
   if (perKey) proxies.append(perKey);
   advIn.append(...field(t("Proxy"), proxies));
   advIn.append(...concurrencyField(p));
-  advIn.append(...priceRateField());
+  advIn.append(...priceRateField(), ...rateWindowsField());
 
   if (p?.cline || (isNew && pr?.id === "clinepass")) advIn.append(...upstreamField());
 
@@ -10206,6 +10210,8 @@ function drawEditor(p, presetID) {
     Object.assign(body, queue);
     body.priceRate = priceRateOfDraft();
     if (body.priceRate === undefined) return priceRateError(ed);
+    body.rateWindows = self.rateWindowsOfDraft?.();
+    if (body.rateWindows === false) return rateWindowsError(ed);
     if (p && priceTypedError(ed)) return;
     if (draft.balanceToken) body.balanceToken = draft.balanceToken;
     else if (draft.clearBalanceToken) body.clearBalanceToken = true;

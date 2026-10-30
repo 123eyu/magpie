@@ -2326,7 +2326,11 @@ func priceOf(s settings.Settings, model string) (catalog.Price, bool) {
 		return catalog.Price{}, false
 	}
 	if pid, rest, ok := strings.Cut(m, "/"); ok {
-		if pr, ok := provider.EffectivePriceIn(s, pid, rest); ok {
+		// without a rate window's rate (#2463): a session sums its calls by
+		// model, not by time, so the window of the hour it is read in
+		// would price all of them at it, and the same session read 3× at
+		// the peak and 1× off it
+		if pr, ok, _ := provider.BasePriceIn(s, pid, rest); ok {
 			return pr, true
 		}
 	}

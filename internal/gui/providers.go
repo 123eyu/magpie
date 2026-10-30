@@ -244,6 +244,13 @@ type providerJSON struct {
 	// how many requests each key or account sends the vendor in any
 	// minute, 0 for no limit (coeo91 on Discord)
 	MaxRPM int `json:"maxRPM,omitempty"`
+	// RateWindows are the time-of-day windows it bills at its own rate
+	// (#2463), as the editor opens on them
+	RateWindows []provider.RateWindow `json:"rateWindows,omitempty"`
+	// RateNow is what it bills at now, the price rate times the window
+	// of the hour (rateNowOf), 0 for 1×: read on this computer's clock,
+	// which calls are counted on, not the browser's
+	RateNow float64 `json:"rateNow,omitempty"`
 	// what it charges against the official price, 0 for that (#819)
 	PriceRate float64     `json:"priceRate,omitempty"`
 	Models    []modelJSON `json:"models"`            // everything the vendor lists, exposed ones flagged
@@ -631,6 +638,7 @@ func providerInfoWith(p provider.Provider, agents []agentUse, desktop map[string
 		Ready: p.Ready(), Chosen: p.Picks(), Models: []modelJSON{}, Agents: []providerAgent{},
 		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, CapStop: p.CapStop, CapCareful: p.CapCareful, Unlisted: p.Unlisted, NoModels: p.ServesNone(), BestInFamily: p.BestInFamily && len(p.Models) == 0 && !p.NoModels, Off: p.Off, Contexts: p.Contexts,
 		MaxConcurrency: p.MaxConcurrency, PluginConcurrency: p.PluginConcurrency(), PriceRate: p.PriceRate,
+		RateWindows: p.RateWindows, RateNow: rateNowOf(p, time.Now()),
 		AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM,
 		Outputs: provider.OutputsOf(p.ID), Compacts: provider.CompactsOf(p.ID),
 	}
@@ -1237,6 +1245,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// Limit, for accountconcurrency: the account's or key's own
 			// limit, 0 for none, null for the provider's (#892)
 			Limit *int `json:"limit"`
+			// RateWindows are the time-of-day windows it bills at its own
+			// rate (#2463); a list as checked (CheckRateWindows), null or
+			// [] for none; left out, they are kept
+			RateWindows json.RawMessage `json:"rateWindows"`
 			// PriceRate is what it charges against the official price
 			// (#819): a number, null or 0 for none; left out, it is kept
 			PriceRate    json.RawMessage `json:"priceRate"`
@@ -1526,6 +1538,14 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				return
 			}
 			in.PriceRate = rate
+			wins, keepWins, err := rateWindowsOf(req.RateWindows)
+			if err != nil {
+				fail(rw, err)
+				return
+			}
+			if !keepWins {
+				in.RateWindows = wins
+			}
 			// many keys pasted into the key field (361 on Discord: a provider
 			// added with hundreds): the first is the key, the others its
 			// accounts, as Paste several adds them
@@ -1611,6 +1631,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				}
 				if keepRate && old != nil {
 					in.PriceRate = old.PriceRate
+				}
+				if keepWins && old != nil {
+					in.RateWindows = old.RateWindows
 				}
 				// how long its keys rest out of quota is set in
 				// providers.json or with `magpie provider quota-rest`,
@@ -2585,6 +2608,46 @@ func priceRateOf(raw json.RawMessage) (r float64, keep bool, err error) {
 		return 0, false, fmt.Errorf("%s, not %v", bad, *n)
 	}
 	return *n, false, nil
+}
+
+// rateWindowsOf is a save's rateWindows: keep when the save left it out,
+// none for null or an empty list, else the windows as checked
+// (CheckRateWindows).
+func rateWindowsOf(raw json.RawMessage) (ws []provider.RateWindow, keep bool, err error) {
+	if len(raw) == 0 {
+		return nil, true, nil
+	}
+	var list *[]provider.RateWindow
+	if err := json.Unmarshal(raw, &list); err != nil {
+		return nil, false, fmt.Errorf("rate windows are a list of windows, not %s", raw)
+	}
+	if list == nil || len(*list) == 0 {
+		return nil, false, nil
+	}
+	if bad := provider.CheckRateWindows(*list); bad != "" {
+		return nil, false, errors.New(bad)
+	}
+	return *list, false, nil
+}
+
+// rateNowOf is what p bills at at t (#2463): its price rate times the
+// rate of the window holding t, 0 when that comes to 1× or p has no
+// windows (a price rate alone is the editor's to show).
+func rateNowOf(p provider.Provider, t time.Time) float64 {
+	if len(p.RateWindows) == 0 {
+		return 0
+	}
+	r := 1.0
+	if p.PriceRate > 0 {
+		r = p.PriceRate
+	}
+	if w := p.RateAt(t); w > 0 {
+		r *= w
+	}
+	if r == 1 {
+		return 0
+	}
+	return r
 }
 
 // concurrencyOf is a save's maxConcurrency: keep when the save left it

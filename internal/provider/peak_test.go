@@ -100,7 +100,7 @@ func TestPriceOfPeak(t *testing.T) {
 	}
 	at := func(s settings.Settings, p Provider, model string, tm time.Time) float64 {
 		t.Helper()
-		pr, ok := priceOf(s, p, true, model)
+		pr, ok := priceOf(s, p, true, model, time.Time{})
 		if !ok {
 			t.Fatalf("%s %s: unpriced", p.ID, model)
 		}
@@ -137,7 +137,7 @@ func TestPriceOfPeak(t *testing.T) {
 		}
 	}
 	// a provider gone since, priced at its maker's
-	if pr, ok := priceOf(none, Provider{ID: "deepseek"}, false, "deepseek-flash"); !ok || pr.In(peak).Input != 0.3 {
+	if pr, ok := priceOf(none, Provider{ID: "deepseek"}, false, "deepseek-flash", time.Time{}); !ok || pr.In(peak).Input != 0.3 {
 		t.Errorf("removed deepseek: %+v %v", pr, ok)
 	}
 }
