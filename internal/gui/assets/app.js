@@ -20284,13 +20284,7 @@ function refreshAfterSync() {
 
 // hhmm: a time's hours and minutes, in the user's language
 const hhmm = (d) => new Date(d).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit" });
-// restBack: when a key's rest ends, its date too when that isn't today: a
-// key out of credit rests days at a time, and "back at 04:10 PM" read as
-// this afternoon (PaulT on Discord)
-const restBack = (d) => {
-  const at = new Date(d);
-  return at.toDateString() === new Date().toDateString() ? hhmm(at) : at.toLocaleDateString(intlLang(), { month: "short", day: "numeric" }) + " " + hhmm(at);
-};
+const restBack = (d) => ((d = new Date(d)).toDateString() === new Date().toDateString() ? "" : d.toLocaleDateString(intlLang(), { month: "short", day: "numeric" }) + " ") + hhmm(d);
 
 function syncWhen(iso) {
   const d = new Date(iso);
