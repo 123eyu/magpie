@@ -380,6 +380,8 @@ function icon(name, lazy) {
 const saidOk = (msg, ms) => state.notice ? status(withNotice(msg, state.notice), "warn", 9000) : status(msg, "ok", ms);
 // statusErr: a failed call's message, as the status line's error
 function statusErr(e) { status(e.message, "err"); }
+function statusTErr(e) { status(t(e.message), "err"); }
+function settingsErr(e) { statusTErr(e); renderSettings(); }
 function status(msg, kind = "", ms = kind === "err" ? 8000 : 3500) {
   const s = $("#status");
   s.textContent = msg;
@@ -1642,7 +1644,7 @@ function switchEntry(a) {
       const l = ls.find((x) => "u:" + x.user === v);
       if (v === "only") accountAction("provider/switchonly", { id: p.id, switchOnly: !p.switchOnly }, !p.switchOnly ? on
         : cx ? t("{agent}'s requests go through magpie to fail over to your other accounts again", ag) : t("magpie serves requests on these accounts again"));
-      else if (v === "manage" || l?.lapsed) pn ? api("window/main?view=providers", {}).catch((e) => status(e.message, "err")) : openProvider(a.id);
+      else if (v === "manage" || l?.lapsed) pn ? api("window/main?view=providers", {}).catch(statusErr) : openProvider(a.id);
       else if (l && l.user !== cur) switchAccountTo(a, p, l.user);
     }, "Switch accounts only", "sess-menu", "right");
   };
@@ -7182,7 +7184,7 @@ function renderArchive() {
       renderArchive();
       api("settings/archive", { on: !providers.gateway.archive?.on })
         .then((na) => { providers.gateway.archive = na; })
-        .catch((e) => status(t(e.message), "err"))
+        .catch(statusTErr)
         .finally(() => { archiveSaving = false; renderArchive(); });
     };
     box.append(b);
@@ -7779,7 +7781,7 @@ async function uninstallMagpie(btn) {
     if (r.codexApp && !(await confirmAction(t("Open the Codex app again"), t("The Codex app is still on the settings it read before: quit it and open it again. magpie quits now, and its files are deleted once it has."), t("Quit magpie")))) return;
     await api("uninstall/finish", {});
   } catch (e) {
-    status(t(e.message), "err");
+    statusTErr(e);
   } finally {
     if (btn.isConnected) btn.disabled = false;
   }
@@ -12810,7 +12812,7 @@ function copilotHostSwitch(sub) {
 // signAsk: a sign-in that asks one value first (Copilot's GHE.com host, a
 // Claude setup-token); its sheet is in signsheets.js, loaded when asked for
 async function signAsk(flow) {
-  try { await import("./signsheets.js"); } catch (err) { return status(err.message, "err"); }
+  try { await import("./signsheets.js"); } catch (err) { return statusErr(err); }
   stopSignIn();
   signing = flow;
   renderProviders();
@@ -19404,7 +19406,7 @@ function renderBarIcon() {
   if ($("#barIconRow").hidden) return;
   $("#barIconSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], barIcon.on ? "on" : "off", (v) =>
     api("omarchy/widget", { on: v === "on" }).then((b) => { barIcon = b; renderBarIcon(); })
-      .catch((e) => { status(t(e.message), "err"); renderBarIcon(); })));
+      .catch((e) => { statusTErr(e); renderBarIcon(); })));
 }
 
 // renderLoginAllow: Open at login switched off in System Settings, its
@@ -19429,7 +19431,7 @@ function renderLoginAllow(s) {
   open.type = "button";
   open.className = "login-allow-open";
   open.textContent = t("Open Login Items");
-  open.onclick = () => api("open", { url: loginItemsURL }).catch((e) => status(t(e.message), "err"));
+  open.onclick = () => api("open", { url: loginItemsURL }).catch(statusTErr);
   sub.replaceChildren(t("Switched off in System Settings’ Login Items, so magpie won’t open at login"), " ", open);
 }
 
@@ -19460,7 +19462,7 @@ async function loadSettings() {
 // new).
 let prefsWrites = 0, prefsBusy = 0;
 // prefWrite: a Settings write of its own, the page drawn again either way
-function prefWrite(p) { return writingPrefs(p).then((ns) => { prefs = ns; renderSettings(); }).catch((e) => { status(t(e.message), "err"); renderSettings(); }); }
+function prefWrite(p) { return writingPrefs(p).then((ns) => { prefs = ns; renderSettings(); }).catch(settingsErr); }
 async function writingPrefs(p) {
   prefsWrites++;
   prefsBusy++;
@@ -19696,7 +19698,7 @@ function renderCLI(r) {
       paint(cliView);
       status(cliView.windows && cliView.shim ? t("Added: magpie.cmd beside {name} runs it as magpie; open a new PowerShell or Command Prompt window to run magpie", { name: exeName(cliView.exe) })
         : cliView.windows ? t("Added: open a new PowerShell or Command Prompt window to run magpie") : t("Added: open a new terminal window to run magpie"), "ok");
-    } catch (e) { status(t(e.message), "err"); } finally { btn.disabled = false; }
+    } catch (e) { statusTErr(e); } finally { btn.disabled = false; }
   };
   const paint = (v) => {
     sub.textContent = v.stuck === "translocated" ? t("macOS runs magpie from a temporary copy until it is moved to Applications: move it there first")
@@ -19763,7 +19765,7 @@ function renderUpdateMirror(r, s) {
   if (!mirrorEditing) {
     if (m) {
       const official = el("button", "text", t("Use GitHub"));
-      official.onclick = () => setUpdateMirror("").catch((e) => status(t(e.message), "err"));
+      official.onclick = () => setUpdateMirror("").catch(statusTErr);
       const change = el("button", "text", t("Change"));
       change.onclick = () => { mirrorEditing = true; mirrorDraft = m; renderUpdateMirror(r, s); };
       val.append(el("code", "", m), change, official);
@@ -19782,7 +19784,7 @@ function renderUpdateMirror(r, s) {
   save.onclick = () => {
     const v = i.value.trim();
     if (!v) return i.focus(NO_SCROLL);
-    setUpdateMirror(v).catch((e) => { mirrorErr = t(e.message); status(t(e.message), "err"); renderSettings(); });
+    setUpdateMirror(v).catch((e) => { mirrorErr = t(e.message); statusTErr(e); renderSettings(); });
   };
   const cancel = el("button", "text", t("Cancel"));
   cancel.onclick = () => { mirrorEditing = false; mirrorDraft = mirrorErr = ""; renderUpdateMirror(r, s); };
@@ -20033,7 +20035,7 @@ function renderGatewayMode(s) {
       prefs = ns;
       setGatewayMode(!!ns.gatewayOn);
       renderSettings();
-    }).catch((e) => { status(t(e.message), "err"); renderSettings(); })));
+    }).catch(settingsErr)));
   const now = s.gatewayMode ? "" : {
     flag: t("Now on: magpie web was started with --gateway"),
     "no-agents": t("Now on: no agents on this computer"),
@@ -20156,7 +20158,7 @@ async function renderSync(v) {
       e.target.classList.add("busy");
       try { renderSync(await api("davsync/undo", {})); refreshAfterSync(); } catch (x) { e.target.classList.remove("busy"); sub.textContent = x.message; sub.classList.add("bad"); }
     }));
-    val.append(btn(t("Show"), () => api("davsync/reveal", {}).catch((e) => status(e.message, "err"))), btn(t("OK"), async () => renderSync(await api("davsync/dismiss", {}))));
+    val.append(btn(t("Show"), () => api("davsync/reveal", {}).catch(statusErr)), btn(t("OK"), async () => renderSync(await api("davsync/dismiss", {}))));
     r.append(who, val);
     box.append(r);
   }
@@ -20543,7 +20545,7 @@ function suffixSegs(drawn) {
   const seg = segs([["off", t("Off")], ["own", t("Not on names I set")], ["on", t("On")]], mode, (v) =>
     // every place that says it follows (Names & levels behind Settings)
     writingPrefs(api("settings/plain-names", { mode: v })).then((ns) => { prefs = state.settings = ns; seg.dataset.mode = v; renderSettings(); drawn?.(v); redrawSuffix(); })
-      .catch((e) => { status(t(e.message), "err"); renderSettings(); drawn?.(suffixMode()); }));
+      .catch((e) => { statusTErr(e); renderSettings(); drawn?.(suffixMode()); }));
   seg.classList.add("suffix-segs");
   seg.dataset.mode = mode;
   seg.drawnAgain = drawn;
@@ -20617,7 +20619,7 @@ function renderTrayUsage(s, keep) {
   // before a proxy app, a read by itself goes out direct (#1518)
   $("#quotaReadsSegs").replaceChildren(segs([["", t("Automatic")], ["asked", t("When I ask")]], s.quotaReads || "", (v) =>
     writingPrefs(api("settings/quota-reads", { reads: v })).then((ns) => { prefs = state.settings = ns; renderSettings(); })
-      .catch((e) => { status(t(e.message), "err"); renderSettings(); })));
+      .catch(settingsErr)));
   $("#currencySegs").replaceChildren(segs(CURRENCIES.map(([id, name]) => [id, t(name)]), s.currency || "usd", (v) => savePrefs({ ...keep, currency: v })));
   // 万 and 亿 are Chinese's alone: in English a count is always K, M and B
   $("#unitsRow").hidden = locale !== "zh" && locale !== "zh-TW";
@@ -20911,7 +20913,7 @@ function renderGitHubToken(s) {
   box.append(r);
   const set = (token) => writingPrefs(api("settings/github-token", { token }))
     .then((ns) => { prefs = ns; githubTokenErr = githubTokenDraft = ""; renderSettings(); status(t("Saved"), "ok", 1500); })
-    .catch((e) => { githubTokenErr = t(e.message); status(t(e.message), "err"); renderSettings(); });
+    .catch((e) => { githubTokenErr = t(e.message); statusTErr(e); renderSettings(); });
   const why = t("The library checks skills for updates with it: GitHub allows 5,000 requests an hour with a token, 60 without. It also installs skills from private repositories it can read; for public ones it needs no scopes.");
   if (s.githubTokenFrom === "settings") {
     sub.textContent = sub.title = s.githubTokenRefused ? t("GitHub refused this token: it may have expired or been revoked. Requests go without one (60 an hour) until it is replaced.") : why;
@@ -21042,7 +21044,7 @@ function renderAutoResetOwn(s) {
           renderSettings();
           if (quotas) renderQuotas(); // the account's card says the same
         } catch (e) {
-          status(t(e.message), "err");
+          statusTErr(e);
           renderSettings();
         }
       });
@@ -21075,7 +21077,7 @@ function renderWarmAtOwn(s) {
       if (state) state.settings = prefs;
       renderSettings();
     } catch (e) {
-      status(t(e.message), "err");
+      statusTErr(e);
       renderSettings();
     }
   };
@@ -21269,7 +21271,7 @@ function renderAgentPrefs() {
   v1Warn.hidden = !s.notice;
   v1Warn.textContent = s.notice ? tNotice(s.notice) : "";
   $("#codexAgentsV1Segs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.codexAgentsV1 ? "on" : "off", (v) =>
-    writingPrefs(api("settings/codex-agents-v1", { on: v === "on" })).then((ns) => { prefs = ns; renderSettings(); if (ns.notice) status(tNotice(ns.notice), "warn", 9000); }).catch((e) => { status(t(e.message), "err"); renderSettings(); })));
+    writingPrefs(api("settings/codex-agents-v1", { on: v === "on" })).then((ns) => { prefs = ns; renderSettings(); if (ns.notice) status(tNotice(ns.notice), "warn", 9000); }).catch(settingsErr)));
   // a 1M model's whole window, or compacting at the working one (X: Chen,
   // 70–90s to a first token at 550K)
   // at a size the user types too, not 272K alone (#876); a provider's own
@@ -21742,7 +21744,7 @@ function renderDisabledModels(s) {
   const list = s.disabledModels || [];
   const save = (next) => writingPrefs(api("settings/disabled-models", { models: next }))
     .then((ns) => { prefs = ns; renderSettings(); })
-    .catch((e) => { status(t(e.message), "err"); renderSettings(); });
+    .catch(settingsErr);
   const add = el("div", "row pref");
   add.id = "disabledAddRow";
   const who = el("div", "who");
@@ -21826,7 +21828,7 @@ function renderDiscovery(s) {
     }
     writingPrefs(api("settings/account-discovery", { off: v === "off" }))
       .then((ns) => { prefs = state.settings = ns; renderSettings(); refreshAfterSync(); })
-      .catch((e) => { status(t(e.message), "err"); renderSettings(); });
+      .catch(settingsErr);
   }));
   r.append(who, val);
   box.replaceChildren(r);
@@ -21985,7 +21987,7 @@ function privacyModelRow(box, why) {
     if (pmBusy(m) || starting) pmTimer = setTimeout(load, 1000);
   };
   const load = () => api("privacy-model").then((m) => { pmState = m; draw(m); }).catch(() => {});
-  const act = (doing, model, score) => { tries = 0; api("privacy-model", { do: doing, model, score }).then((m) => { pmState = m; draw(m); }).catch((e) => { status(t(e.message), "err"); load(); }); };
+  const act = (doing, model, score) => { tries = 0; api("privacy-model", { do: doing, model, score }).then((m) => { pmState = m; draw(m); }).catch((e) => { statusTErr(e); load(); }); };
   draw(pmState);
   load();
 }
@@ -22279,7 +22281,7 @@ function renderMaskActions(s) {
   const acts = s.redactActions || {};
   const set = (next) => writingPrefs(api("settings/redact-actions", { actions: next }))
     .then((ns) => { prefs = ns; renderSettings(); status(t("Saved"), "ok", 1500); })
-    .catch((e) => { status(t(e.message), "err"); renderSettings(); });
+    .catch(settingsErr);
   const row = (name, sub, ...tools) => {
     const r = el("div", "row pref");
     const who = el("div", "who"), val = el("div", "val");
@@ -22321,7 +22323,7 @@ function renderMaskActions(s) {
     if (v.join(", ") === allow) return;
     writingPrefs(api("settings/redact-allow", { allow: v }))
       .then((ns) => { prefs = ns; renderSettings(); status(t("Saved"), "ok", 1500); })
-      .catch((e) => { status(t(e.message), "err"); renderSettings(); });
+      .catch(settingsErr);
   };
   i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") save(); else if (e.key === "Escape") { i.value = allow; i.blur(); } };
   i.onblur = save;
@@ -22366,7 +22368,7 @@ function maskTryRun(out) {
     if (seq !== maskTry.seq) return;
     maskTry.res = res;
     maskTryDraw(out);
-  }).catch((e) => { if (seq === maskTry.seq) status(t(e.message), "err"); });
+  }).catch((e) => { if (seq === maskTry.seq) statusTErr(e); });
 }
 function maskTryDraw(out) {
   out.replaceChildren();
@@ -22441,7 +22443,7 @@ function editRedactRule(r, n, row) {
     save.disabled = true;
     writingPrefs(api("settings/redact-rule", { at: n, was: d.was, rule }))
       .then((ns) => { prefs = ns; ruleEdit = null; renderSettings(); status(t("Saved"), "ok", 1500); })
-      .catch((e) => { if (ruleEdit === d) d.err = t(e.message); status(t(e.message), "err"); renderSettings(); });
+      .catch((e) => { if (ruleEdit === d) d.err = t(e.message); statusTErr(e); renderSettings(); });
   };
   for (const i of [kind, match]) {
     i.oninput = () => { d.kind = kind.value; d.match = match.value; };
@@ -22635,7 +22637,7 @@ async function renderUpdate(r, u) {
             updateLast = null;
             renderSettings(); // the source row says GitHub, this one the download
           } catch (e) {
-            status(t(e.message), "err");
+            statusTErr(e);
             renderUpdate(r);
           }
         });

@@ -887,7 +887,7 @@
         if (r.mirror) loadListings().then(() => { draw(); askNPM(); });
       } catch (e) {
         mine.mirror = on;
-        status(t(e.message), "err");
+        statusTErr(e);
       }
       mirrorSaving = false;
       draw();
