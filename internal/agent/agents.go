@@ -512,7 +512,7 @@ func magpieProviderJSONAt(shape, catalog, gw string) any {
 	case "pi":
 		var ms []map[string]any
 		for _, m := range models {
-			ms = append(ms, piModelJSON(m, gw, true))
+			ms = append(ms, piModelJSON(piAsked(catalog, m), gw, true))
 		}
 		if ms == nil {
 			ms = []map[string]any{}
@@ -613,6 +613,31 @@ func objectPairs(raw []byte) orderedJSON {
 		out = append(out, jsonPair{k, v})
 	}
 	return out
+}
+
+// piAsked is m as agentID's models.json can ask it: without the Gemini API
+// where nothing that reads the file can be trusted to stream
+// google-generative-ai, so such a model stays on the provider's Chat,
+// which the gateway translates.
+//
+//   - StepCode registers no google-generative-ai stream, only Pi's
+//     anthropic-messages, openai-completions and openai-responses
+//     (packages/providers/src/compat.ts BUILTIN_APIS, Step-Code at
+//     90a57820), though its docs list it (#3282).
+//   - Pi's own agent folder is read by every app that runs Pi's SDK on it,
+//     not by Pi alone. Raft (slock's raft-daemon, the Pi runtime of its
+//     agents) opens ~/.pi/agent/models.json (or PI_CODING_AGENT_DIR's) and
+//     hands every request its own fetch (installProviderHttpClient), which
+//     pi-ai's Google adapter refuses before sending: "Custom fetch is not
+//     supported by the Google Generative AI adapter" (pi-ai 0.83.0 and
+//     1.4.0, api/google-generative-ai.js; yunfei9958 on X). Per-request
+//     fetch is a feature of Pi's SDK, so any other host of it can do the
+//     same. OmO's and Prime Agent's folders are their own, and keep it.
+func piAsked(agentID string, m catalog.Model) catalog.Model {
+	if agentID == "stepcode" || agentID == "pi" {
+		m.APIs = slices.DeleteFunc(slices.Clone(m.APIs), func(a string) bool { return a == string(provider.Gemini) })
+	}
+	return m
 }
 
 // piModelJSON is one of magpie's models as an entry of Pi's models.json.
