@@ -2629,7 +2629,7 @@ func held(h http.Handler) http.Handler {
 			defer sessions.Ask()()
 			// and what the read threw away goes back once the page rests
 			defer readingPage()()
-			// and collected under GOGC 25 while it runs: a poll's reads
+			// and collected under GOGC 10 while it runs: a poll's reads
 			// allocated ~330 MB to keep ~105 MB, and at the default 100 the
 			// heap grew to twice what it kept before a collection, ~320 MB
 			// in Activity Monitor during a poll. No memory limit: held as

@@ -753,12 +753,12 @@ func coldTurn(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// underTightGC runs fn letting the heap grow by a quarter of what it holds
+// underTightGC runs fn letting the heap grow by a tenth of what it holds
 // before a collection, not Go's default of all of it, and then puts back
 // what was set; a GOGC the user set lower, or off, is kept. The usage
 // page's read of the whole history holds every row of it at once (~270 MB
 // live for 390k calls), and a cold start that rests at ~200 MB peaked at
-// 555–587 MB in Activity Monitor there; under it, 410–438 MB. That read
+// 555–587 MB in Activity Monitor there; under a quarter, 410–438 MB. That read
 // and Codex's effort, which reads the whole ledger again while the page
 // still holds its rows, run under it: the warm-up as a whole did too for
 // ~11 s more CPU.
@@ -776,7 +776,7 @@ func underTightGC(fn func()) {
 
 // tightGC is what the reads under a tight GC hold: the first to begin sets
 // it, and the last to end puts back what was set before it. Each read
-// putting back what it found let two at once leave GOGC at 25 for good,
+// putting back what it found let two at once leave GOGC tight for good,
 // when the first to begin ended before the second.
 var tightGC struct {
 	sync.Mutex
@@ -805,7 +805,13 @@ func tightenGC() (undo func()) {
 	})
 }
 
-const tightGCPercent = 25
+// tightGCPercent is a tenth. Under a quarter, a first start's footprint
+// peaked at 390–397 MB, and a start with its caches at 304–321 MB, on a
+// live heap of ~280 MB and ~250 MB: each read, and the window's polls
+// beside it, let the heap grow by ~70 MB first. Under a tenth, 350–352
+// MB and 271–275 MB, for ~20% more CPU in the first start's minute and
+// ~2 s a minute of polls asking ten answers every 5 s (#2278).
+const tightGCPercent = 10
 
 // agentCommand is the shell line that starts a: its Launch where it has
 // one (agy, Claude Science, Cursor Private Inference), else its own
