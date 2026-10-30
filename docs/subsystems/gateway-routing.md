@@ -782,7 +782,7 @@ answers as that API does (#1580). Empty is the vendor's own
 takes only an `http://` or `https://` URL with a host and no `?query` or
 `#fragment`, since `askSearchAPI` puts the vendor's path after it
 (`/search`, `/res/v1/web/search`, `/v2/search`, `/v1/tools/search`,
-`/search_api/web_search`; `SearchVendor.Paths`) with the slash at its end
+`/search_api/web_search`, `/SearchPro`; `SearchVendor.Paths`) with the slash at its end
 trimmed. A URL given ending in that path (`…/search` for Tavily, any
 case) is its base: `SetSearchAPI` saves it without the path, and
 `SearchAPI.Base` drops it from one saved with it before, so it is asked
@@ -862,7 +862,14 @@ says its error in `ResponseMetadata.Error`, possibly with a 200, so
 `volcSearchError` reads it by its code first: 10401, 10403 and 10409 as
 403, 10406, 10408, 10410 and 10412 (no free searches left, none paid
 for, a plan missing or spent) as 402, 700429 as 429; any other code is a
-plain error (`TestVolcengineSearchAPI`). A resting key is not dropped:
+plain error (`TestVolcengineSearchAPI`). Yuanbao Search (Tencent Cloud,
+`wsa`) answers 200 to every request it handled, its error in
+`Response.Error.Code`, so `wsaSearchError` reads the code: `AuthFailure.*`,
+`UnauthorizedOperation` (a wrong key) and `ResourceNotFound` (the service
+not opened) as 403, `ResourceUnavailable` (an account in arrears),
+`LimitExceeded` and `ResourceInsufficient` as 402,
+`RequestLimitExceeded.*` as 429; any other code is a plain error
+(`TestWSASearchAPI`). A resting key is not dropped:
 it is asked after every key that isn't, the one back soonest first, so a
 search still has every key to fall back on. A key that answers wakes.
 Rests are held by vendor and a hash of the key (`searchKeyID`), never the

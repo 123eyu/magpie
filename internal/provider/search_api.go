@@ -2,7 +2,7 @@ package provider
 
 // Search APIs answer a model's web search when no provider can (#419):
 // Tavily, Brave Search, Exa, Firecrawl, You.com, DeepSeek, Volcengine's
-// Doubao Search, a SearXNG of the user's. They are
+// Doubao Search, Tencent Cloud's Yuanbao Search, a SearXNG of the user's. They are
 // kept in providers.json beside the providers, their keys with theirs.
 
 import (
@@ -68,6 +68,10 @@ var SearchVendors = []SearchVendor{
 	// Volcengine's Doubao Search Custom (豆包搜索 Custom版, once 联网搜索 /
 	// 融合信息搜索), with an API key from its console (CyberCaius on Discord)
 	{ID: "volcengine", Name: "Doubao Search (Volcengine)", Base: "https://open.feedcoopapi.com", KeysURL: "https://console.volcengine.com/search-infinity/api-key", Paths: []string{"/search_api/web_search"}},
+	// Tencent Cloud's Yuanbao Search (元宝搜索, wsa) by its service API
+	// key (服务 API KEY 方式, cloud.tencent.com/document/product/1806/130615),
+	// made in its console's 概览 › 服务 API KEY 方式 (plugins#509)
+	{ID: "wsa", Name: "Yuanbao Search (Tencent Cloud)", Base: "https://api.wsa.cloud.tencent.com", KeysURL: "https://console.cloud.tencent.com/wsapi/index", Paths: []string{"/SearchPro"}},
 	{ID: "searxng", Name: "SearXNG", KeyOptional: true, Paths: []string{"/search"}},
 }
 

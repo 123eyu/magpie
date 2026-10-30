@@ -236,6 +236,13 @@ func (s *Server) askSearchAPI(ctx context.Context, a provider.SearchAPI, query s
 		// with a URL (NeedUrl leaves out its 火山如意 cards, which have none)
 		post("/search_api/web_search", map[string]any{"Query": firstRunes(query, volcQueryMax), "SearchType": "web",
 			"Count": searchHits, "Filter": map[string]any{"NeedUrl": true}})
+	case "wsa":
+		// Tencent Cloud's Yuanbao Search by its service API key
+		// (cloud.tencent.com/document/product/1806/130615): Cnt is one of
+		// 10/20/30/40/50 (cloud.tencent.com/document/api/1806/121811), and
+		// a smaller one is turned away, so the fewest, cut to searchHits
+		// below
+		post("/SearchPro", map[string]any{"Query": query, "Cnt": wsaCnt})
 	case "searxng":
 		get("/search", url.Values{"q": {query}, "format": {"json"}})
 	case "you":
@@ -299,10 +306,14 @@ func (s *Server) askSearchAPI(ctx context.Context, a provider.SearchAPI, query s
 	}
 	status := res.StatusCode
 	var volcMsg string
-	if a.Vendor == "volcengine" {
+	switch a.Vendor {
+	case "volcengine":
 		// its error is in ResponseMetadata.Error, a code beside the
 		// status, and may come with a 200
 		status, volcMsg = volcSearchError(b, status)
+	case "wsa":
+		// Tencent Cloud's is in Response.Error, its HTTP status 200
+		status, volcMsg = wsaSearchError(b, status)
 	}
 	if status >= 300 {
 		msg := provider.APIError(b, res.Status)
@@ -344,6 +355,8 @@ func readSearchAPI(vendor string, b []byte) ([]foundPage, error) {
 		return readYouSearch(b)
 	case "volcengine":
 		return readVolcSearch(b)
+	case "wsa":
+		return readWSASearch(b)
 	}
 	type result struct {
 		Title       string `json:"title"`
@@ -485,6 +498,85 @@ func readVolcSearch(b []byte) ([]foundPage, error) {
 			age = ""
 		}
 		pages = append(pages, foundPage{Title: title, URL: h.Url, Text: clipText(searchPlain(text), pageText), Age: age})
+	}
+	return pages, nil
+}
+
+// wsaCnt is the Cnt Yuanbao Search is asked for: the fewest it takes.
+const wsaCnt = 10
+
+// wsaSearchError is the status a Yuanbao Search (Tencent Cloud) reply
+// stands for, and its error's words. Tencent Cloud answers 200 whenever
+// the request was handled (cloud.tencent.com/document/api/1806/121818),
+// its error in Response.Error {Code, Message}, so the code decides: one
+// about the key or the service not opened for it is a key turned away
+// (403), one about an account in arrears (ResourceUnavailable, "请检查账号
+// 是否欠费") or a spent quota out of credit (402), a frequency limit
+// rate limited (429). Any other code is a plain error.
+func wsaSearchError(b []byte, status int) (int, string) {
+	var out struct {
+		Response struct {
+			Error *struct{ Code, Message string }
+		}
+	}
+	if json.Unmarshal(b, &out) != nil || out.Response.Error == nil || out.Response.Error.Code == "" {
+		return status, ""
+	}
+	e := out.Response.Error
+	msg := strings.TrimSpace(e.Code + " " + e.Message)
+	code, _, _ := strings.Cut(e.Code, ".")
+	switch code {
+	case "AuthFailure", "UnauthorizedOperation", "ResourceNotFound":
+		// a key it doesn't take ("请检查服务密钥 API KEY 是否正确"), or
+		// the service not opened ("用户资源未开通")
+		return 403, msg
+	case "ResourceUnavailable", "LimitExceeded", "ResourceInsufficient":
+		return 402, msg
+	case "RequestLimitExceeded":
+		return 429, msg
+	}
+	if status < 300 {
+		status = 502
+	}
+	return status, msg
+}
+
+// readWSASearch reads Yuanbao Search's reply: Response.Pages, each page
+// a JSON object in a string, with its title, url, date, passage (its
+// standard summary, in every edition) and content (a summary for the
+// query, not in its 极速版).
+func readWSASearch(b []byte) ([]foundPage, error) {
+	var out struct {
+		Response *struct {
+			Pages []string
+		}
+	}
+	if err := json.Unmarshal(b, &out); err != nil {
+		return nil, err
+	}
+	if out.Response == nil || out.Response.Pages == nil {
+		return nil, errors.New("no Response.Pages in it")
+	}
+	var pages []foundPage
+	for _, s := range out.Response.Pages {
+		var h struct {
+			Title, URL, Date, Passage, Content string
+		}
+		if json.Unmarshal([]byte(s), &h) != nil || h.URL == "" {
+			continue
+		}
+		text := h.Passage
+		if strings.TrimSpace(searchPlain(text)) == "" || searchPlain(text) == searchPlain(h.Title) {
+			// a passage that is only its title says less than its content
+			if c := searchPlain(h.Content); c != "" {
+				text = h.Content
+			}
+		}
+		title := searchPlain(h.Title)
+		if title == "" {
+			title = h.URL
+		}
+		pages = append(pages, foundPage{Title: title, URL: h.URL, Text: clipText(searchPlain(text), pageText), Age: h.Date})
 	}
 	return pages, nil
 }

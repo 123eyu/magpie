@@ -465,3 +465,128 @@ func TestVolcengineSearchAPI(t *testing.T) {
 		t.Errorf("vendor %+v", v)
 	}
 }
+
+// TestWSASearchAPI: Tencent Cloud's Yuanbao Search (元宝搜索, wsa) by its
+// service API key answers from its docs' own example replies, asked as
+// its docs say, its errors read by their code (plugins#509, chenjiangzi).
+// wsa_searchpro.json is SearchPro's API page's example
+// (cloud.tencent.com/document/api/1806/121811) byte for byte;
+// wsa_searchpro_apikey.json the API-key page's
+// (cloud.tencent.com/document/product/1806/130615), whose page shows each
+// quote in Pages escaped twice (\\", not JSON), once here.
+func TestWSASearchAPI(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	api, err := os.ReadFile("testdata/wsa_searchpro.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyed, err := os.ReadFile("testdata/wsa_searchpro_apikey.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// its docs' error reply (cloud.tencent.com/document/api/1806/121818)
+	errReply := func(code, msg string) string {
+		return `{
+        "Response": {
+            "Error": {
+                "Code": "` + code + `",
+                "Message": "` + msg + `"
+            },
+            "RequestId": "ed93f3cb-f35e-473f-b9f3-0d451b8b79c6"
+        }
+    }`
+	}
+	var mu sync.Mutex
+	var got []map[string]any
+	var paths, auths []string
+	reply := keyed
+	answer := func(w http.ResponseWriter) { w.Write(reply) }
+	f := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		var body map[string]any
+		json.Unmarshal(b, &body)
+		mu.Lock()
+		got = append(got, body)
+		paths = append(paths, r.Method+" "+r.URL.Path+" "+r.Header.Get("Content-Type"))
+		auths = append(auths, r.Header.Get("Authorization"))
+		a := answer
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		a(w)
+	}))
+	t.Cleanup(f.Close)
+	s := New()
+	a := provider.SearchAPI{Vendor: "wsa", Key: "sk-209b0123456789e23d", URL: f.URL}
+
+	pages, err := s.askSearchAPI(context.Background(), a, "三星堆的由来")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pages) != 3 || pages[0].URL != "https://www.163.com/dy/article/J43Q2STU0553FV3Z.html" ||
+		pages[0].Title != "三星堆名字的由来,你真的了解吗?三星堆的参观攻略,建议收藏青铜文物玉器古蜀国三星堆遗址_网易订阅" ||
+		!strings.HasPrefix(pages[0].Text, "三星堆名字的由来 三星堆遗址位于四川省广汉市西北部") ||
+		pages[0].Age != "2024-06-07 19:00:51" ||
+		pages[1].URL != "https://news.qq.com/rain/a/20240903A048N700" ||
+		// its <strong> marks taken out
+		pages[2].Text != "最早在1929年,一位当地农民在遗址区域内偶然发现了一个玉器坑,这一发现引起了考古界的关注｡在四川省广汉市西北部,有三座稍稍隆起的土堆呈直线排列,这种地形布局与夜空中闪烁的三颗星辰相呼应,因此得名“三星堆”｡" {
+		t.Fatalf("pages %+v", pages)
+	}
+	if paths[0] != "POST /SearchPro application/json" || auths[0] != "Bearer sk-209b0123456789e23d" {
+		t.Fatalf("asked %q with %q", paths[0], auths[0])
+	}
+	// Query as given, and Cnt 10: fewer is turned away ("illegal Cnt")
+	if len(got[0]) != 2 || got[0]["Query"] != "三星堆的由来" || got[0]["Cnt"] != float64(10) {
+		t.Fatalf("body %v", got[0])
+	}
+
+	// the API page's example: a passage that is only its title gives
+	// way to its content; a date as it gives it
+	mu.Lock()
+	reply = api
+	mu.Unlock()
+	pages, err = s.askSearchAPI(context.Background(), a, "人工智能发展现状")
+	if err != nil || len(pages) != 1 || pages[0].URL != "https://www.cac.gov.cn/2025-02/26/c_1742272852299173.htm" ||
+		pages[0].Title != "【新思想引领新征程】人工智能创新加速我国产业转型升级_中央网络安全和信息化委员会办公室" ||
+		pages[0].Text != "【新思想引领新征程】人工智能创新加速我国产业转型升级_中央网络安全和信息化委员会办公室..." ||
+		pages[0].Age != "2025/02/26 09:37:00" {
+		t.Fatalf("pages %+v, %v", pages, err)
+	}
+
+	// its errors come in Response.Error with a 200, read by their code
+	for _, c := range []struct {
+		code, msg string
+		want      int
+		why       string
+	}{
+		{"UnauthorizedOperation", "未授权操作。", 403, "turned away"},
+		{"AuthFailure.SignatureFailure", "The provided credentials could not be validated. Please check your signature is correct.", 403, "turned away"},
+		{"ResourceNotFound", "用户资源未开通。", 403, "turned away"},
+		{"ResourceUnavailable", "用户资源不可用。", 402, "out of credit"},
+		{"LimitExceeded", "超过配额限制。", 402, "out of credit"},
+		{"RequestLimitExceeded", "请求的次数超过了频率限制。", 429, "rate limited"},
+		{"RequestLimitExceeded.UinLimitExceeded", "主账号限频。", 429, "rate limited"},
+		{"InvalidParameter", "illegal Cnt sk-209b0123456789e23d", 0, ""},
+		{"InternalError", "内部错误。", 0, ""},
+	} {
+		mu.Lock()
+		answer = func(w http.ResponseWriter) { io.WriteString(w, errReply(c.code, c.msg)) }
+		mu.Unlock()
+		_, err := s.askSearchAPI(context.Background(), a, "q")
+		if err == nil || !strings.Contains(err.Error(), c.code+" ") || strings.Contains(err.Error(), "sk-209b0123456789e23d") {
+			t.Fatalf("%s: %v", c.code, err)
+		}
+		var r searchRefused
+		if refused := errors.As(err, &r); refused != (c.want != 0) || refused && r.status != c.want {
+			t.Fatalf("%s: %#v", c.code, err)
+		}
+		if c.want != 0 {
+			if _, why := searchRestFor("wsa", r.status, "", time.Now()); why != c.why {
+				t.Errorf("%s rests as %q", c.code, why)
+			}
+		}
+	}
+	if v, ok := provider.SearchVendorOf("wsa"); !ok || v.Base != "https://api.wsa.cloud.tencent.com" || v.KeyOptional ||
+		v.KeysURL != "https://console.cloud.tencent.com/wsapi/index" {
+		t.Errorf("vendor %+v", v)
+	}
+}
