@@ -12049,7 +12049,7 @@ const ROUTINGS = [
 // the routings besides Smart are the built-in plugin rotation's
 // (plugins/rotation): off, their options leave the page, as anything marked
 // data-feature does, and Smart is left — one in use keeps it on
-const ROTATION = new Set(["order", "rotate", "usage", "pace", "weight", "free", "fast"]);
+const ROTATION = new Set(["order", "rotate", "usage", "pace", "weight", "free", "fast", "cheap"]);
 // jsRoutings: the routings JS gateway plugins serve now ("<plugin>/<name>",
 // settings' jsRoutings, plugins/middleware's), and saved, a routing none
 // serves now, shown as it is: its pool is tried in its listed order

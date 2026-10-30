@@ -36,6 +36,12 @@ const (
 	// lately — first token, then how fast it wrote — first; one not
 	// measured lately gets a turn now and then to be (routes.Fastest).
 	Fastest = "fast"
+	// Cheapest goes by price: the member whose model costs least at the
+	// request's time first — its vendor's peak hours and the provider's
+	// rate windows read then — those alike in their listed order
+	// (routes.Cheapest). A group's only: a provider's keys and accounts
+	// all bill its one price.
+	Cheapest = "cheap"
 )
 
 // pluginRouting is a routing a plugin serves: "<plugin>/<name>".

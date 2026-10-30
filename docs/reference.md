@@ -1732,6 +1732,20 @@ each of these groups ordered by the share used.
   Replies that aren't streamed tell no speed, and a restart starts the
   measuring over. The Routing page says why the first went first:
   "answered fastest lately — first token in 0.8s, 62 tokens a second".
+- **Cheapest first** (routing groups only): the member whose model costs
+  least now first, by its price a million tokens in and out at the hour of
+  the request, as Usage would count a call made then: the price you set
+  for it, else its list price, at the provider's price rate and rate
+  windows; a model its vendor serves free costs nothing. DeepSeek's own
+  API, and Command Code's and OpenCode Go's DeepSeek models, bill double
+  in their peak hours (weekdays 01:00–04:00 and 06:00–10:00 UTC), so a
+  DeepSeek model on two providers goes to whichever is cheaper at that
+  hour. A tie on that goes to the cheaper cache read; members that still
+  cost the same keep their order, and one with no known price goes after
+  every priced one. For a schedule of your own instead, a rule with a
+  time window sends a member first at its hours, and a Pause rule leaves
+  one out at its hours. The Routing page says why the first went first:
+  "costs least on Ollama now — $0.150 in, $0.600 out a million tokens".
 
 The routings besides Smart are the built-in plugin `rotation` (Routing
 strategies in Plugins › Built-in). It stays on while a provider or group is
@@ -1755,6 +1769,7 @@ depends on the routing:
 | Least used first | Only between accounts with the same share used and the same tokens sent lately. |
 | Weekly pace | Only between accounts in the same pace band that magpie sent the same tokens lately, in practice none since magpie started. |
 | Speed first | Only between those within a tenth of each other's speed, and among those not measured lately. |
+| Cheapest first | Only between those that cost the same now, and among those with no known price. |
 
 For Claude Code and Codex, *Make first* also signs the agent in to that
 account, because the account the agent is signed in to is first. With
