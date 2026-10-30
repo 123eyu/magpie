@@ -219,10 +219,22 @@ type pluginsJSON struct {
 	// Mirror is the 「国内镜像」 switch: the list, npm and Bun asked of
 	// mirrors in China first (settings.ChinaMirror)
 	Mirror bool `json:"mirror"`
+	// Registry is the npm registry plugins are installed from and npm's
+	// answers asked of, and where it came from (plugin.Registry)
+	Registry plugin.RegistryInUse `json:"registry"`
+}
+
+// registryJSON is plugin.Registry with its file's path as the page shows it.
+func registryJSON() plugin.RegistryInUse {
+	r := plugin.Registry()
+	if r.Path != "" {
+		r.Path = tilde(r.Path)
+	}
+	return r
 }
 
 func pluginsState(ctx context.Context, w Windows) pluginsJSON {
-	s := pluginsJSON{Plugins: []pluginEntryJSON{}, Bun: plugin.HasBun(), BunVer: plugin.BunInUse(), Movable: provider.MoveCandidates(), Picker: w != nil && !isWeb(w), Mirror: settings.Load().ChinaMirror}
+	s := pluginsJSON{Plugins: []pluginEntryJSON{}, Bun: plugin.HasBun(), BunVer: plugin.BunInUse(), Movable: provider.MoveCandidates(), Picker: w != nil && !isWeb(w), Mirror: settings.Load().ChinaMirror, Registry: registryJSON()}
 	l := plugin.Load()
 	errs := map[string]string{}
 	names := map[string][]string{}
@@ -690,6 +702,20 @@ func pluginRoutes(mux *http.ServeMux, w Windows) {
 			return
 		}
 		writeJSON(rw, map[string]bool{"mirror": in.On})
+	})
+	// the npm registry set in magpie, "" for none of its own: an address
+	// that isn't an http(s) one is refused, not kept
+	mux.HandleFunc("POST /api/plugins/registry", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ URL string }
+		if err := json.NewDecoder(io.LimitReader(r.Body, 4<<10)).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if _, err := plugin.SetRegistry(in.URL); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, map[string]any{"registry": registryJSON()})
 	})
 	// add, remove, update, turn on or off: each answers with the list
 	mux.HandleFunc("POST /api/plugins/{op}", func(rw http.ResponseWriter, r *http.Request) {

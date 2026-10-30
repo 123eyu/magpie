@@ -447,7 +447,7 @@ func readTagged(pc context.Context, t Tagged, branch string) (Tagged, bool, bool
 	// published to npm from this repository: npm's copy is the one
 	// built to be installed (a repository often leaves its dist out,
 	// built only to publish), so it is installed from npm
-	b, err := fetchJSON(pc, npmRegistry+"/"+npmPath(pj.Name)+"/latest", 1<<20)
+	b, err := fetchNPM(pc, pj.Name, "/"+npmPath(pj.Name)+"/latest", 1<<20)
 	known := err == nil || errors.Is(err, errNotFound)
 	var unknown error
 	if !known {

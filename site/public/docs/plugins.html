@@ -213,6 +213,7 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
       <li><b>Installing.</b>
         <ul>
           <li>An npm package is installed with <code>bun add</code>, with its install scripts left unrun, as OpenCode installs plugins. A dependency that needs a <code>postinstall</code> build won’t work.</li>
+          <li>Packages come from the npm registry you already use: the <code>registry=</code> in your <code>~/.npmrc</code>, <code>install.registry</code> in <code>~/.bunfig.toml</code>, or <code>NPM_CONFIG_REGISTRY</code> / <code>BUN_CONFIG_REGISTRY</code> in your shell, before the Mirrors in China switch. A token your <code>.npmrc</code> keeps for that registry is sent to it alone. To use another, change <span class="ui">npm registry</span> on <span class="ui">Plugins</span> → Discover, or run <code>magpie plugin registry &lt;url&gt;</code> (<code>default</code> goes back).</li>
           <li>A git repository is fetched by Bun: <code>github:owner/repo[#ref]</code>, <code>git+https://…</code> or <code>owner/repo</code>.</li>
           <li>A path to a folder or file is loaded where it is.</li>
         </ul></li>

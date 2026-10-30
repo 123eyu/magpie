@@ -213,6 +213,7 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
       <li><b>インストール。</b>
         <ul>
           <li>npm パッケージは <code>bun add</code> でインストールされ、OpenCode と同じくインストールスクリプトは実行されません。<code>postinstall</code> でのビルドが必要な依存は動きません。</li>
+          <li>パッケージは普段使っている npm レジストリから取得されます。<code>~/.npmrc</code> の <code>registry=</code>、<code>~/.bunfig.toml</code> の <code>install.registry</code>、シェルの <code>NPM_CONFIG_REGISTRY</code> / <code>BUN_CONFIG_REGISTRY</code> が「中国のミラー」スイッチより優先されます。<code>.npmrc</code> がそのレジストリ用に持つトークンはそこにだけ送られます。別のものを使うには <span class="ui">プラグイン</span> → 発見 の <span class="ui">npm レジストリ</span> を変更するか、<code>magpie plugin registry &lt;url&gt;</code> を実行します（<code>default</code> で元に戻ります）。</li>
           <li>git リポジトリは Bun が取得します：<code>github:owner/repo[#ref]</code>、<code>git+https://…</code>、<code>owner/repo</code>。</li>
           <li>フォルダやファイルへのパスは、その場所から読み込まれます。</li>
         </ul></li>

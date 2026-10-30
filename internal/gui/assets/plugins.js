@@ -22,7 +22,7 @@
   const heads = {};      // /api/plugins/git: a git plugin's spec → the commit its repository is at
   let failed = "";       // why what's installed couldn't be loaded
   let failedList = "";   // ...and the plugins suggested
-  let tab = "discover";
+  let tab = "discover", regBox;
   try { tab = localStorage.getItem("magpie.pluginTab") || tab; } catch {}
   let query = "";
   let hits = null;       // npm's answer for query: { q, list } | { q, loading } | { q, error }
@@ -635,21 +635,14 @@
     return box;
   }
 
-  // The repositories on GitHub are many and of every kind (the owner: 这里
-  // 应该有分类以及搜索框方便用户筛选), so their section has its own kinds
-  // to pick from, each with how many there are, and a field that narrows
-  // them by name, author or description as it is typed, once there are
-  // more than a few to look through (counted before the page's search, so
-  // they don't go away under someone typing). Both narrow what the page's
-  // search has already found; only the section is drawn again.
-  // What's installed is the other question the section is read with (the
-  // owner: 加一个未安装), and it cuts across the kinds: a reader after a
-  // middleware they haven't got picks Middleware and Not installed. So it
-  // is a second strip beside the kinds, each counting what the other, the
-  // field and the page's search leave — the counts follow the picks as
-  // they are made — and the two narrow the grid together.
-  // The section, its head and its field are made once and kept in the
-  // page, as the page's search field is (#1055).
+  // GitHub's repositories are many and of every kind (the owner: 这里
+  // 应该有分类以及搜索框方便用户筛选): the section has its own kinds, each
+  // counted, and, past a few, a field narrowing by name, author or
+  // description as typed (counted before the page's search). A second
+  // strip says what's installed (the owner: 加一个未安装), across the
+  // kinds; each strip counts what the other, the field and the search
+  // leave, and they narrow the grid together. Only the section is drawn
+  // again; it, its head and its field are kept, as the search is (#1055).
   let ghKind = "";       // "" (all) | "pv" | "mw" | "ag"
   let ghHave = "";       // "" (all) | "have" | "none"
   let ghQuery = "";
@@ -961,6 +954,10 @@
       else if (!tagged) out.push(ghWaiting());
       else if (taggedErr && !tagged.length) out.push(ghFailed());
       out.push(manual());
+      if (mine?.registry) {
+        out.push(regBox = regBox || el("div", "pm-registry"));
+        import("./registry.js").then(() => pmRegistry(regBox, mine, askNPM), statusTErr);
+      }
       replaceKeeping(body, out);
       if (agentsFor && agSec) {
         // after the view is put back where the reader was, as showing it

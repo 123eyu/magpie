@@ -213,6 +213,7 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
       <li><b>安装。</b>
         <ul>
           <li>npm 包用 <code>bun add</code> 安装，不运行安装脚本，和 OpenCode 安装插件的方式一样。依赖 <code>postinstall</code> 构建的包无法使用。</li>
+          <li>包从你已在用的 npm 源下载：<code>~/.npmrc</code> 里的 <code>registry=</code>、<code>~/.bunfig.toml</code> 里的 <code>install.registry</code>，或 shell 里的 <code>NPM_CONFIG_REGISTRY</code> / <code>BUN_CONFIG_REGISTRY</code>，优先于「国内镜像」开关。<code>.npmrc</code> 里为这个源保存的 token 只发给它。要换一个，在 <span class="ui">插件</span> → 发现 里修改 <span class="ui">npm 源</span>，或运行 <code>magpie plugin registry &lt;url&gt;</code>（<code>default</code> 恢复默认）。</li>
           <li>git 仓库由 Bun 拉取：<code>github:owner/repo[#ref]</code>、<code>git+https://…</code> 或 <code>owner/repo</code>。</li>
           <li>文件夹或文件的路径就地加载。</li>
         </ul></li>

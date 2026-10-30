@@ -167,6 +167,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		CodexSubagentModel:   "codex/gpt-6-astra",
 		DesktopSubagentModel: "fake/m2",
 		ChinaMirror:          true,
+		NPMRegistry:          "https://npm.corp.example",
 		CodexAutoReset:       []string{"me@example.com"},
 		CodexAutoResetOnly:   map[string]string{"me@example.com": "expiring"},
 		CodexResetLead:       180,
