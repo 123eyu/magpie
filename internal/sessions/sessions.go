@@ -1025,7 +1025,8 @@ func CachePath() string { return filepath.Join(filepath.Dir(catalog.CachePath())
 // 25: the skills Codex calls up by reading their SKILL.md.
 // 26: Grok Build's tool calls and skills.
 // 27: Factory Droid's skills (its Skill tool and /<name> prompts).
-const cacheVersion = 27
+// 28: OpenCode 2's, Cline's and dsh's tool calls and skills.
+const cacheVersion = 28
 
 type cacheFile struct {
 	Version int               `json:"version"`
