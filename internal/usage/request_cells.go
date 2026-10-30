@@ -268,10 +268,10 @@ func mix(vs ...uint64) uint64 {
 // whose chunk has one serial and one sig read the same rows from it.
 func (ps *pairedRows) sigs(identities map[string]sessions.CodexIdentity) map[*rowChunk]uint64 {
 	out := make(map[*rowChunk]uint64, len(ps.all))
-	for ref := range ps.skip {
+	for ref := range ps.skip.all() {
 		out[ref.Chunk] += mix(1, uint64(ref.Index))
 	}
-	for ref := range ps.matched {
+	for ref := range ps.matched.all() {
 		out[ref.Chunk] += mix(2, uint64(ref.Index))
 	}
 	actors := map[string]uint64{}

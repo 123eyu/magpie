@@ -17,14 +17,9 @@ type pairMemo struct {
 	// serials are the chunks' in pairRows' order, each set ended by a 0;
 	// a chunk without a serial (the probes') is named by its rows instead
 	serials       []uint64
-	skip, matched []serialRef
+	skip, matched map[uint64][]uint64 // refSets, by serial
 	actors        map[uint64]codexActors
 	compactions   map[uint64]map[int]*bool
-}
-
-type serialRef struct {
-	serial uint64
-	index  int
 }
 
 // pairSerials names the chunks of a pairing, or is false when two have
@@ -98,10 +93,10 @@ func memoOf(ps *pairedRows, serials []uint64, originals []*rowChunk) *pairMemo {
 			m.compactions[serials[k-1]] = c.codexCompactions
 		}
 	}
-	refs := func(set map[rowRef]bool) []serialRef {
-		out := make([]serialRef, 0, len(set))
-		for ref := range set {
-			out = append(out, serialRef{named[ref.Chunk], ref.Index})
+	refs := func(set refSet) map[uint64][]uint64 {
+		out := make(map[uint64][]uint64, len(set))
+		for c, b := range set {
+			out[named[c]] = slices.Clone(b)
 		}
 		return out
 	}
@@ -128,10 +123,10 @@ func (m *pairMemo) apply(serials []uint64, identities map[string]sessions.CodexI
 		}
 		k++
 	}
-	refs := func(list []serialRef) map[rowRef]bool {
-		out := make(map[rowRef]bool, len(list))
-		for _, ref := range list {
-			out[rowRef{by[ref.serial], ref.index}] = true
+	refs := func(set map[uint64][]uint64) refSet {
+		out := make(refSet, len(set))
+		for s, b := range set {
+			out[by[s]] = slices.Clone(b)
 		}
 		return out
 	}

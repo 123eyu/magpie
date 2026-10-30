@@ -324,7 +324,7 @@ func TestVisibleLocalLeavesOutRepeatedMessages(t *testing.T) {
 	b.add(Row{}, "msg_3", 2, false)
 	b.add(Row{}, "msg_2", 3, false)
 	a, b = a.pack(), b.pack()
-	got := visibleLocal([]*rowChunk{a, b})
+	got := refMap(visibleLocal([]*rowChunk{a, b}))
 	if len(got) != 2 || !got[rowRef{b, 0}] || !got[rowRef{b, 3}] {
 		t.Fatalf("left out %v, want b's rows 0 and 3 only", got)
 	}
