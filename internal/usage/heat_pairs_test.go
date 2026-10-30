@@ -1,8 +1,12 @@
 package usage
 
 import (
+	"path/filepath"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/sessions"
 )
 
 // The heatmap's year and the whole history's page pair the same chunks
@@ -52,5 +56,50 @@ func TestHeatmapPairsAsAllDoes(t *testing.T) {
 				t.Fatalf("the heatmap counted %d calls, want 400", calls)
 			}
 		})
+	}
+}
+
+// Big builds that began together take the pairing the one before them
+// made while they waited their turn (holdBigBuild): each took the memo
+// when it began, found none, and a cold start paired the whole history
+// once for each of them (#2278). Each also read the session files with
+// chunks of its own serials, so none was the pairing's the one before
+// had paired.
+func TestBigBuildsBegunTogetherPairOnce(t *testing.T) {
+	pageHome(t)
+	settleLogClock(t)
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
+	historyLog(t, 400)
+	for i := range 8 {
+		at := now.AddDate(0, 0, -20*i).Add(-time.Hour)
+		id := string(rune('a' + i))
+		path := filepath.Join(sessions.CodexDir(), "sessions", at.Format("2006/01/02"), "rollout-"+at.Format("2006-01-02T15-04-05")+"-"+id+".jsonl")
+		writeCodexCall(t, path, id, "s"+id, `"vscode"`, "resp-"+id, "m", "low", at, 100+i, 10)
+	}
+	rows := bigBuildRows
+	bigBuildRows = 1
+	t.Cleanup(func() { bigBuildRows = rows })
+	var mu sync.Mutex
+	n := 0
+	pairing = func() {
+		mu.Lock()
+		n++
+		mu.Unlock()
+	}
+	t.Cleanup(func() { pairing = nil })
+	// both have read their rows before either pairs them
+	var began sync.WaitGroup
+	began.Add(2)
+	building = func() {
+		began.Done()
+		began.Wait()
+	}
+	t.Cleanup(func() { building = nil })
+	var wg sync.WaitGroup
+	wg.Go(func() { QueryPage(All, Filter{}, 0, 50) })
+	wg.Go(func() { HeatmapOf(Filter{}) })
+	wg.Wait()
+	if n != 2 {
+		t.Fatalf("paired %d times, want 2: every row once, and the heatmap's recent days", n)
 	}
 }

@@ -880,7 +880,17 @@ func queryPageOf(p Period, f Filter, offset, limit int, readSource func(sessions
 	}
 	func() {
 		defer holdBigBuild(b.gateways, b.chunks, b.others)() // on a panic too
+		memo := p
+		if p == heatmapPeriod {
+			memo = All
+		}
+		if cache != nil {
+			cache.pairs = shared.lastPairs(idx, memo)
+		}
 		page = buildRequestBlocksIn(p, f, offset, limit, now, b.gateways, b.chunks, b.others, names, codexIdentities, cache)
+		if cache != nil && (p != heatmapPeriod || cache.pairsNext != nil) {
+			shared.keepPairsFor(idx, memo, cache.pairsNext)
+		}
 	}()
 	ownStrings(reflect.ValueOf(&page).Elem())
 	b.priced.release()
@@ -899,15 +909,11 @@ func queryPageOf(p Period, f Filter, offset, limit int, readSource func(sessions
 			shared.heatOld = map[partKey]*heatOld{}
 		}
 		shared.heatOld[pk] = cache.heatOldNext
-		if cache.pairsNext != nil {
-			shared.keepPairs(All, cache.pairsNext)
-		}
 	} else if cache != nil {
 		if shared.parts == nil || len(shared.parts) >= partSets && shared.parts[pk] == nil {
 			shared.parts = map[partKey]map[uint64]*chunkPart{}
 		}
 		shared.parts[pk] = cache.next
-		shared.keepPairs(p, cache.pairsNext)
 		if shared.pageOld == nil || len(shared.pageOld) >= partSets && shared.pageOld[pk] == nil {
 			shared.pageOld = map[partKey]*pageOld{}
 		}
@@ -938,9 +944,6 @@ func codexEffortOfIndex(st requestState, p Period, now time.Time) map[string][]s
 	shared.Lock()
 	shared.keepWhileAsked()
 	shared.adopt(st)
-	// the page of p just before, the warm-up's of All, paired these rows:
-	// a build after it paired every session file's calls again (#3493)
-	memo := shared.pairs[p]
 	idx := shared.private()
 	shared.Unlock()
 	b := readRequestBlocks(idx, st, p, now, settledBefore(now), sessions.ReadCallSource, true)
@@ -950,6 +953,10 @@ func codexEffortOfIndex(st requestState, p Period, now time.Time) map[string][]s
 	paired := false
 	func() {
 		defer holdBigBuild(b.gateways, b.chunks, b.others)()
+		// the page of p just before, the warm-up's of All, paired these
+		// rows: a build after it paired every session file's calls again
+		// (#3493)
+		memo := shared.lastPairs(idx, p)
 		full := func() *pairedRows {
 			var ps *pairedRows
 			ps, next = pairRowsMemo(p, now, b.gateways, b.chunks, b.others, st.codexIdentities, memo)
@@ -959,14 +966,14 @@ func codexEffortOfIndex(st requestState, p Period, now time.Time) map[string][]s
 		if !effortSplit(sums, p, now, b.gateways, b.chunks, b.others, st.codexIdentities, heatDiskRef{root: st.root, meta: st.meta}, full) {
 			full().visitActors(func(r *Row) { sums.add(r) })
 		}
+		if paired {
+			shared.keepPairsFor(idx, p, next)
+		}
 	}()
 	b.priced.release()
 	shared.Lock()
 	if shared.keep(idx, b.on) {
 		shared.noteBuilt(b)
-		if paired {
-			shared.keepPairs(p, next)
-		}
 		shared.trim(requestCacheBytes)
 	}
 	shared.Unlock()
@@ -1144,7 +1151,7 @@ func readRequestBlocks(idx *requestIndex, st requestState, p Period, now, settle
 		put := false
 		if reused := c != nil && c.Source.Size == s.Size && c.Source.Modified.Equal(s.Modified); !reused {
 			c = read(i)
-			c.serial = nextChunkSerial()
+			c.serial = sourceSerial(st.root, st.meta, s)
 			built++
 			builtRows += c.Count
 			c.used = useAt(idx.tick)
@@ -1203,6 +1210,48 @@ func readRequestBlocks(idx *requestIndex, st requestState, p Period, now, settle
 // adopt drops what idx keeps of a state other than st: every chunk when
 // what prices or names a call changed (meta), the pages when anything
 // did (key). idx is locked.
+// sourceSerial names a session file's chunk by what it is made of: the
+// file's path, size and mtime under the index's root and meta, as a read reuses
+// a chunk it keeps and joins another query's build of it (sharedBuild).
+// A serial of each read's own made a cold start's builds, which read the
+// files side by side, name every chunk apart: none found the pairing the
+// one before it made (pairMemo), and the whole history was paired once
+// for each, the footprint's peak (#2278). Its top bit keeps it apart from
+// a counted one.
+func sourceSerial(root, meta string, s sessions.CallSource) uint64 {
+	h := sha256.New()
+	fmt.Fprintf(h, "%s\x00%s\x00%s\x00%d\x00%d", root, meta, s.Path, s.Size, s.Modified.UnixNano())
+	return binary.BigEndian.Uint64(h.Sum(nil)) | 1<<63
+}
+
+// lastPairs is p's last pairing for read, idx's private copy, taken once
+// the build of read has its turn (holdBigBuild). Taken when it began, a
+// cold start's page of the month, heatmap, page of All and Codex's effort
+// each found none, as they began together and paired in turn: the whole
+// history was paired three times, each beside what the last kept, the
+// footprint's peak (#2278). idx is not locked.
+func (idx *requestIndex) lastPairs(read *requestIndex, p Period) *pairMemo {
+	idx.Lock()
+	defer idx.Unlock()
+	if idx.root != read.root || idx.meta != read.meta {
+		return nil
+	}
+	return idx.pairs[p]
+}
+
+// keepPairsFor keeps memo as p's last pairing for read, idx's private
+// copy, while the build of read still has its turn (holdBigBuild): kept
+// once it let go, as the page was, the build that had waited for it took
+// its turn first and found none (#2278). The memo is kept though read
+// isn't, as it stands only for chunks of its serials. idx is not locked.
+func (idx *requestIndex) keepPairsFor(read *requestIndex, p Period, memo *pairMemo) {
+	idx.Lock()
+	defer idx.Unlock()
+	if idx.root == read.root && idx.meta == read.meta {
+		idx.keepPairs(p, memo)
+	}
+}
+
 // keepPairs keeps memo as p's last pairing (nil: there is none to keep).
 func (idx *requestIndex) keepPairs(p Period, memo *pairMemo) {
 	if idx.pairs == nil || len(idx.pairs) >= partSets && idx.pairs[p] == nil {
