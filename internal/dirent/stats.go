@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"io/fs"
 	"slices"
+	"sync"
 	"time"
 )
 
@@ -41,11 +42,33 @@ func (l Listing) Get(name string) (Stat, bool) {
 // (getattrlistbulk on macOS), rather than one per entry. ok is false where
 // the system has none or the folder couldn't be read, and the caller asks
 // after each entry itself.
+//
+// A caller done reading the listing gives it back (Done) for the next.
 func Stats(dir string) (Listing, bool) {
-	l, ok := stats(dir)
+	var l Listing
+	if p, _ := listings.Get().(*Listing); p != nil {
+		l = *p
+	}
+	l, ok := stats(dir, l)
 	if !ok {
 		return nil, false
 	}
 	slices.SortFunc(l, func(a, b Entry) int { return cmp.Compare(a.Name, b.Name) })
 	return l, true
+}
+
+// listings are Stats' answers given back: a listing made new for each
+// folder, grown an entry at a time, was ~95 MB of a minute of the page's
+// polls (#2278).
+var listings sync.Pool
+
+// Done gives l back to be the next Stats' answer: whoever had it reads it
+// no more. A Get of it before is only a copy of its entry.
+func (l Listing) Done() {
+	if cap(l) == 0 || cap(l) > 1<<14 {
+		return // none, or a folder of more files than the pool keeps room for
+	}
+	clear(l[:cap(l)])
+	l = l[:0]
+	listings.Put(&l)
 }

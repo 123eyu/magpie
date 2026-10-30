@@ -95,3 +95,35 @@ func TestStatsAsLstat(t *testing.T) {
 		t.Error("Stats read a folder that isn't there")
 	}
 }
+
+// A listing given back (Done) is the next one's room, and holds nothing of
+// its folder: a smaller folder read into it has its own entries only.
+func TestStatsAfterDone(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("listed in one call a folder on macOS only")
+	}
+	big, small := t.TempDir(), t.TempDir()
+	for i := range 40 {
+		if err := os.WriteFile(filepath.Join(big, fmt.Sprintf("b%02d", i)), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(small, "s"), []byte("abc"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		l, ok := Stats(big)
+		if !ok || len(l) != 40 {
+			t.Fatalf("big folder: %d entries, ok %t", len(l), ok)
+		}
+		l.Done()
+		s, ok := Stats(small)
+		if !ok || len(s) != 1 || s[0].Name != "s" || s[0].Size != 3 {
+			t.Fatalf("small folder after a big one given back: %+v, ok %t", s, ok)
+		}
+		if rest := s[1:cap(s)]; slices.ContainsFunc(rest, func(e Entry) bool { return e.Name != "" }) {
+			t.Fatalf("a listing given back kept its folder's entries: %+v", rest)
+		}
+		s.Done()
+	}
+}

@@ -3,6 +3,7 @@ package dirent
 import (
 	"encoding/binary"
 	"io/fs"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -31,18 +32,26 @@ type attrList struct {
 	fork        uint32
 }
 
+// bufs are getattrlistbulk's answers, one a folder being read, kept for
+// the next of a poll's few hundred Codex day folders and Claude Code
+// projects (#2278). Nothing is kept of one once its folder's entries are
+// read: each name is copied.
+var bufs = sync.Pool{New: func() any { b := make([]byte, 64<<10); return &b }}
+
 // stats reads dir's entries with getattrlistbulk: a Sessions read stats
 // each of ~21k session files on every 15 s poll, ~10 µs a file on APFS,
 // and this is one call for every few hundred.
-func stats(dir string) (Listing, bool) {
+func stats(dir string, out Listing) (Listing, bool) {
 	fd, err := unix.Open(dir, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return nil, false
 	}
 	defer unix.Close(fd)
 	al := attrList{bitmapCount: attrBitMapCount, common: attrCmnReturned | attrCmnName | attrCmnObjType | attrCmnModTime, file: attrFileDataLen}
-	buf := make([]byte, 64<<10)
-	var out Listing
+	bp := bufs.Get().(*[]byte)
+	defer bufs.Put(bp)
+	buf := *bp
+	out = out[:0]
 	for {
 		n, _, errno := syscall.Syscall6(unix.SYS_GETATTRLISTBULK, uintptr(fd), uintptr(unsafe.Pointer(&al)), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)), 0, 0)
 		if errno == syscall.EINTR {
