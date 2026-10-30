@@ -95,7 +95,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const tips = (sort) => page.locator(`.segs.sortby[data-sort="${sort}"] .opt`).evaluateAll((os) => os.map((o) => o.title));
 
         // the Library's MCP servers: A→Z first, whatever order magpie gave them in
-        // (the MCP hub's row below them is no server, and isn't sorted)
+        // (the MCP router's row below them is no server, and isn't sorted)
         const serverNames = () => names("#view-library .lib-list:not(.lib-hublist) .lib-row > .who > .name");
         const openLib = async () => {
           await page.goto("http://magpie.test/");

@@ -1,7 +1,7 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // #4382 (cuipengcx90; nifengfanpan on Discord): with the MCP hub on, a
 // server can stay each agent's own entry. Its editor has a switch,
-// "Through the MCP hub", on for a server shared as before; off saves it
+// "Through the MCP router", on for a server shared as before; off saves it
 // with hub "direct", the row says so with a tag, and the hub's line
 // counts it as given directly. magpie's own image server is behind the hub
 // as the others are, and can be kept direct the same way. With the
@@ -19,8 +19,8 @@ const { I18N } = require("./strings.cjs").strings(); // i18n.js's and the plugin
 const tr = (lang, s, vars = {}) => ((lang === "en" ? s : I18N[lang][s]) || s).replace(/\{(\w+)\}/g, (_, k) => vars[k]);
 const HOME = "/Users/xv";
 const agents = [{ id: "claude", name: "Claude Code", icon: "", skills: `${HOME}/.claude/skills`, mcp: `${HOME}/.claude.json`, hub: "on" }];
-const WORDS = ["Through the MCP hub", "Not through the hub", "Each agent is given its own entry for it, as with the MCP hub off",
-  "Off gives each agent its own entry for it, as with the hub off: for a server that reads its project from the folder it starts in, or keeps a session's state"];
+const WORDS = ["Through the MCP router", "Not through the router", "Each agent is given its own entry for it, as with the MCP router off",
+  "Off gives each agent its own entry for it, as with the router off: for a server that reads its project from the folder it starts in, or keeps a session's state"];
 
 function server(lang, calls, hubOn) {
   const lib = {
@@ -87,7 +87,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             const rowOf = (name) => page.locator("#view-library .lib-server", { has: page.locator(`.lib-health[data-server="${name}"]`) });
             const row = rowOf("index");
             const ed = page.locator("#modal .lib-editor");
-            const sw = ed.getByRole("switch", { name: w("Through the MCP hub"), exact: true });
+            const sw = ed.getByRole("switch", { name: w("Through the MCP router"), exact: true });
             const tag = row.locator(".lib-tag.lib-direct");
             const open = async (r = row) => { await r.locator(".name").click(); await ed.waitFor(); };
             const save = async () => { await ed.locator(":scope > .bar button.primary").click(); await ed.waitFor({ state: "detached" }); };
@@ -116,7 +116,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             assert.deepEqual(calls, ['index "direct"']);
             // the row says so, the hub counts it given directly, and the editor shows it off again
             await tag.waitFor();
-            assert.equal((await tag.textContent()).trim(), w("Not through the hub"));
+            assert.equal((await tag.textContent()).trim(), w("Not through the router"));
             assert.equal(await tag.getAttribute("title"), w(WORDS[2]));
             await page.waitForFunction((x) => document.querySelector("#view-library .lib-hubstats")?.textContent.startsWith(x[0]) &&
               document.querySelector("#view-library .lib-hubstats")?.textContent.endsWith(x[1]),

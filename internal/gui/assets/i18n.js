@@ -4,7 +4,7 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
-    "MCP hub": "MCP 聚合",
+    "MCP router": "MCP 路由",
     "in {agents}": "用于 {agents}",
     "Browser access": "浏览器访问",
     "Open magpie in a browser": "在浏览器中打开 magpie",
@@ -4224,7 +4224,7 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "这份报告已经不在了：magpie 只保留最近 5 份。",
   },
   "zh-TW": {
-    "MCP hub": "MCP 聚合",
+    "MCP router": "MCP 路由",
     "in {agents}": "用於 {agents}",
     "Browser access": "瀏覽器存取",
     "Open magpie in a browser": "在瀏覽器中開啟 magpie",
@@ -8429,7 +8429,7 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "這份報告已經不在了：magpie 只保留最近 5 份。",
   },
   ja: {
-    "MCP hub": "MCP ハブ",
+    "MCP router": "MCP ルーター",
     "in {agents}": "{agents} で使用",
     "Browser access": "ブラウザからのアクセス",
     "Open magpie in a browser": "ブラウザで magpie を開く",
@@ -12636,7 +12636,7 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "このレポートはもう残っていません。magpie は最新の 5 件だけを保存します。",
   },
   de: {
-    "MCP hub": "MCP-Hub",
+    "MCP router": "MCP-Router",
     "in {agents}": "in {agents}",
     "Browser access": "Browserzugriff",
     "Open magpie in a browser": "magpie im Browser öffnen",

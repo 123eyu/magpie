@@ -154,7 +154,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await hub.waitFor();
 
         // off: what it would do, and no reasons yet
-        assert.equal((await hub.locator(".name").textContent()).trim(), w("MCP hub"));
+        assert.equal((await hub.locator(".name").textContent()).trim(), w("MCP router"));
         assert.equal((await hub.locator(".sub.wraps").textContent()).trim(), w("Serve every server through magpie: each agent is given one server, magpie, in place of these, and any other app connects at one address."));
         assert.equal(await v.locator(".lib-hubstats, .lib-hubat").count(), 0);
         const sw = hub.locator(".lib-switch");
@@ -184,7 +184,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // the address any other app connects at
         const at = v.locator(".lib-hubat");
         // the row says what it is (the owner: "Other apps" over an address read as nonsense)
-        assert.equal((await at.locator(".name").textContent()).trim(), w("Hub address"));
+        assert.equal((await at.locator(".name").textContent()).trim(), w("Router address"));
         assert.equal((await at.locator(".lib-hubURL").textContent()).trim(), url);
         assert.equal((await at.locator(".lib-hubconnect").textContent()).trim(), w("Connect…"));
         const why = v.locator(".lib-hub-why");
