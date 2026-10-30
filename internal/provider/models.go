@@ -2546,21 +2546,43 @@ type Entry struct {
 // provider not kept unlisted. A provider switched off has none in it.
 func Catalog() []Entry { return catalogKeeping(nil) }
 
-// catalogOf is the catalog agent's lists start from: Catalog, and for
-// Codex the ChatGPT accounts' own models as well when they are kept out
-// of the lists, the codex provider used only through routing groups
-// (Provider.Unlisted) or a group listing alone (Group.Unlists). Codex
-// reaches those on its own sign-in, its app lists them from the ChatGPT
-// backend, and keeping them for routing groups is about magpie's offer to
-// the other agents and /v1/models: Codex's list kept no Codex section, so
-// the app lost GPT while Codex's picker still offered it (士奇 on
-// Discord). The user takes them out of Codex's list there (HiddenModels,
-// PickedModels), which the gateway follows (CodexNativeHidden).
+// catalogOf is the catalog agent's lists start from: Catalog, with the
+// models of the user's signed-in subscriptions (SubscriptionKept) that a
+// group listing alone (Group.Unlists) keeps out of it. A group is added
+// on top of what the agents had: switching one on that names a ChatGPT
+// account's GPT models took its Codex section out of every agent's list,
+// Hermes Agent's and WorkBuddy's among them, and switched off they were
+// back (士奇 on Discord, a third time: a3ee00c05 kept them in Codex's list
+// alone). The gateway's /v1/models for a client that is no agent ("")
+// still lists the group alone, as #1783 asked.
+//
+// For Codex, the ChatGPT accounts' own models are kept too when the
+// codex provider is used only through routing groups (Provider.Unlisted):
+// Codex reaches those on its own sign-in, its app lists them from the
+// ChatGPT backend, and the codex provider's switch is about magpie's
+// offer to the other agents and /v1/models. The user takes them out of
+// Codex's list there (HiddenModels, PickedModels), which the gateway
+// follows (CodexNativeHidden).
 func catalogOf(agent string) []Entry {
-	if !strings.EqualFold(agent, "codex") {
+	if agent == "" {
 		return Catalog()
 	}
-	return catalogKeeping(CodexOwn)
+	codex := strings.EqualFold(agent, "codex")
+	return catalogKeeping(func(e Entry) bool { return SubscriptionKept(e) || codex && CodexOwn(e) })
+}
+
+// CatalogOf is the catalog agent's lists start from, before its
+// visibility and picks narrow it (CatalogFor): every model that agent may
+// be given by name.
+func CatalogOf(agent string) []Entry { return catalogOf(agent) }
+
+// SubscriptionKept reports whether e is one of a signed-in subscription's
+// own models (a ChatGPT, Claude, Copilot or plugin account's) that only a
+// group listing alone could keep out: such a group doesn't take it from
+// the agents' lists. A provider the user keeps for routing groups itself
+// (Provider.Unlisted, "Only through routing groups") still keeps it out.
+func SubscriptionKept(e Entry) bool {
+	return e.Group == "" && e.Provider.Account != nil && !e.Provider.Unlisted
 }
 
 // catalogKeeping is Catalog with the unlisted models keep says, too.
@@ -2612,15 +2634,16 @@ func Served() []Entry {
 	})
 }
 
-// Unlisted are the models Served has and Catalog doesn't: those of the
-// providers kept for routing groups (Provider.Unlisted), and those a group
-// keeps out of the lists (Group.Unlists), which agents aren't offered.
+// Unlisted are the models Served has and agents aren't offered: those of
+// the providers kept for routing groups (Provider.Unlisted), and those a
+// group keeps out of the lists (Group.Unlists) but a signed-in
+// subscription's, which agents keep (SubscriptionKept).
 func Unlisted() []Entry {
 	var out []Entry
 	entries := providerEntries()
 	kept := unlistedByGroups(entries)
 	for _, e := range entries {
-		if e.Provider.Unlisted || kept[e.ID] {
+		if e.Provider.Unlisted || kept[e.ID] && !SubscriptionKept(e) {
 			out = append(out, e)
 		}
 	}

@@ -1339,7 +1339,10 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) model(w http.ResponseWriter, r *http.Request) {
 	id := unprefixed(r.PathValue("id"))
-	shown := keyAllowed(r, provider.Catalog())
+	// the catalog the agent asking is listed from (/v1/models): a signed-in
+	// subscription's model a group listing alone keeps out of Catalog is
+	// still in an agent's list, and found here too
+	shown := keyAllowed(r, provider.CatalogOf(agentOf(r)))
 	for _, e := range shown {
 		if e.ID == id || e.Group != "" && provider.SameRef(e.ID, id) {
 			if agentOf(r) == ScienceID {

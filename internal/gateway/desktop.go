@@ -425,7 +425,10 @@ func aliased(id string) (string, bool) {
 	if len(number) != 10 {
 		return "", false
 	}
-	for _, e := range provider.Catalog() {
+	// the catalog Desktop and Science are listed from: a signed-in
+	// subscription's model a group listing alone keeps out of Catalog
+	// is still theirs (provider.SubscriptionKept)
+	for _, e := range provider.CatalogOf("claude-desktop") {
 		if aliasNumber(e.ID) == number {
 			return e.ID, true
 		}
