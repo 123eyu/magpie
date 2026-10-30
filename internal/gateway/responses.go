@@ -486,6 +486,17 @@ func readResponsesFor(body []byte, facts, keepInstructions bool) (*Request, erro
 				if part.Text != "" || part.Sealed != nil || part.Signature != "" {
 					r.Messages = append(r.Messages, Message{Role: "assistant", Parts: []Part{part}})
 				}
+			case it.Type == "web_search_call" && it.Action != nil && strings.TrimSpace(it.Action.Query) != "":
+				// where a search ran in the turn: magpie's own search round
+				// for a Claude reply is put back (searchRoundsBack), and
+				// otherwise it goes, as before
+				var hits []Hit
+				for _, s := range it.Action.Sources {
+					if s.URL != "" {
+						hits = append(hits, Hit{URL: s.URL})
+					}
+				}
+				r.Messages = append(r.Messages, Message{Role: "assistant", Parts: []Part{{Kind: Search, ID: it.ID, Text: it.Action.Query, Hits: hits}}})
 			}
 		}
 	}
@@ -588,7 +599,77 @@ func readResponsesFor(body []byte, facts, keepInstructions bool) (*Request, erro
 			}
 		}
 	}
+	r.Messages = searchRoundsBack(r.Messages, searchTool(r.Tools).Name)
 	return r, nil
+}
+
+// searchRoundsBack puts back the search rounds magpie ran for a Claude
+// reply (searchRounds), which its client keeps only as web_search_call
+// items. Claude wrote the thinking before a search in a message that
+// ended with magpie's web_search call, and what it wrote after the
+// result in a message of its own; told as one message, the thinking
+// blocks of the latest assistant message aren't where Claude wrote them,
+// and an upstream that checks them refuses the turn: Claude on Bedrock
+// answered 400 "thinking or redacted_thinking blocks in the latest
+// assistant message cannot be modified", and Codex retried it until the
+// stream gave up (oreoft on Discord). An assistant message with Claude's
+// signed thinking is split at each search into the call and its result,
+// the query and the pages found, as what the search said was never kept.
+// A search with no Claude thinking beside it is left out, as before.
+func searchRoundsBack(msgs []Message, name string) []Message {
+	if !slices.ContainsFunc(msgs, func(m Message) bool { return slices.ContainsFunc(m.Parts, isSearch) }) {
+		return msgs
+	}
+	out := make([]Message, 0, len(msgs))
+	n := 0
+	for _, m := range msgs {
+		if !slices.ContainsFunc(m.Parts, isSearch) {
+			out = append(out, m)
+			continue
+		}
+		if m.Role != "assistant" || !slices.ContainsFunc(m.Parts, claudeSigned) {
+			m.Parts = slices.DeleteFunc(slices.Clone(m.Parts), isSearch)
+			if len(m.Parts) > 0 {
+				out = append(out, m)
+			}
+			continue
+		}
+		var cur []Part
+		for _, p := range m.Parts {
+			if !isSearch(p) {
+				cur = append(cur, p)
+				continue
+			}
+			n++
+			id := p.ID
+			if id == "" {
+				id = fmt.Sprintf("call_search_back_%d", n)
+			}
+			args, _ := json.Marshal(map[string]string{"query": p.Text})
+			result := "Searched the web for: " + p.Text
+			if len(p.Hits) > 0 {
+				result += "\nPages found:"
+				for _, h := range p.Hits {
+					result += "\n- " + h.URL
+				}
+			}
+			cur = append(cur, Part{Kind: ToolCall, ID: id, Name: name, Args: args})
+			out = append(out, Message{Role: "assistant", Parts: cur},
+				Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: id, Text: result}}})
+			cur = nil
+		}
+		if len(cur) > 0 {
+			out = append(out, Message{Role: "assistant", Parts: cur})
+		}
+	}
+	return mergeTurns(out)
+}
+
+func isSearch(p Part) bool { return p.Kind == Search }
+
+// claudeSigned is thinking Claude signed, or its redacted_thinking.
+func claudeSigned(p Part) bool {
+	return p.Kind == Thinking && (p.SignedBy == sealAnthropic && p.Signature != "" || p.sealedBy(sealAnthropic))
 }
 
 // toolCallItem is a Responses input item that makes a tool call, and

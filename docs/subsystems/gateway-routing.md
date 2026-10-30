@@ -662,9 +662,20 @@ earlier progress is fabricated. Search items keep their order among text,
 reasoning and client tool calls. They carry sources, not invented
 `url_citation` annotations: the shared search result has no citation offsets
 in the model's answer. Native Responses passthrough is unchanged. A client
-that sends the item back in its next input (Codex replays its output) loses
-nothing: `parseResponses` has no case for `web_search_call` and leaves it
-out, as before.
+sends the item back in its next input (Codex replays its output).
+`parseResponses` leaves it out, as before, unless Claude's signed thinking
+is in the same assistant run: then the search was magpie's own round for a
+Claude reply, which Claude wrote as two messages (thinking and magpie's
+`web_search` call; then, after the result, more thinking and the answer).
+`searchRoundsBack` splits the run there into the call and a result naming
+the query and the pages found (what the search said was not kept), so the
+thinking blocks of the latest assistant message are where Claude wrote
+them. Told as one message, Claude on Bedrock refused the next turn 400
+"thinking or redacted_thinking blocks in the latest assistant message
+cannot be modified" and Codex retried until the stream gave up (oreoft on
+Discord; `TestClaudeThinkingAroundMagpieSearchGoesBackAsWritten`,
+`TestSearchWithoutClaudeThinkingStaysOut` in
+[`claude_search_round_test.go`](../../internal/gateway/claude_search_round_test.go)).
 
 This lets a Responses client verify search execution and display source
 links without sending a separate Anthropic Messages request. Covered by
