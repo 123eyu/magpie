@@ -9475,7 +9475,7 @@ function drawEditor(p, presetID) {
     if (subOf(a.agent)) {
       // no Claude Code on Windows: the gateway runs the one in WSL
       const via = a.wsl ? t("Runs through WSL · {distro}: Claude Code there signs in and answers; Windows has none of its own.", { distro: a.wsl }) + " " : "";
-      ed.append(...field(t("Accounts"), renderAccounts(a, p), via + (p.routing ? t("Tick every account to use; Routing says how requests spread over them.") : subOf(a.agent).single ? t("{agent} keeps one account; the gateway runs it for every request. Signing in to another replaces it.", { agent: a.agentName }) : subOf(a.agent).own && (a.logins || []).some((l) => l.own) ? t("The gateway uses the first. Tick more and it moves on to the next when the one before it is out of quota. {agent} itself stays signed in as it is.", { agent: a.agentName && a.agentName !== a.agent ? a.agentName : p.name }) : subOf(a.agent).own || subOf(a.agent).plugin ? t("The gateway uses the first. Tick more and it moves on to the next when the one before it is out of quota.") : t("{agent} signs in to the first. Tick more and the gateway moves on to the next when the one before it is out of quota. Sessions already running keep theirs until restarted.", { agent: a.agentName }))));
+      ed.append(...field(t("Accounts"), renderAccounts(a, p), via + (p.routing ? t("Tick every account to use; Routing says how requests spread over them.") : subOf(a.agent).single ? t("{agent} keeps one account; the gateway runs it for every request. Signing in to another replaces it.", { agent: a.agentName }) : subOf(a.agent).own && (a.logins || []).some((l) => l.own) ? t("The gateway uses the first. Tick more and it moves on to the next when the one before it is out of quota. {agent} itself stays signed in as it is.", { agent: a.agentName && a.agentName !== a.agent ? a.agentName : p.name }) : subOf(a.agent).own || subOf(a.agent).plugin ? t("The gateway uses the first. Tick more and it moves on to the next when the one before it is out of quota.") : t("{agent} signs in to the first. Tick more and magpie moves on to the next when the one before it is out of quota. Sessions already running keep theirs until restarted.", { agent: a.agentName }))));
       if ((a.logins || []).filter((l) => l.active || l.on).length > 1) ed.append(...renderRouting(p));
       if (p.move) ed.append(...renderMove(p));
     } else {
@@ -12061,7 +12061,7 @@ function renderRouting(p) {
   const own = (routing) => !a || (a.agent !== "codex" && a.agent !== "claude") ? ""
     : " " + (keptLogin(p)
       ? t("Routing picks the account for each request through magpie, in the accounts' order; {agent} on its own stays signed in to {user}, whatever it has left.", { agent: a.agentName, user: keptLogin(p) })
-      : p.keepLogin
+      : p.keepLogin && !p.switchOnly
       ? t("Routing picks the account for each request through magpie; {agent} on its own stays signed in to the first account, whatever it has left.", { agent: a.agentName })
       : routing === "order"
         ? t("Routing picks the account for each request through magpie; {agent} on its own uses the one it is signed in to, which magpie moves to the next ticked account with room once it is used up, and back to the first once that has room again.", { agent: a.agentName })
@@ -13175,11 +13175,10 @@ function forgetOwnTitle(a) {
 }
 
 // keptLogin: the account Codex or Claude Code is kept signed in to in
-// place of the first (#524), "" when none — the gateway then tries the
-// accounts in their order, the one signed in to at its own place
+// place of the first (#524), "" when none or switch-only (#1907)
 function keptLogin(p) {
   const a = p?.account;
-  if (!a || (a.agent !== "codex" && a.agent !== "claude") || !p.keepLogin || !p.keepLoginAs) return "";
+  if (!a || (a.agent !== "codex" && a.agent !== "claude") || !p.keepLogin || p.switchOnly || !p.keepLoginAs) return "";
   const as = p.keepLoginAs.toLowerCase();
   return (a.logins || []).find((l) => (l.user || "").toLowerCase() === as)?.user || "";
 }
@@ -13368,7 +13367,7 @@ function renderAccounts(a, p) {
   // first runs low (#209, #408); this keeps it on the first instead, or on
   // an account of the user's choosing, the gateway still spreading requests
   // over the ticked ones in their order (#524)
-  if ((a.agent === "codex" || a.agent === "claude") && several && p) {
+  if ((a.agent === "codex" || a.agent === "claude") && several && p && !p.switchOnly) {
     const box = el("div", "keep-login");
     const [keep, cb] = tick(t("Keep {agent} signed in to", { agent: a.agentName }), !!p.keepLogin);
     keep.title = t("magpie won't sign {agent} in to another account when the first runs low; requests through magpie still go to the other ticked accounts as Routing says", { agent: a.agentName });
