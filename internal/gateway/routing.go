@@ -207,6 +207,56 @@ const (
 	slowForget = 30 * time.Minute
 )
 
+// creditLadder is how long a key its vendor says is out of money sits
+// out, by how many times in a row it was refused so (creditBackoff): a
+// balance spent, or a spend limit reached, comes back when someone tops
+// it up or raises the limit, or when a month's limit turns, not in half
+// an hour (PaulT on Discord: an OpenAI key's 402 had it asked, and
+// refused, every 30 minutes). The first rest is creditRest still, as a
+// relay's 402 can be its own moment's; each refusal after a rest ended
+// rests it longer, up to a week. "Try now" lifts it whenever the user
+// has topped it up, and an answer clears the count.
+var creditLadder = []time.Duration{creditRest, 2 * time.Hour, 8 * time.Hour, 24 * time.Hour, 3 * 24 * time.Hour, 7 * 24 * time.Hour}
+
+// creditSoon: an out-of-credit refusal that says it can pass soon, or
+// that a smaller request would: OpenRouter's in-flight budget (a 402
+// with Retry-After, "a wait-and-retry case", openrouter.ai/docs/
+// api-reference/errors), its "requires more credits, or fewer
+// max_tokens … can only afford N" (the request's size, not the balance
+// spent), and a vendor's "try again in 30 seconds" or "1 分钟后重试".
+// These rest creditRest, as before; they don't climb creditLadder.
+var creditSoon = regexp.MustCompile(`(?i)openrouter_in_flight_budget|can only afford|fewer max_tokens|(?:try again|retry)(?: after| in)?\s*\d|\d+\s*(?:秒|分钟|小时)[后後]`)
+
+// creditBackoff is the rest of a key (c, no subscription account) out of
+// credit, rested by id: the vendor's own time when it names one (a
+// Retry-After, a reset in its body or headers), creditRest when it says
+// it can pass soon (creditSoon), else the next rung of creditLadder —
+// the same rung while the last rest still runs (the lone key asked all
+// the same), one up once it has ended. n is the rung, 0 off the ladder.
+func creditBackoff(id string, header http.Header, body []byte, now time.Time) (d time.Duration, by string, n int, guessed bool) {
+	if w := resetsAt(body, now); w > 0 {
+		return min(w, longestMonthly), "resets", 0, false
+	}
+	if w := resetsNoted(header, now); w > 0 {
+		return min(w, longestMonthly), "resets", 0, false
+	}
+	if retryAfter(header, now) > 0 || creditSoon.Match(wordsOf(body)) {
+		return creditRest, "credit", 0, true
+	}
+	n = 1
+	restingUntil.Lock()
+	if prev, ok := restingUntil.note[id]; ok && prev.Why == failCredit && prev.Failures > 0 {
+		// its rest gone rather than ended (lifted) starts a new run
+		if until, had := restingUntil.m[id]; had && now.Before(until) {
+			n = prev.Failures
+		} else if had {
+			n = prev.Failures + 1
+		}
+	}
+	restingUntil.Unlock()
+	return creditLadder[min(n, len(creditLadder))-1], "credit", n, true
+}
+
 var (
 	// creditWords: the account or key has no money left.
 	creditWords = regexp.MustCompile(`(?i)insufficient.?(balance|credit|fund)|balance|credit|billing|payment|arrear|overdue|suspended|余额|欠费|充值|账户.*(不足|停)`)
@@ -557,7 +607,8 @@ type Rest struct {
 	Why    string    `json:"why"`    // failCredit, failQuota, failRate, failOther
 	Status int       `json:"status"` // what it answered
 	Until  time.Time `json:"until"`
-	// By is what set how long: "credit" (half an hour), "retry-after" (the
+	// By is what set how long: "credit" (half an hour, a key longer each
+	// time again: creditLadder), "retry-after" (the
 	// vendor's own headers), "resets" (the time Claude Code gave), "window"
 	// (the allowance window it filled renews), "quota" (no word of when),
 	// "cooldown" (a minute), "backoff" (longer each time it fails again,
@@ -1130,6 +1181,16 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 				d = chatgptCreditRest
 			}
 			d, guessed = min(d, longestMonthly), false
+		} else if c.p.Account == nil && !remoteModelRest(c, why, header) {
+			// a key out of money: longer each time it is refused so
+			// again (creditLadder). Rested by the id the rest is kept
+			// under below; another computer's magpie rests its model
+			// for it, as before
+			id := c.restKey()
+			if c.p.PaidBesideFree(c.model) {
+				id = c.restID()
+			}
+			d, r.By, r.Failures, guessed = creditBackoff(id, header, body, now)
 		}
 	case failQuota:
 		if c.onCredits() {
