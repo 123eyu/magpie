@@ -108,7 +108,11 @@ type partCache struct {
 	// heatOld is the heatmap's days before its last few the page before
 	// kept, and heatOldNext this page's (heatSplit)
 	heatOld, heatOldNext *heatOld
-	// disk is where heatSplit keeps its settled days between runs
+	// pageOld is a page's cells before its last few days the page before
+	// kept, and pageOldNext this page's (pageSplit)
+	pageOld, pageOldNext *pageOld
+	// disk is where heatSplit and pageSplit keep what is settled between
+	// runs
 	disk heatDiskRef
 }
 

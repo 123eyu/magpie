@@ -552,6 +552,8 @@ type requestIndex struct {
 	heatParts map[partKey]map[uint64]*chunkPart
 	// heatOld are the heatmap's days before its last few (heatSplit)
 	heatOld map[partKey]*heatOld
+	// pageOld are a page's cells before its last few days (pageSplit)
+	pageOld map[partKey]*pageOld
 	// pairs are the last pairing of each of a few periods (pairMemo),
 	// kept as parts are
 	pairs map[Period]*pairMemo
@@ -790,7 +792,7 @@ func queryPageOf(p Period, f Filter, offset, limit int, readSource func(sessions
 	if p == heatmapPeriod {
 		cache = &partCache{old: idx.heatParts[pk], next: map[uint64]*chunkPart{}, heatOld: idx.heatOld[pk], disk: heatDiskRef{root: idx.root, meta: idx.meta}}
 	} else if p.Last() == 0 {
-		cache = &partCache{old: idx.parts[pk], next: map[uint64]*chunkPart{}, pairs: idx.pairs[p]}
+		cache = &partCache{old: idx.parts[pk], next: map[uint64]*chunkPart{}, pairs: idx.pairs[p], pageOld: idx.pageOld[pk], disk: heatDiskRef{root: idx.root, meta: idx.meta}}
 	}
 	shared := idx
 	idx = shared.private()
@@ -831,6 +833,12 @@ func queryPageOf(p Period, f Filter, offset, limit int, readSource func(sessions
 		}
 		shared.parts[pk] = cache.next
 		shared.keepPairs(p, cache.pairsNext)
+		if shared.pageOld == nil || len(shared.pageOld) >= partSets && shared.pageOld[pk] == nil {
+			shared.pageOld = map[partKey]*pageOld{}
+		}
+		if cache.pageOldNext != nil {
+			shared.pageOld[pk] = cache.pageOldNext
+		}
 	}
 	if len(shared.pages) >= 16 {
 		shared.pages = map[pageKey]RequestPage{}
@@ -1134,6 +1142,7 @@ func (idx *requestIndex) adopt(st requestState) {
 		idx.parts = nil
 		idx.heatParts = nil
 		idx.heatOld = nil
+		idx.pageOld = nil
 		idx.pairs = nil
 		idx.key = ""
 	}
@@ -2035,12 +2044,6 @@ func buildRequestBlocksIn(p Period, f Filter, offset, limit int, now time.Time, 
 		return RequestPage{Rows: []Row{}, Agents: []string{}, Providers: []string{}, Purposes: []string{}, By: map[string][]Share{},
 			Heat: heatSplit(since, now, gateways, chunks, others, chartFilter, identities, cache)}
 	}
-	var ps *pairedRows
-	if cache != nil {
-		ps, cache.pairsNext = pairRowsMemo(p, now, gateways, chunks, others, identities, cache.pairs)
-	} else {
-		ps = pairRows(p, now, gateways, chunks, others, identities)
-	}
 	out := RequestPage{Rows: []Row{}, Agents: []string{}, Providers: []string{}, Purposes: []string{}, By: map[string][]Share{}}
 	agents, providers := map[string]bool{}, map[string]bool{}
 	kinds := map[string]bool{}
@@ -2059,8 +2062,10 @@ func buildRequestBlocksIn(p Period, f Filter, offset, limit int, now time.Time, 
 	// Bound the requested prefix before adding limit: external offsets can
 	// reach MaxInt, and a page beyond all sources needs no heap at all.
 	maxRows := 0
-	for _, c := range ps.all {
-		maxRows += rowsIn(c)
+	for _, set := range [][]*rowChunk{gateways, chunks, others} {
+		for _, c := range set {
+			maxRows += rowsIn(c)
+		}
 	}
 	take := 0
 	if offset < maxRows {
@@ -2069,7 +2074,21 @@ func buildRequestBlocksIn(p Period, f Filter, offset, limit int, now time.Time, 
 	// a kept cell says which computer its rows are of whether this page
 	// counts computers or not: the next one of its partKey may
 	pass := newCellPass(p, f, now, names != nil || cache != nil)
-	parts := ps.partsOf(pass, cache, identities)
+	var ps *pairedRows
+	var parts, newestParts []*chunkPart
+	split := false
+	if cache != nil {
+		parts, ps, newestParts, split = pageSplit(p, f, now, take, pass, gateways, chunks, others, identities, cache)
+	}
+	if !split {
+		if cache != nil {
+			ps, cache.pairsNext = pairRowsMemo(p, now, gateways, chunks, others, identities, cache.pairs)
+		} else {
+			ps = pairRows(p, now, gateways, chunks, others, identities)
+		}
+		parts = ps.partsOf(pass, cache, identities)
+		newestParts = parts
+	}
 	var first time.Time
 	// Each dimension's groups are counted with its own pick cleared, and
 	// the computers' with the computer's and day's (cellPass): a cell's
@@ -2167,7 +2186,7 @@ func buildRequestBlocksIn(p Period, f Filter, offset, limit int, now time.Time, 
 			}
 		}
 	}
-	selected := ps.newest(f, parts, take)
+	selected := ps.newest(f, newestParts, take)
 	slices.SortFunc(selected, func(a, b timedRef) int {
 		if a.newer(b) {
 			return -1
