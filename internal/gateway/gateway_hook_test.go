@@ -288,6 +288,19 @@ func TestAsyncGatewayOrigin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// a key of the user's own value, made for a friend, is a named key too
+	friend, err := access.Update("add-key", access.Change{Name: "Friend", Secret: "a-friends-own-key-0042"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the sharing key magpie makes and writes into this computer's agents
+	if err := access.ConfigureLAN(true, false); err != nil {
+		t.Fatal(err)
+	}
+	mine := access.LANSecret()
+	if mine == "" || mine == key {
+		t.Fatalf("no default sharing key: %q", mine)
+	}
 	abs := filepath.Join(t.TempDir(), "origin.hooks.mjs")
 	script := `export function onRequest(body,ctx){ctx.state.origin=ctx.origin;body.origin=ctx.origin;return body}
 export async function onResponse(reply,ctx){await fetch(ctx.options.url,{method:"POST",body:JSON.stringify({origin:ctx.origin,before:ctx.state.origin}),signal:ctx.signal})}`
@@ -314,6 +327,9 @@ export async function onResponse(reply,ctx){await fetch(ctx.options.url,{method:
 		{"named-loopback", "127.0.0.1:1234", "", key, "0", "gateway-key"},
 		{"remote", "10.0.0.1:1234", "", key, "0", "gateway-key"},
 		{"proxy", "127.0.0.1:1234", "X-Forwarded-For", key, "0", "gateway-key"},
+		{"friend-own-value", "10.0.0.1:1234", "", friend, "0", "gateway-key"},
+		{"magpie-key-remote", "10.0.0.1:1234", "", mine, "0", "magpie-key"},
+		{"magpie-key-loopback", "127.0.0.1:1234", "", mine, "0", "magpie-key"},
 		{"trusted-proxy", "127.0.0.1:1234", "Forwarded", "", "1", "remote"},
 		{"trusted-tunnel", "127.0.0.1:1234", "Tailscale-User-Login", "", "1", "remote"},
 		{"unknown-peer", "malformed", "", "", "0", "remote"},

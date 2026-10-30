@@ -152,6 +152,11 @@ type Identity struct {
 	Accounts       []string
 	Quotas         bool
 	ReadOnly       bool
+	// Default: the key is the sharing key magpie made itself (Default),
+	// the one it writes into this computer's own agents that reach the
+	// gateway from beyond loopback, never one the user made for someone
+	// else.
+	Default bool
 }
 type contextKey struct{}
 
@@ -520,7 +525,10 @@ func Authenticate(secret string) (Identity, bool) {
 			if k.Off {
 				return Identity{}, false
 			}
-			return Identity{KeyID: k.ID, KeyName: k.Name, Limit: k.Limit, More: k.More, Models: HeldModels(k.Models, k.Accounts), Accounts: k.Accounts, Quotas: k.Quotas, ReadOnly: k.ReadOnly}, true
+			// the default key as Default tells it: marked LAN, or the id
+			// the settings name (settings read only for an unmarked key)
+			def := k.LAN || (settings.Load().LANKeyID == k.ID && k.ID != "")
+			return Identity{KeyID: k.ID, KeyName: k.Name, Limit: k.Limit, More: k.More, Models: HeldModels(k.Models, k.Accounts), Accounts: k.Accounts, Quotas: k.Quotas, ReadOnly: k.ReadOnly, Default: def}, true
 		}
 	}
 	s := settings.Load()
@@ -528,7 +536,7 @@ func Authenticate(secret string) (Identity, bool) {
 	// fall back after either durable marker exists, or to a revoked mirror.
 	if s.LAN && s.LANKeyID == "" && s.LANKey != "" && !strings.HasPrefix(s.LANKey, revokedLANPrefix) && !slices.ContainsFunc(keys, func(k Key) bool { return k.LAN }) && subtle.ConstantTimeCompare([]byte(secret), []byte(s.LANKey)) == 1 {
 		k := legacyLANKey(s.LANKey)
-		return Identity{KeyID: k.ID, KeyName: k.Name}, true
+		return Identity{KeyID: k.ID, KeyName: k.Name, Default: true}, true
 	}
 	return Identity{}, false
 }

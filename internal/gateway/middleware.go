@@ -156,8 +156,17 @@ func gatewayQuery(req *Request) string {
 // gatewayOrigin exposes provenance, never credentials or peer addresses.
 // Forwarded traffic remains remote even when the administrator trusts its
 // proxy for authentication: that trust does not establish conversation ownership.
+//
+// The sharing key magpie made itself, which it writes into this computer's
+// own agents that reach the gateway from beyond loopback, is "magpie-key";
+// any other gateway key — one the owner made for someone else, a value a
+// user brought, or one that didn't authenticate — stays "gateway-key", so
+// a plugin can serve the owner's own agents without serving a friend's key
+// (plugins#526). Plugins that trust only "local" see both as not local.
 func gatewayOrigin(r *http.Request) string {
-	if access.Caller(r.Context()).KeyID != "" || managedKey(r) {
+	if who := access.Caller(r.Context()); who.KeyID != "" && who.Default {
+		return "magpie-key"
+	} else if who.KeyID != "" || managedKey(r) {
 		return "gateway-key"
 	}
 	if local(r) && !slices.ContainsFunc(forwardHeaders, func(h string) bool { return r.Header.Get(h) != "" }) {
