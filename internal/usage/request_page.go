@@ -864,17 +864,26 @@ func codexEffortOfIndex(st requestState, p Period, now time.Time) map[string][]s
 	defer b.priced.release()
 	sums := effortSums{}
 	var next *pairMemo
+	paired := false
 	func() {
 		defer holdBigBuild(b.gateways, b.chunks, b.others)()
-		var ps *pairedRows
-		ps, next = pairRowsMemo(p, now, b.gateways, b.chunks, b.others, st.codexIdentities, memo)
-		ps.visitActors(func(r *Row) { sums.add(r) })
+		full := func() *pairedRows {
+			var ps *pairedRows
+			ps, next = pairRowsMemo(p, now, b.gateways, b.chunks, b.others, st.codexIdentities, memo)
+			paired = true
+			return ps
+		}
+		if !effortSplit(sums, p, now, b.gateways, b.chunks, b.others, st.codexIdentities, heatDiskRef{root: st.root, meta: st.meta}, full) {
+			full().visitActors(func(r *Row) { sums.add(r) })
+		}
 	}()
 	b.priced.release()
 	shared.Lock()
 	if shared.keep(idx, b.on) {
 		shared.noteBuilt(b)
-		shared.keepPairs(p, next)
+		if paired {
+			shared.keepPairs(p, next)
+		}
 		shared.trim(requestCacheBytes)
 	}
 	shared.Unlock()

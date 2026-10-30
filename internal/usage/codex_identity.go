@@ -789,6 +789,29 @@ func (groups effortSums) add(row *Row) {
 	entry.value.Cost += row.Cost
 }
 
+// addValue adds a thread's kept total for one model and effort (effortSplit).
+func (groups effortSums) addValue(actor string, v sessions.ModelEffort) {
+	byModel := groups[actor]
+	if byModel == nil {
+		byModel = map[modelEffortKey]*effortTotal{}
+		groups[actor] = byModel
+	}
+	key := modelEffortKey{v.Model, v.Effort}
+	entry := byModel[key]
+	if entry == nil {
+		entry = &effortTotal{value: sessions.ModelEffort{Model: v.Model, Effort: v.Effort}, priced: true}
+		byModel[key] = entry
+	}
+	entry.priced = entry.priced && v.Priced
+	entry.value.Input += v.Input
+	entry.value.Output += v.Output
+	entry.value.CacheRead += v.CacheRead
+	entry.value.CacheWrite += v.CacheWrite
+	entry.value.CacheWrite1h += v.CacheWrite1h
+	entry.value.Reasoning += v.Reasoning
+	entry.value.Cost += v.Cost
+}
+
 func (groups effortSums) values() map[string][]sessions.ModelEffort {
 	out := make(map[string][]sessions.ModelEffort, len(groups))
 	for actor, byModel := range groups {
