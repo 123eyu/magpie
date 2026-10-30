@@ -1914,10 +1914,8 @@ async function addProviderFromAgents() {
   if (!adding) $("#addProvider")?.click();
 }
 
-// desktopLongestLine: Claude Desktop lists a model of 1M or more twice, the
-// plain one and a "1M context window" one of its own; switched on, magpie
-// lists it by its 1M id alone, one entry each (#1272). Desktop reads the
-// list as it starts.
+// desktopLongestLine: Desktop lists a 1M model twice; on, magpie lists its
+// 1M id alone (#1272)
 function desktopLongestLine() {
   const on = !!state.settings?.desktopLongest;
   const l = el("label", "ag-vl ag-longest");
@@ -2120,7 +2118,10 @@ function connectPanel(a, { fields, fieldBtn }) {
     }
     kv(t("In {agent}", { agent: a.name }), ...parts);
   } else if (menuFromList(a)) {
-    kv(t("In {agent}", { agent: a.name }), line(t("{agent}'s model menu lists the models picked here; switch among them there. It reads the list as it starts: quit and reopen it after a change.", { agent: a.name })));
+    const p = [line(t("{agent}'s model menu lists the models picked here; switch among them there. It reads the list as it starts: quit and reopen it after a change.", { agent: a.name }))];
+    // its 3p window has no Chinese (GZXYMH on X)
+    if (a.id === "claude-desktop" && /^zh/.test(locale)) p.push(el("div", "ag-vl ag-warn ag-desktop-lang")), p[1].append(el("span", "ag-dot"), el("span", "", t("On magpie, Desktop shows Anthropic's gateway window, which has no Chinese; disconnect it for Chinese.")));
+    kv(t("In {agent}", { agent: a.name }), ...p);
   }
   // Hermes' other profiles, each on its own model
   const bots = a.fields.filter(hermesBot);
@@ -2408,11 +2409,9 @@ async function reapplyAgent(a, btn) {
 }
 
 // ---------- the agents' CLIs (#202) ----------
-// Each agent's CLI shows its version after its name, faint; when a newer one
-// is out and magpie knows how the CLI was installed (its own updater, npm,
-// bun, pnpm, Homebrew), a pill beside it updates it. The versions come after
-// the rows are drawn, never holding them up; one magpie can't tell how it
-// was installed shows its version alone.
+// Each agent's CLI shows its version after its name; a newer one out and its
+// installer known (its updater, npm, bun, pnpm, Homebrew), a pill updates
+// it. The versions come after the rows are drawn, never holding them up.
 
 let cliInfo = {}; // agent id → { version, latest, via, command, update }
 const cliBusy = new Set(); // the ones being updated now
