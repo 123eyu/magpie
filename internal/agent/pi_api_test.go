@@ -61,13 +61,13 @@ func TestPiModelsAskedOnTheirNativeAPI(t *testing.T) {
 		apis[m["id"].(string)], entries[m["id"].(string)] = m["api"], m
 	}
 	for id, want := range map[string]any{
-		"resp/grok-5":           "openai-responses",
-		"resp/gpt-5.5":          "openai-responses",
-		"openai/gpt-5.5":        "openai-responses",
-		"openai/whisper-x":      nil,
-		"relay/glm-4.6":         nil,
-		"anth/claude-sonnet-5":  "anthropic-messages",
-		"anth/kimi-k3":          "anthropic-messages",
+		"resp/grok-5":          "openai-responses",
+		"resp/gpt-5.5":         "openai-responses",
+		"openai/gpt-5.5":       "openai-responses",
+		"openai/whisper-x":     nil,
+		"relay/glm-4.6":        nil,
+		"anth/claude-sonnet-5": "anthropic-messages",
+		"anth/kimi-k3":         "anthropic-messages",
 		// Pi's folder keeps Gemini on Chat: Raft runs Pi's SDK on it with
 		// a fetch pi-ai's Google adapter refuses (piAsked); OmO, below,
 		// asks Gemini's API
