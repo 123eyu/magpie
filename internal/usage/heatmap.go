@@ -367,6 +367,8 @@ func heatSplit(since, now time.Time, gateways, chunks, others []*rowChunk, f Fil
 				old, kept = &heatOld{cut: cut, settled: serials, at: time.Now(), days: days, before: before, key: key}, true
 			} else if days, found := heatAdvance(cache.disk, cut, since, now, f, identities, sets, key); found {
 				old, kept = &heatOld{cut: cut, settled: serials, at: time.Now(), days: days, before: before, key: key}, true
+			} else if days, found := heatCold(cut, since, now, f, identities, sets, key); found {
+				old, kept = &heatOld{cut: cut, settled: serials, at: time.Now(), days: days, before: before, key: key}, true
 			}
 		}
 	}
@@ -446,6 +448,25 @@ func heatAdvance(d heatDiskRef, cut, since, now time.Time, f Filter, identities 
 		if day.Date < to {
 			all.addDay(day)
 		}
+	}
+	days := all.list()
+	_ = heatDiskWrite(key, cut, since, days)
+	return days, true
+}
+
+// heatCold is the days from since to cut, of a pairing a few weeks at a
+// time (coldSpans), written under key; or false.
+func heatCold(cut, since, now time.Time, f Filter, identities map[string]sessions.CodexIdentity, sets [3][]*rowChunk, key string) ([]Day, bool) {
+	all := heatDays{}
+	if !coldSpans(since, cut, sets, func(from, to time.Time, span [3][]*rowChunk) {
+		end := to.Format(time.DateOnly)
+		for _, day := range pairRowsIn(from, to, span[0], span[1], span[2], identities).heatDaysOf(from, now, f, nil, identities, nil) {
+			if day.Date < end {
+				all.addDay(day)
+			}
+		}
+	}) {
+		return nil, false
 	}
 	days := all.list()
 	_ = heatDiskWrite(key, cut, since, days)

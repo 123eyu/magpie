@@ -84,6 +84,8 @@ func pageSplit(p Period, f Filter, now time.Time, take int, pass *cellPass, gate
 				old, kept = &pageOld{cut: cut, since: since, settled: serials, before: before, at: time.Now(), key: key, cells: c}, true
 			} else if c, found := pageAdvance(cache.disk, cut, since, until, f, pass, identities, sets, key); found {
 				old, kept = &pageOld{cut: cut, since: since, settled: serials, before: before, at: time.Now(), key: key, cells: c}, true
+			} else if c, found := pageCold(cut, since, pass, identities, sets, key); found {
+				old, kept = &pageOld{cut: cut, since: since, settled: serials, before: before, at: time.Now(), key: key, cells: c}, true
 			}
 		}
 	}
@@ -170,6 +172,19 @@ func pageAdvance(d heatDiskRef, cut, since, until time.Time, f Filter, pass *cel
 		return cells, true
 	}
 	return nil, false
+}
+
+// pageCold is a page's cells before cut from since, of a pairing a few
+// weeks at a time (coldSpans), written under key; or false.
+func pageCold(cut, since time.Time, pass *cellPass, identities map[string]sessions.CodexIdentity, sets [3][]*rowChunk, key string) (*chunkPart, bool) {
+	cells := &chunkPart{}
+	if !coldSpans(since, cut, sets, func(from, to time.Time, span [3][]*rowChunk) {
+		cells = addCells(cells, pairRowsIn(from, to, span[0], span[1], span[2], identities).cellsBefore(pass, to))
+	}) {
+		return nil, false
+	}
+	_ = pageDiskWrite(key, cut, since, cells)
+	return cells, true
 }
 
 // addCells is the cells of a and of b, the later, as one part: a cell of

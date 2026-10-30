@@ -133,6 +133,8 @@ func effortSplit(sums effortSums, p Period, now time.Time, gateways, chunks, oth
 				old, kept = &effortOld{root: disk.root, cut: cut, since: since, settled: serials, before: before, at: time.Now(), key: key, sums: s}, true
 			} else if s, found := effortAdvance(disk, cut, since, until, identities, sets, key); found {
 				old, kept = &effortOld{root: disk.root, cut: cut, since: since, settled: serials, before: before, at: time.Now(), key: key, sums: s}, true
+			} else if s, found := effortCold(cut, since, identities, sets, key); found {
+				old, kept = &effortOld{root: disk.root, cut: cut, since: since, settled: serials, before: before, at: time.Now(), key: key, sums: s}, true
 			}
 		}
 		if !kept {
@@ -164,6 +166,20 @@ func effortSplit(sums effortSums, p Period, now time.Time, gateways, chunks, oth
 	}
 	pairRowsIn(cut, until, recent[0], recent[1], recent[2], identities).visitActors(func(r *Row) { sums.add(r) })
 	return true
+}
+
+// effortCold is the effort from since to cut, of a pairing a few weeks
+// at a time (coldSpans), written under key; or false.
+func effortCold(cut, since time.Time, identities map[string]sessions.CodexIdentity, sets [3][]*rowChunk, key string) (map[string][]sessions.ModelEffort, bool) {
+	part := effortSums{}
+	if !coldSpans(since, cut, sets, func(from, to time.Time, span [3][]*rowChunk) {
+		pairRowsIn(from, to, span[0], span[1], span[2], identities).visitActors(part.add)
+	}) {
+		return nil, false
+	}
+	sums := part.values()
+	_ = effortDiskWrite(key, cut, since, sums)
+	return sums, true
 }
 
 // effortAdvance is the effort before cut, from the file's effort before

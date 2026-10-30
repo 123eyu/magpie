@@ -68,6 +68,7 @@ func TestPageSettledFromDisk(t *testing.T) {
 // settled is the 20-day call's file; restart drops what a start doesn't
 // have.
 func pageHistory(t *testing.T) (now time.Time, settled string, paired *[]int, restart func()) {
+	pairAtOnce(t)
 	pageHome(t)
 	now = holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	for i, days := range []int{40, 20, 10, 5, 0} {

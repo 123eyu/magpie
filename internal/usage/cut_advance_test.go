@@ -17,6 +17,7 @@ import (
 // and not in the next day's, which begins a week later.
 func advanceHistory(t *testing.T) (yesterday, today time.Time) {
 	pageHome(t)
+	pairAtOnce(t)
 	yesterday = holdClock(t, time.Date(2026, 10, 4, 12, 0, 0, 0, time.Local))
 	for i, days := range []int{368, 40, 20, 10, 5, 2, 0} {
 		id := string(rune('a' + i))

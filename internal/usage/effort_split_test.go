@@ -14,6 +14,7 @@ import (
 // pairs only the recent chunks, and tells the same effort a pairing of
 // every chunk does. A settled file changed, or no file, pairs them all.
 func TestCodexEffortSettledFromDisk(t *testing.T) {
+	pairAtOnce(t)
 	pageHome(t)
 	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	write := func(id string, at time.Time, input int) string {
