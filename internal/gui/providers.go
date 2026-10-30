@@ -406,6 +406,11 @@ type providerAgent struct {
 	Current bool   `json:"current"` // this agent is on one of this provider's models now
 	Model   string `json:"model,omitempty"`
 	Group   string `json:"group,omitempty"` // through this routing group, one of whose members it is
+	// Hides are this provider's models (by model id) the agent's own model
+	// list leaves out, set on the Agents page (provider.ModelOff): the
+	// editor's model picks are every agent's, so it says which agent
+	// doesn't show one it has ticked (Kylin_Cloud on X)
+	Hides []string `json:"hides,omitempty"`
 }
 
 type presetJSON struct {
@@ -555,12 +560,23 @@ type agentUse struct {
 	group      provider.Group
 	members    []provider.Member
 	inGroup    bool
+	// off is the agent's own model list's picks (provider.ModelOff), nil
+	// when it leaves nothing out, or another agent sharing its list (a WSL
+	// one, an omp profile) says it already
+	off func(id string) bool
 }
 
 func agentUses(agents []*agent.Agent, findGroup func(string) (provider.Group, []provider.Member, bool)) []agentUse {
 	out := make([]agentUse, 0, len(agents))
+	lists := map[string]bool{}
 	for _, a := range agents {
 		u := agentUse{Agent: a}
+		if id := a.ListsFor(); !lists[id] {
+			lists[id] = true
+			if _, only := provider.PickedModels(id); only || len(provider.HiddenModels(id)) > 0 {
+				u.off = provider.ModelOff(id)
+			}
+		}
 		v := agentModel(a)
 		if provider.IsGroupRef(v) {
 			u.group, u.members, u.inGroup = findGroup(v)
@@ -862,6 +878,13 @@ func providerInfoWith(p provider.Provider, agents []agentUse, desktop map[string
 				if m.Provider.ID == p.ID {
 					pa.Current, pa.Model, pa.Group = true, m.Model, a.group.Name
 					break
+				}
+			}
+		}
+		if a.off != nil {
+			for _, m := range out.Models {
+				if a.off(p.ID + "/" + m.ID) {
+					pa.Hides = append(pa.Hides, m.ID)
 				}
 			}
 		}
