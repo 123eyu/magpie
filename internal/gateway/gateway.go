@@ -758,7 +758,18 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 
 // Handler routes the client APIs.
 func (s *Server) Handler() http.Handler {
-	mux := http.NewServeMux()
+	mux := s.routes()
+	// the goroutine dump first, ahead of every lock the rest can be stuck
+	// on (dumpFirst)
+	// a socket's turns go through all of it again (socketEntry)
+	return socketEntry(s.dumpFirst(s.counted(holdCatalog(corsGuard(callerGuard(readOnlyGuard(mux, withCaller(keyLimited(mux)))))))))
+}
+
+// routes are the client APIs, each by its pattern: readOnlyGuard reads
+// which one a request is for, and TestReadOnlyKeyEveryRoute that each is
+// judged for a read-only key.
+func (s *Server) routes() *routeMux {
+	mux := &routeMux{ServeMux: http.NewServeMux()}
 	mux.HandleFunc("GET /{$}", s.info)
 	// an OpenAI-compatible base URL answers too: Empryo lists a provider with
 	// no key of its own only when its baseURL does
@@ -857,10 +868,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, provider.Chat, http.StatusNotFound, "magpie serves /v1/chat/completions, /v1/responses, /v1/messages, /v1/systemone, /v1/images/generations, /v1/images/edits, /v1/videos, /v1/embeddings, /v1/rerank, /v1/audio/transcriptions, /v1/audio/translations, /v1/audio/speech and /v1beta/models/*")
 	})
-	// the goroutine dump first, ahead of every lock the rest can be stuck
-	// on (dumpFirst)
-	// a socket's turns go through all of it again (socketEntry)
-	return socketEntry(s.dumpFirst(s.counted(holdCatalog(corsGuard(callerGuard(withCaller(keyLimited(mux))))))))
+	return mux
 }
 
 // responsesOverHTTP answers a GET on /v1/responses. A WebSocket upgrade

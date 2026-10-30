@@ -2801,6 +2801,9 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
    and gives way before the row runs past a narrow window */
 #gatewayKeys .amodels.key-quotas { display: inline-block; flex: 0 1 auto; min-width: 0; line-height: 20px; overflow: hidden; text-overflow: ellipsis; }
 #gatewayKeys .acc:not(:hover) > .key-quotas:not(.set):not(:focus) { max-width: 0; padding: 0; margin-left: -9px; box-shadow: none; }
+/* a read-only key's tag, always shown, never a button */
+#gatewayKeys .amodels.key-readonly { display: inline-block; flex: 0 1 auto; min-width: 0; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
+#gatewayKeys .amodels.key-readonly:hover { color: var(--accent); background: var(--accent-soft); }
 /* the Settings row's picker: the key row's badge, always shown */
 .row.pref .proto.pick { flex: none; margin-left: auto; display: inline-flex; align-items: center; gap: 3px; height: 24px; padding: 0 6px 0 9px; font: inherit; font-size: 12px; color: var(--fg-2); border: 0; border-radius: 7px; background: var(--pill); white-space: nowrap; cursor: default; transition: background .12s, color .12s; }
 .row.pref .proto.pick svg { opacity: .7; transition: transform .15s var(--ease); }

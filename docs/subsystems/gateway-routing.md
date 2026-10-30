@@ -414,6 +414,32 @@ request alone. `Server.gatewayTrace` in
 `TestHeldKeyToldNoAccounts` in
 [`quotas_held_key_test.go`](../../internal/gateway/quotas_held_key_test.go).
 
+A read-only gateway key (`access.Key.ReadOnly`, set by `add-key` or
+`access-key`; `magpie gateway-key add <name> --read-only`, `gateway-key
+access <id> read-only|full`, or the key's menu in Gateway → Gateway keys)
+reads this magpie's stats and uses nothing: a desk display polling
+`/v1/magpie/quotas` and `/v1/magpie/usage` keeps such a key in its flash.
+`readOnlyGuard` in [`readonly.go`](../../internal/gateway/readonly.go) sits
+after `callerGuard`, so the key is known from loopback and from elsewhere,
+and before `withCaller` and `keyLimited`, so nothing is read, reserved or
+sent first. It judges the pattern `ServeMux.Handler` routes the request to
+against `readOnlyRoutes` (`GET /`, `/v1`, the quotas, their history and
+cards, the usage summary and its requests, the key's limit and the
+concurrency) and refuses every other with 403 `gateway_key_read_only`:
+every model route, `count_tokens`, the Responses WebSocket's upgrade, every
+MCP server, Codex's and Gemini's backends, the catch-all and every write
+(`POST /v1/magpie/usage/requests`, the quotas' refresh). A route added later
+is refused it until it is put in that list. A read-only key is held to
+nothing else, so `heldKey` leaves it alone and it reads the usage summary
+and every account's quotas as a key held to nothing does; none of those
+routes tells a key's secret. The sharing key can't be read-only: magpie
+gives it to its own agents (`LANSecret`). A magpie from before this field
+reads such a key as a full one. `TestReadOnlyKeyEveryRoute` in
+[`readonly_test.go`](../../internal/gateway/readonly_test.go) fails when a
+route the router has is in neither `readOnlyRoutes` nor its refused list,
+and sends each refused pattern, by each method it takes, from loopback and
+from the network.
+
 A remote provider serves the conversation, token-counting, System One,
 embeddings, rerank, speech-to-text, image generation/edit and video
 creation/status/content APIs. Gemini clients enter through the local Gemini adapter and follow the

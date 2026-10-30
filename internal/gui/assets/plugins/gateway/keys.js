@@ -222,7 +222,7 @@ function renderGatewayKeys() {
     tick.onclick = () => gatewayKeyAction(k.off ? "on-key" : "off-key", { key: k.id });
     // the copy sits by the key it copies (the owner: stranded among the
     // badges it read as nobody's); Rotate and Remove wait in the row's menu
-    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), copyCallerKeyBtn(k), el("span", "grow"), gatewayModelsBadge(k), gatewayQuotasBadge(k), gatewayLimitBadge(k), gatewayKeyMore(k));
+    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), copyCallerKeyBtn(k), el("span", "grow"), ...(k.readOnly ? [gatewayReadOnlyTag()] : []), gatewayModelsBadge(k), gatewayQuotasBadge(k), gatewayLimitBadge(k), gatewayKeyMore(k));
     const under = gatewayLimit?.id === k.id ? [gatewayLimitEditor(k)] : keyUsed(k).map((u) => gatewayLimitLine(k, u));
     if (under.length) row.classList.add("with-limit"), row.append(...under);
     list.append(row);
@@ -250,11 +250,29 @@ function gatewayKeyMore(k) {
     // added again)
     openRowMenu(more, [
       { name: k.off ? "Enable key" : "Disable key", icon: POWER_GLYPH, run: () => gatewayKeyAction(k.off ? "on-key" : "off-key", { key: k.id }) },
+      // read-only (Steven on Discord: a desk display's key reads quotas
+      // and usage, and uses nothing); the sharing key is given to agents
+      k.readOnly
+        ? { name: "Give full access", icon: EYE_GLYPH, run: () => gatewayKeyAccess(k, false) }
+        : { name: "Make read-only", icon: EYE_GLYPH, run: () => gatewayKeyAccess(k, true), off: k.lan, why: k.lan ? t("The sharing key is given to agents, so it can't be read-only") : "" },
       { name: "Rotate key", icon: ROTATE_GLYPH, run: () => askGatewayKey(k, true) },
       { name: "Remove", icon: REMOVE_GLYPH, sep: true, run: () => askGatewayKey(k, false) },
     ]);
   };
   return more;
+}
+
+const EYE_GLYPH = "M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8zM8 9.9a1.9 1.9 0 1 0 0-3.8 1.9 1.9 0 0 0 0 3.8z";
+async function gatewayKeyAccess(k, readOnly) {
+  const out = await gatewayKeyAction("access-key", { key: k.id, readOnly });
+  if (out) status(t(readOnly ? "{name} is read-only" : "{name} has full access", { name: k.name }), "ok");
+}
+// a read-only key says so in its row, always: it reads quotas and usage
+// and uses no model
+function gatewayReadOnlyTag() {
+  const tag = el("span", "amodels key-readonly set", t("Read only"));
+  tag.title = t("This key only reads quotas and usage. It can't use models or MCP servers, or change anything.");
+  return tag;
 }
 
 function askGatewayKey(k, rotate) {
