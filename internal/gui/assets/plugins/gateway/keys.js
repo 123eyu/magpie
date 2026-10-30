@@ -230,6 +230,22 @@ function renderGatewayKeys() {
   if (gatewayKeyDraft !== null) list.append(gatewayKeyForm());
   else if (!gatewayKeys.length) list.append(el("div", "none", t("No gateway keys yet")));
   box.append(list);
+  const page = gatewayKeyPage();
+  if (page) box.append(page);
+}
+
+// the key page (the gateway's /me): where a key's holder, with their key
+// alone, sees what it has used and may use and the setup for their agents
+// (zytszone on X: a department shares one magpie, whose app its people
+// can't be given). Its address is the one other machines reach.
+function gatewayKeyPage() {
+  const g = providers?.gateway, lan = g?.lanURLs || [];
+  const at = g?.publicURL || (lan.includes(connectURL) ? connectURL : lan[0]);
+  if (!at || !gatewayKeys?.length) return null;
+  const url = at.replace(/\/+$/, "") + "/me";
+  const p = el("div", "usage-note gw-key-page");
+  p.append(el("span", "", t("Key holders see their usage and setup at")), " ", el("code", "", url), copyBtn(url, t("Key page")));
+  return p;
 }
 
 const ROTATE_GLYPH = "M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3.25h-3.25";

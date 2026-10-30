@@ -425,8 +425,8 @@ after `callerGuard`, so the key is known from loopback and from elsewhere,
 and before `withCaller` and `keyLimited`, so nothing is read, reserved or
 sent first. It judges the pattern `ServeMux.Handler` routes the request to
 against `readOnlyRoutes` (`GET /`, `/v1`, the quotas, their history and
-cards, the usage summary and its requests, the key's limit and the
-concurrency) and refuses every other with 403 `gateway_key_read_only`:
+cards, the usage summary and its requests, the key's limit, the key
+page and its data, and the concurrency) and refuses every other with 403 `gateway_key_read_only`:
 every model route, `count_tokens`, the Responses WebSocket's upgrade, every
 MCP server, Codex's and Gemini's backends, the catch-all and every write
 (`POST /v1/magpie/usage/requests`, the quotas' refresh). A route added later
@@ -465,6 +465,33 @@ point ([Plugin runtime](plugin-runtime.md#gateway-extension-points-p3-budget)):
 with it off, a key held to a limit gets 503 and nothing is sent. A local magpie
 asks it with each of its remote-magpie keys for that key's card on its
 Usage page (#1547), a window per limit's cap.
+
+`GET /me` is the key page: a gateway key's holder opens it in a browser at
+the address they reach the gateway at, types their key, and sees that key's
+own name, limits, usage (today, 7 and 30 days, its most used models) and
+the models it may use, with the setup for Claude Code, Codex and an
+OpenAI-compatible client whose base URL is the address the page was opened
+at (zytszone on X: a department shares one magpie, whose app its people
+can't be given). The page itself (`keypage.html`, embedded) is the same
+bytes for everyone and holds no data, so `lanGuard` serves exactly `GET`
+or `HEAD /me` (`keyPageOpen`: no escaped path) to another machine without a
+key, after the allow list, the rebinding check and the not-shared refusal,
+which still apply. Its data is `GET /v1/magpie/me` (`keyInfo`), which takes
+the key as every route does (`Authorization` or `x-api-key`) and answers
+only `access.Caller`'s own: no key, a wrong one, one turned off and
+magpie's own token are 401 alike, and `?key=` is refused 400, so a key is
+never written into an address or a log. It names no account, no other key,
+no provider and no secret; its models are `/v1/models`' for that key
+(`keyAllowed`), none for a read-only key. The page loads nothing from
+elsewhere, posts no form and can't be framed (its CSP), keeps the key in
+the tab's `sessionStorage` only, and sends it to its own origin with
+`credentials: "omit"`. Gateway → Gateway keys shows the page's address
+(`MAGPIE_PUBLIC_URL`, else the LAN address offered) with a Copy, while
+shared and with a key (`gatewayKeyPage` in `keys.js`). `key_page.go`, and
+`TestKeyPageTellsAKeyItsOwn`, `TestKeyPageRefusesWithoutItsKey` and
+`TestKeyPageOpensWithoutAKey` in
+[`key_page_test.go`](../../internal/gateway/key_page_test.go);
+`internal/gui/tests/key-page.test.cjs` drives the page itself.
 
 System One uses `RouteDecider` and `postDecide` in
 [`decide.go`](../../internal/gateway/decide.go), taking one provider prefix

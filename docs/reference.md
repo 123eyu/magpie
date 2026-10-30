@@ -686,6 +686,14 @@ Usage page this way (#1547). Requests from
 this computer that send no gateway key are not limited; a gateway key used
 from this computer is.
 
+A key's holder can also open **`/me`** in a browser at the address they
+reach the gateway at (for example `http://192.168.1.10:3999/me`), type
+their key, and see its own limits, its usage over today, 7 and 30 days, the
+models it may use, and copy-ready setup for Claude Code, Codex and any
+OpenAI-compatible client. It shows nothing of other keys, accounts or
+providers. Gateway → Gateway keys shows that address with a Copy button,
+so it can be handed out with the keys.
+
 A gateway key can also be held to some **models** (#882): pick them with the
 **All models** badge on the key's row, or run `magpie gateway-key models <id>
 openai/gpt-5 anthropic/*` (`all` takes the restriction off). A pattern is
