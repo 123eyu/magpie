@@ -85,6 +85,12 @@ func Rename(from, to string) error {
 			f.Order[j] = to
 		}
 	}
+	// kept out of found groups under its new id too
+	for j, id := range f.AutoGroupSkip {
+		if id == from {
+			f.AutoGroupSkip[j] = to
+		}
+	}
 	// a deleted provider merged into it stays merged (MergeDeleted)
 	for j := range f.Deleted {
 		if f.Deleted[j].Into == from {

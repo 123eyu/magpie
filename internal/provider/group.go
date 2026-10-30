@@ -622,25 +622,45 @@ func mergeKey(pid, model string, same map[string]string) string {
 }
 
 // AutoStandIn is the model a request for a group magpie found goes to while
-// such groups are off (SetAutoGroups): its model, from the first provider
-// that serves it, as "provider/model". An agent set to the group, or a
-// session begun on it, keeps working, on one provider. ok is false for any
-// other id, a group the user has of that id, or while found groups are on.
+// such groups are off (SetAutoGroups), or once the providers the user keeps
+// out of them (SetAutoGroupSkip) took it away: its model, from the first
+// provider that serves it, one not kept out first, as "provider/model". An
+// agent set to the group, or a session begun on it, keeps working, on one
+// provider. ok is false for any other id, a group the user has of that id,
+// one they removed, and while found groups are on, one there is or that
+// isn't gone for a provider kept out.
 func AutoStandIn(id string) (string, bool) {
 	gid, ok := GroupIDOf(id)
-	if !ok || !strings.HasPrefix(gid, "auto-") || AutoGroupsOn() {
+	if !ok || !strings.HasPrefix(gid, "auto-") {
 		return "", false
 	}
+	f := load()
 	entries := providerEntries()
 	if _, ok := groupOf(groupsIn(entries), gid); ok {
 		return "", false
 	}
-	for _, e := range entries {
-		if AutoGroupOf(e.Provider.ID, e.Model) == gid {
-			return e.ID, true
+	if !f.NoAutoGroups {
+		if len(f.AutoGroupSkip) == 0 || slices.ContainsFunc(f.Groups, func(g Group) bool { return g.ID == gid }) {
+			return "", false // not gone for skipping: removed, or the user's
+		}
+		all := autoGroups(foundFrom(entries, heldOffEntries()), heldSettings().ModelSameAs)
+		if !slices.ContainsFunc(all, func(g Group) bool { return g.ID == gid }) {
+			return "", false
 		}
 	}
-	return "", false
+	var first string
+	for _, e := range entries {
+		if AutoGroupOf(e.Provider.ID, e.Model) != gid {
+			continue
+		}
+		if !slices.Contains(f.AutoGroupSkip, e.Provider.ID) {
+			return e.ID, true
+		}
+		if first == "" {
+			first = e.ID
+		}
+	}
+	return first, first != ""
 }
 
 // foundGroups are the groups magpie finds (autoGroups) among entries and
@@ -648,7 +668,45 @@ func AutoStandIn(id string) (string, bool) {
 // stays in the group, a member the gateway skips (membersIn), rather than
 // taking a group of two away with every agent, rule and group set to it.
 func foundGroups(entries []Entry) []Group {
-	return autoGroups(foundFrom(entries, heldOffEntries()), heldSettings().ModelSameAs)
+	return autoGroups(unskipped(foundFrom(entries, heldOffEntries()), heldOf("file", load).AutoGroupSkip), heldSettings().ModelSameAs)
+}
+
+// unskipped is entries without the models of the providers skip names:
+// those the user keeps out of found groups (AutoGroupSkip).
+func unskipped(entries []Entry, skip []string) []Entry {
+	if len(skip) == 0 {
+		return entries
+	}
+	return slices.DeleteFunc(slices.Clone(entries), func(e Entry) bool { return slices.Contains(skip, e.Provider.ID) })
+}
+
+// AutoGroupSkip are the providers the user keeps out of the groups magpie
+// finds (SetAutoGroupSkip).
+func AutoGroupSkip() []string { return slices.Clone(load().AutoGroupSkip) }
+
+// SetAutoGroupSkip keeps the providers ids names out of the groups magpie
+// finds, and every other back in: none of their models is in a found
+// group, so a model one other provider serves is no group of them. The
+// groups the user made or changed, a found one included, keep them: they
+// are the user's. A request still naming a found group skipping took away
+// goes to its model from one provider (AutoStandIn).
+func SetAutoGroupSkip(ids []string) error {
+	f, err := read()
+	if err != nil {
+		return err
+	}
+	var skip []string
+	for _, id := range ids {
+		id = strings.ToLower(strings.TrimSpace(id))
+		if id != "" && !slices.Contains(skip, id) {
+			skip = append(skip, id)
+		}
+	}
+	if slices.Equal(skip, f.AutoGroupSkip) {
+		return nil
+	}
+	f.AutoGroupSkip = skip
+	return store(f)
 }
 
 // foundFrom is entries with idle's models it lacks, each provider's in

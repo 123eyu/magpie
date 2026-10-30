@@ -524,6 +524,11 @@ type file struct {
 	// NoAutoGroups: the user turned off the groups magpie finds on its
 	// own (SetAutoGroups); the groups they made or changed stay.
 	NoAutoGroups bool `json:"noAutoGroups,omitempty"`
+	// AutoGroupSkip are the providers, by id, the user keeps out of the
+	// groups magpie finds (SetAutoGroupSkip; chenxiang0010 on Discord):
+	// their models are in none, so a model only one other provider serves
+	// is no group. The groups the user made or changed keep them.
+	AutoGroupSkip []string `json:"autoGroupSkip,omitempty"`
 	// Order is the order the user put the providers in on the Providers
 	// tab (#499), by id; one not in it follows those that are, in the
 	// order it was added (see SetOrder).

@@ -5547,7 +5547,42 @@ function routingPage(part) {
     txt.append(el("b", "", t("Find groups on their own")), el("small", "", on
       ? t("A model two or more of your providers serve becomes a group of them (auto/…). Switch it off to list and serve only the groups you made or changed.")
       : t("Off: only the groups you made or changed are listed and served. An agent set to a found group is moved to its model from one provider, and a request still naming one goes there too.")));
+    if (on) txt.append(skipPick());
     gFound.replaceChildren(txt, s);
+  }
+  // skipPick: the providers kept out of found groups (chenxiang0010 on
+  // Discord), picked in the app's menu and saved as it closes: their
+  // models join none, and the groups the user made or changed keep them
+  // (provider.SetAutoGroupSkip)
+  function skipPick() {
+    const skip = Array.isArray(groups.skip) ? groups.skip : [];
+    const opts = (Array.isArray(groups.skippable) ? groups.skippable : []).filter((p) => p && typeof p.id === "string");
+    const nameOf = (id) => opts.find((p) => p.id === id)?.name || id;
+    const b = el("button", "text rt-skip-pick"), label = el("span");
+    b.type = "button";
+    b.setAttribute("aria-haspopup", "menu");
+    b.setAttribute("aria-expanded", "false");
+    b.dataset.tt = "Their models join no found group; the groups you made or changed keep them";
+    label.textContent = skip.length ? t("Left out: {names}", { names: skip.map(nameOf).join(", ") }) : t("Leave out a provider…");
+    b.append(label, svg(CHEV, 10, 1.6));
+    b.onclick = (e) => {
+      e.stopPropagation();
+      if (b.classList.contains("open")) return closeProtoMenu();
+      openProtoMenu(b, opts.map((p) => ({ v: p.id, name: p.name, literalName: true, note: "" })), skip, (ids) => setSkip(ids), "Leave out of found groups", "rt-skip-menu");
+    };
+    return b;
+  }
+  async function setSkip(ids) {
+    if (groupDirty() && !(await confirmDiscard())) return;
+    try {
+      groups = groupsFrom(await api("groups/skip", { skip: ids }));
+      gEdit = null;
+      renderGroups();
+      saidMoved(t("Found groups changed"), groups.moved);
+      load(); // the gateway's model list, the agents' pickers
+    } catch (e) {
+      status(e.message, "err");
+    }
   }
   function drawNames() {
     const txt = el("div", "txt");
