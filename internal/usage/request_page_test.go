@@ -366,6 +366,76 @@ func TestVisibleLocalKeptBySerial(t *testing.T) {
 	}
 }
 
+// A page read again after a call takes each chunk's newest rows from its
+// part, refs and rows: decoding the newest chunks for every page was
+// ~390 MB of 90s while an agent worked, a long session's file among them,
+// and as much again to read the page's rows (#2278). A page that wants
+// more rows than a chunk gave reads it again.
+func TestNewestKeptOnPart(t *testing.T) {
+	at := time.Date(2026, 10, 30, 12, 0, 0, 0, time.Local)
+	a, b := &rowChunk{}, &rowChunk{}
+	for i := range 3 {
+		a.add(Row{Record: Record{Time: at.Add(time.Duration(i) * time.Minute), Model: fmt.Sprintf("a%d", i)}}, "", int64(i), false)
+		b.add(Row{Record: Record{Time: at.Add(time.Hour + time.Duration(i)*time.Minute), Model: fmt.Sprintf("b%d", i)}}, "", int64(i), false)
+	}
+	a, b = a.pack(), b.pack()
+	ps := &pairedRows{all: []*rowChunk{a, b}}
+	parts := []*chunkPart{{kept: 3}, {kept: 3}}
+	opened := 0
+	newestOpening = func(*rowChunk) { opened++ }
+	t.Cleanup(func() { newestOpening = nil })
+	refs := func(h newestHeap, read map[rowRef]Row) []rowRef {
+		if len(read) != len(h) {
+			t.Fatalf("%d rows read for %d refs", len(read), len(h))
+		}
+		for _, r := range h {
+			want := fmt.Sprintf("b%d", r.Index)
+			if r.Chunk == a {
+				want = fmt.Sprintf("a%d", r.Index)
+			}
+			if got := read[r.rowRef]; got.Model != want || !got.Time.Equal(r.at) {
+				t.Fatalf("%v read as %q at %v, want %q at %v", r.rowRef, got.Model, got.Time, want, r.at)
+			}
+		}
+		h = slices.Clone(h)
+		slices.SortFunc(h, func(x, y timedRef) int { return x.at.Compare(y.at) })
+		var out []rowRef
+		for _, r := range h {
+			out = append(out, r.rowRef)
+		}
+		return out
+	}
+	for i, c := range []struct {
+		take, open int
+		want       []rowRef
+	}{
+		{2, 1, []rowRef{{b, 1}, {b, 2}}},
+		{2, 0, []rowRef{{b, 1}, {b, 2}}},
+		{1, 0, []rowRef{{b, 2}}},
+		{4, 2, []rowRef{{a, 2}, {b, 0}, {b, 1}, {b, 2}}},
+		{4, 0, []rowRef{{a, 2}, {b, 0}, {b, 1}, {b, 2}}},
+		{6, 0, []rowRef{{a, 0}, {a, 1}, {a, 2}, {b, 0}, {b, 1}, {b, 2}}},
+	} {
+		opened = 0
+		sel, read := ps.newest(Filter{}, parts, c.take)
+		open := opened
+		// the rows read are their own: decoding the chunks again, over
+		// the block they were lent from, leaves them as they were
+		ps.newest(Filter{}, []*chunkPart{{kept: 3}, {kept: 3}}, 6)
+		opened = open
+		got := refs(sel, read)
+		if !slices.Equal(got, c.want) || opened != c.open {
+			t.Fatalf("page %d (take %d): %v, decoded %d; want %v, %d", i, c.take, got, opened, c.want, c.open)
+		}
+	}
+	// a new part, as after a clear or a rename, reads the chunks again
+	opened = 0
+	parts = []*chunkPart{{kept: 3}, {kept: 3}}
+	if got := refs(ps.newest(Filter{}, parts, 2)); !slices.Equal(got, []rowRef{{b, 1}, {b, 2}}) || opened != 1 {
+		t.Fatalf("new parts: %v, decoded %d", got, opened)
+	}
+}
+
 // A read keeps one chunk a source, the map's and the page's both: a copy
 // for each was 13.5 MB after 34k sessions' start (#2278). A chunk an
 // earlier read published is taken as it is, its use counted on it: a copy
