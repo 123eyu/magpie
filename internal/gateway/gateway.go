@@ -2200,12 +2200,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// and the second, its verdict kept or the classifier resting, passed
 	// (CyberCaius on Discord, v0.1.1847). It goes by the group's order,
 	// as a model's check does.
-	ask := s.askClassifier
-	if r.Header.Get("User-Agent") == RouterAgent || desktopCheck {
-		ask = nil
-	} else {
-		// a wait magpie knows of, before a route is begun (unrouted.go)
-		ask = askWaited(r.Context(), ask)
+	var ask classifier
+	if r.Header.Get("User-Agent") != RouterAgent && !desktopCheck {
+		// a wait magpie knows of, before a route is begun (unrouted.go),
+		// one for every group the request goes through
+		ask = s.askWaited(r.Context())
 	}
 	if isGroup && slices.ContainsFunc(ms, func(m provider.Member) bool {
 		return g.Ruled() || slices.ContainsFunc(m.Via, provider.Group.Ruled)
