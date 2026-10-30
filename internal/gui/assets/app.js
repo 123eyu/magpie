@@ -285,11 +285,10 @@ function keepIcons(...roots) {
     keptIcons.get(e.dataset.icon).push(e);
   }
 }
-// A mono logo is a CSS mask, and a mask is not an <img>: a row drawn again
-// makes its span afresh, and nothing but the spans on the page keeps the
-// picture, so between the old row going and the new one painting the
-// engine may let it go and paint the new one empty until it has loaded it
-// again: the logo blinks, where an <img> beside it doesn't (#1847). Every
+// A mono logo is a CSS mask, not an <img>: a row drawn again makes its
+// span afresh, and only the spans on the page keep the picture, so the
+// engine may let it go between rows and paint the new one empty until it
+// is loaded again: the logo blinks, an <img> beside it doesn't (#1847). Every
 // mask picture that has loaded is kept by a span of its own on a hidden
 // shelf for as long as the page is open, so a logo drawn again paints at
 // once on any page. Each picture is tried once, not once per logo: a
@@ -328,9 +327,9 @@ function maskSpan(src, failed) {
 }
 const pngIcons = new Set(["crush", "zcode", "alma", "hanako", "cindy", "lody", "typesafe", "atomcode", "snow", "mlx-serve", "mothx", "zoo-code"]);
 
-// lazy: a picture in a long list (Plugins' rows) is asked for when it
-// nears the screen. Each SVG an <img> draws is a document of its own in
-// the webview, ~0.6 MB, kept while the page is open (#909)
+// lazy: a picture in a long list (Plugins' rows) is asked for near the
+// screen. Each SVG an <img> draws is a webview document, ~0.6 MB, kept
+// while the page is open (#909)
 function icon(name, lazy) {
   const kept = keptIcons?.get(name || "")?.shift();
   if (kept) { kept.removeAttribute("title"); return kept; }
@@ -352,6 +351,8 @@ function icon(name, lazy) {
     e.append(img);
     return e;
   }
+  // a URL: the server keeps pictures (file:…), never the page
+  if (/[:/]/.test(name)) return icon("generic");
   if (name) {
     if (name.endsWith("-color") || pngIcons.has(name)) {
       const img = el("img");
