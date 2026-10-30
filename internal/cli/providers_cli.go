@@ -136,7 +136,8 @@ const providerUsage = `usage:
                                     URLs moves there, keeping its path; address= alone puts it back at the default)
        magpie provider set ollama unmasked=yes
                                    (Settings' redaction leaves its requests as written, at any address: your call,
-                                    so mind a relay that passes them on to a vendor; never a signed-in account)
+                                    so mind a relay that passes them on to a vendor; a subscription or a plugin's
+                                    provider too, whose vendor gets them so; never another magpie)
        magpie provider add "My Relay" url=https://relay.example.com/v1 key=sk-… balance=https://relay.example.com/api/usage/token balance.path='$data.total_available / 500000'
        magpie provider set my-relay balance.path='(1 - credits.monthlyCredits / 70) %'
        magpie provider set my-relay balance.method=POST
@@ -842,7 +843,7 @@ func showProvider(p provider.Provider) error {
 	if p.Unredacted {
 		why := "  Settings' redaction leaves its requests as written"
 		if !p.SkipsRedaction() {
-			why = "  but masked: a signed-in account, another magpie or no address"
+			why = "  but masked: another magpie or no address"
 		}
 		kv("unmasked", "yes"+muted.Render(why))
 	}
@@ -1184,8 +1185,8 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 		case "unmasked":
 			// yes: the provider gets the requests as written, unmasked by
 			// Settings' redaction (lc, AcMilan on Discord): the user's word
-			// at any address, never for an account or another magpie
-			// (provider.SkipsRedaction)
+			// at any address, a subscription's or a plugin's provider's too
+			// (isee1_1), never another magpie's (provider.SkipsRedaction)
 			if v != "yes" && v != "no" {
 				return fmt.Errorf("unmasked=yes|no, not %q", v)
 			}

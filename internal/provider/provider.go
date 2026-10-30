@@ -331,9 +331,12 @@ type Provider struct {
 	// unmasked by Settings' redaction, which keeps secrets from vendors:
 	// for a model on this machine or the local network (Ollama, LM Studio,
 	// a vLLM box; lc on Discord). It is the user's word, not the
-	// address's (AcMilan on Discord): the editor cautions when an address
-	// isn't local, and a relay run locally, or Ollama's cloud models, pass
-	// a request on to a vendor whatever the address. See SkipsRedaction.
+	// address's (AcMilan on Discord), on a subscription or a plugin's
+	// provider too (isee1_1 on Discord): the editor cautions while it is
+	// on for one not local, and a relay run locally, or Ollama's cloud
+	// models, pass a request on to a vendor whatever the address. A
+	// signed-in account keeps it with its model picks (withPicks). See
+	// SkipsRedaction.
 	Unredacted bool `json:"unredacted,omitempty"`
 
 	// InsecureTLS has magpie take the certificate of the provider's own
@@ -790,6 +793,9 @@ func withPicks(a, pk Provider) Provider {
 	a.Sink, a.NoModels, a.BestInFamily = pk.Sink, pk.NoModels, pk.BestInFamily
 	a.NativeCompaction = pk.NativeCompaction
 	a.PromptAsWritten = pk.PromptAsWritten
+	// Send requests unmasked, the user's for a subscription and a
+	// plugin's provider too (isee1_1 on Discord)
+	a.Unredacted = pk.Unredacted
 	a.Proxy, a.AccountProxies, a.AccountModels = pk.Proxy, pk.AccountProxies, pk.AccountModels
 	a.AccountCaps, a.AccountWindowCaps = pk.AccountCaps, pk.AccountWindowCaps
 	a.CapStop, a.CapCareful = pk.CapStop, pk.CapCareful
@@ -937,7 +943,7 @@ func Save(p Provider) error {
 		if p.ID == "kiro" {
 			key = p.Key
 		}
-		p = Provider{ID: p.ID, Key: key, Models: p.Models, NoModels: p.NoModels, BestInFamily: p.BestInFamily, RateWindows: p.RateWindows, PickedFrom: p.PickedFrom, Delisted: p.Delisted, Unlisted: p.Unlisted, HiddenDrawers: p.HiddenDrawers, Off: p.Off, Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, Contexts: p.Contexts, Family: p.Family, Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, CapStop: p.CapStop, CapCareful: p.CapCareful, AccountNames: p.AccountNames, MaxConcurrency: p.MaxConcurrency, AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM, PriceRate: p.PriceRate, QuotaRest: p.QuotaRest, QuotaResetAt: p.QuotaResetAt, RestCap: p.RestCap, PinUpstream: p.PinUpstream, NativeCompaction: p.NativeCompaction, PromptAsWritten: p.PromptAsWritten, Hidden: hiddenAccount(p.ID), Quiet: quietAccount(p.ID), Tucked: tuckedAccount(p.ID)}
+		p = Provider{ID: p.ID, Key: key, Models: p.Models, NoModels: p.NoModels, BestInFamily: p.BestInFamily, RateWindows: p.RateWindows, PickedFrom: p.PickedFrom, Delisted: p.Delisted, Unlisted: p.Unlisted, HiddenDrawers: p.HiddenDrawers, Off: p.Off, Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, Contexts: p.Contexts, Family: p.Family, Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, CapStop: p.CapStop, CapCareful: p.CapCareful, AccountNames: p.AccountNames, MaxConcurrency: p.MaxConcurrency, AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM, PriceRate: p.PriceRate, QuotaRest: p.QuotaRest, QuotaResetAt: p.QuotaResetAt, RestCap: p.RestCap, PinUpstream: p.PinUpstream, NativeCompaction: p.NativeCompaction, PromptAsWritten: p.PromptAsWritten, Unredacted: p.Unredacted, Hidden: hiddenAccount(p.ID), Quiet: quietAccount(p.ID), Tucked: tuckedAccount(p.ID)}
 	} else {
 		p.AccountProxies = keyProxies(p) // a provider of keys proxies each key apart
 		if subscriptionID(p.ID) && !stored(p.ID) {

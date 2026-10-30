@@ -9494,6 +9494,20 @@ function drawEditor(p, presetID) {
   const advIn = el("div", "inner");
   adv.append(advIn);
 
+  const unmaskRow = (hint, urls) => {
+    const [ltk, lcb] = tick(t("Send requests unmasked"), !!draft.unredacted);
+    const row = field(t("Redaction"), ltk, hint), note = el("div", "hint unmasked-away");
+    row[1].append(note);
+    showLocal = () => {
+      const host = draft.unredacted && (urls ? awayHost(urls()) : p.name);
+      note.hidden = !(note.textContent = host ? t("{host} isn't on this computer or your local network: turned on, requests go to it unmasked.", { host }) : "");
+      if (draft.unredacted && urls) askLANNames(urls(), showLocal);
+    };
+    lcb.onchange = () => { draft.unredacted = lcb.checked; showLocal(); };
+    showLocal();
+    return row;
+  };
+
   if (p?.account) {
     // the sign-in belongs to the agent; magpie only borrows it
     const a = p.account;
@@ -9526,6 +9540,7 @@ function drawEditor(p, presetID) {
     advIn.append(...concurrencyField(p));
     advIn.append(...priceRateField(), ...rateWindowsField());
     if (p.cline) advIn.append(...upstreamField());
+    advIn.append(...unmaskRow(""));
     ed.append(...pluginOptionsField(subOf(a.agent)));
     // a plugin's provider is reached inside magpie: its plugin:// URLs go
     // nowhere to show or test
@@ -9567,7 +9582,7 @@ function drawEditor(p, presetID) {
       if (priceTypedError(ed)) return;
       const picked = accountModelsDraft(p);
       if (picked === false) return pickError();
-      const body = { id: p.id, models: chosenIds(), noModels: noneChosen(), bestInFamily: bestChosen(), unlisted: draft.unlisted, hiddenDrawers: draft.hiddenDrawers, fallback: draft.fallback, contexts: cx.map, outputs: ox.map, compacts: cpx.map, proxy, accountProxies: own.map, maxConcurrency, ...queue, priceRate, rateWindows, modelPrefs: modelPrefsOfDraft(), pinUpstream: !!draft.pinUpstream, ...(p.carriesCompaction ? { nativeCompaction: !!draft.nativeCompaction } : {}), ...routingOfDraft(p) };
+      const body = { id: p.id, models: chosenIds(), noModels: noneChosen(), bestInFamily: bestChosen(), unlisted: draft.unlisted, hiddenDrawers: draft.hiddenDrawers, fallback: draft.fallback, contexts: cx.map, outputs: ox.map, compacts: cpx.map, proxy, accountProxies: own.map, maxConcurrency, ...queue, priceRate, rateWindows, modelPrefs: modelPrefsOfDraft(), pinUpstream: !!draft.pinUpstream, unredacted: !!draft.unredacted, ...(p.carriesCompaction ? { nativeCompaction: !!draft.nativeCompaction } : {}), ...routingOfDraft(p) };
       saving(saveBtn, t("Saving…"));
       saveAccountModelsDraft(picked).then(() => savePluginOptions(subOf(a.agent))).then(() => providerAction("save", body, t("{name} saved", { name: p.name })), (e) => { doneSaving(saveBtn); editorError(e.message || String(e)); }); };
     bar.append(cancel, saveBtn);
@@ -9795,24 +9810,10 @@ function drawEditor(p, presetID) {
     advIn.append(...field(t("User-Agent"), utk, t("For a plan that serves only the coding agents it names: each request goes with the User-Agent the agent sent (pi, OpenCode, Claude Code…), not magpie's. Requests magpie makes itself, and ones the agent sent without one, still go as magpie. A User-Agent set in Headers above always wins.")));
   }
 
-  // the user's switch at any address (AcMilan), with a caution while on
   const addressOf = (k) => (draft[k] ?? (isNew && pr ? pr[k] : "")) || "";
-  const unmaskable = () => !p?.account && (p?.preset || pr?.id) !== "remote-magpie";
+  const unmaskable = () => (p?.preset || pr?.id) !== "remote-magpie";
   if (unmaskable()) {
-    const [ltk, lcb] = tick(t("Send requests unmasked"), !!draft.unredacted);
-    lcb.onchange = () => { draft.unredacted = lcb.checked; showLocal(); };
-    const row = field(t("Redaction"), ltk, t("For a model running on this computer or your local network: secrets, personal data and your masked words go to it as written. Leave it off for a local relay or proxy that passes requests on to a vendor."));
-    const away = el("div", "hint unmasked-away");
-    row[1].append(away);
-    showLocal = () => {
-      const urls = ["chat", "responses", "anthropic", "gemini", "decide"].map(addressOf);
-      const host = draft.unredacted ? awayHost(urls) : "";
-      away.textContent = host ? t("{host} isn't on this computer or your local network: turned on, requests go to it unmasked.", { host }) : "";
-      away.hidden = !host;
-      if (draft.unredacted) askLANNames(urls, showLocal);
-    };
-    showLocal();
-    advIn.append(...row);
+    advIn.append(...unmaskRow(t("For a model running on this computer or your local network: secrets, personal data and your masked words go to it as written. Leave it off for a local relay or proxy that passes requests on to a vendor."), () => ["chat", "responses", "anthropic", "gemini", "decide"].map(addressOf)));
   }
 
   // a user's provider whose certificate nothing trusts (#2383, provider.TakesInsecureTLS)

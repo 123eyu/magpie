@@ -405,6 +405,11 @@ func codexMaskRoute(r *http.Request, rest string, body []byte) string {
 	if rest != "/responses" || !MaskRoute(settings.Shared().RedactRouteTo) {
 		return ""
 	}
+	// one the user set to go unmasked goes there as written anyway
+	// (codexUpstreamOn), and stays on it
+	if !apiKey(r.Header) && codexRouteUnmasked(nil) {
+		return ""
+	}
 	_, _, _, hits, err := redactedHits(r.Context(), httptest.NewRecorder(), body)
 	if err != nil {
 		return ""
