@@ -4800,6 +4800,8 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			body, searchFn = searchAsFunction(body)
 		}
 		body = forVendor(p, body)
+		// Ark takes web_search in the shape its docs give (search_ark.go)
+		body = forArkSearch(p, body)
 		if replay {
 			// its reasoning goes back as text, never left out: DeepSeek
 			// refuses a request without it (#1104)
