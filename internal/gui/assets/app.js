@@ -17751,9 +17751,9 @@ function resetsWords(r, q) {
     if (q && autoResetKept(q)) {
       const { expiring: x, week } = autoResetWhen(q);
       w.append(el("span", "resets-kept" + (x || week ? " on" : ""), " · " + t(x ? "auto-used before it expires" : week ? "auto-used when the week runs out" : "not auto-used")));
-      w.title += "\n" + t(x ? "Auto-use is on: the reset that runs out first is used about half an hour before it does, if this account's windows have been used, so what they have left can be used until then and it isn't lost; at once if the account is held up until after then."
+      w.title += "\n" + t(x ? "Auto-use is on: the reset that runs out first is used {lead} before it does, if this account's windows have been used, so what they have left can be used until then and it isn't lost; at once if the account is held up until after then."
         : week ? "Auto-use is on for a used-up week: a reset is used by itself when this account's week is used up, before its credits are spent. One about to run out is otherwise lost unless it's used by hand or the week runs out before then."
-        : "Auto-use is off: the reset that runs out first is lost unless it's used by hand before then.");
+        : "Auto-use is off: the reset that runs out first is lost unless it's used by hand before then.", resetLeadVars());
     }
   } else if (r.each?.length) w.title = resetsEach(r);
   return w;
@@ -17813,7 +17813,7 @@ const AUTO_RESET_CASES = [
     on: "On: a reset is used by itself when this account's week is used up and no other account can answer, one a week at most. The five hours running out never uses one. Click to turn it off.",
     off: "Off: a used-up week is waited out, and the vendor may start it again sooner; requests go to your other accounts, or are refused with why. Click to turn it on." },
   { id: "expiring", say: "before one expires",
-    on: "On: the reset that runs out first is used about half an hour before it does, if this account's windows have been used, or at once when the account is held up until after then. Click to turn it off.",
+    on: "On: the reset that runs out first is used {lead} before it does, if this account's windows have been used, or at once when the account is held up until after then. Click to turn it off.",
     off: "Off: a reset that runs out unused is lost. Click to turn it on." },
 ];
 // autoResetStatus says what the account does now, after a switch.
@@ -17841,7 +17841,7 @@ function autoResetRow(q, cls) {
     const line = el("div", "ar-case" + (w[c.id] ? " on" : ""));
     line.dataset.case = c.id;
     const words = el("span", "ar-case-say", t(c.say));
-    words.title = t(w[c.id] ? c.on : c.off);
+    words.title = t(w[c.id] ? c.on : c.off, resetLeadVars());
     line.append(words, autoResetButton(q, c));
     cases.append(line);
   }
@@ -17870,9 +17870,24 @@ function resetUsedWhy(why) {
   return t("by hand");
 }
 function autoResetTitle(on) {
-  return t(on ? "On: a reset is used by itself when this account's week is used up and no other account can answer, one a week at most, and the one about to run out is used about half an hour before it does, if the account has been used, or at once when the account is held up until after then. Otherwise the five hours running out never uses one. Click to turn it off."
-    : "Off: this account's resets are used only by hand. Turned on, one is used by itself when its week is used up and no other account can answer, one a week at most, and the one about to run out about half an hour before it does, if the account has been used, or at once when the account is held up until after then. Otherwise the five hours running out never uses one.");
+  return t(on ? "On: a reset is used by itself when this account's week is used up and no other account can answer, one a week at most, and the one about to run out is used {lead} before it does, if the account has been used, or at once when the account is held up until after then. Otherwise the five hours running out never uses one. Click to turn it off."
+    : "Off: this account's resets are used only by hand. Turned on, one is used by itself when its week is used up and no other account can answer, one a week at most, and the one about to run out {lead} before it does, if the account has been used, or at once when the account is held up until after then. Otherwise the five hours running out never uses one.", resetLeadVars());
 }
+
+// The reset about to run out is used this long before it does, for every
+// account with "before one expires" on (settings' codexResetLead, the CLI's
+// quota auto-reset lead; the owner, 10-30): half an hour unless set, and a
+// value out of range is the half hour, as the gateway reads it.
+// RESET_LEADS are the choices, in minutes.
+const RESET_LEADS = [15, 30, 60, 120, 180, 360, 720, 1440];
+function resetLeadMinutes(s = state?.settings) {
+  const m = s?.codexResetLead;
+  return Number.isInteger(m) && m >= 15 && m <= 1440 ? m : 30;
+}
+function resetLeadWords(m) {
+  return m < 60 || m % 60 ? t("{n} min", { n: m }) : t("{n} h", { n: m / 60 });
+}
+const resetLeadVars = (s) => ({ lead: resetLeadWords(resetLeadMinutes(s)) });
 
 // autoResetBrief: an account in brief says it too, beside its name — the
 // resets it holds and the say — with its switch: the account a week ran
@@ -17902,7 +17917,7 @@ function autoResetButton(q, c) {
   b.setAttribute("role", "switch");
   b.setAttribute("aria-checked", String(on));
   b.setAttribute("aria-label", t("Auto-use resets") + (c ? " · " + t(c.say) : ""));
-  b.title = c ? t(on ? c.on : c.off) : autoResetTitle(on);
+  b.title = c ? t(on ? c.on : c.off, resetLeadVars()) : autoResetTitle(on);
   if (c) b.dataset.case = c.id;
   b.append(el("i"));
   b.onclick = async (e) => {
@@ -21046,58 +21061,12 @@ function renderWarmAt(box, sub, ats, onReset, via, save) {
   box.append(segs([["off", t("Off")], ["on", t("On")]], ats.length ? "on" : "off", (v) => save(v === "on" ? (ats.length ? ats : ["06:00"]) : [])));
 }
 
-// renderAutoResetOwn lists each ChatGPT account under Settings › Usage's
-// "Codex: auto-use resets", with its switch, the same say as on the
-// account's card (settings' codexAutoReset, the CLI's quota auto-reset).
-// Avalon on Discord, after foobra12 asked where it was: it was only on the
-// accounts' cards, and they found it from the menu bar's panel alone,
-// nothing for it in the window's Settings. The row shows while a Codex
-// account is signed in, or one is still on.
+// Settings › Usage's Codex auto-use rows and how early one expiring is
+// used are drawn by autoresetown.js, imported as Settings first draws
+// them; then in the same draw, so a redraw leaves a pressed switch in place
 function renderAutoResetOwn(s) {
-  const head = $("#codexAutoResetRow");
-  const list = head.parentElement;
-  list.querySelectorAll(".ar-own").forEach((r) => r.remove());
-  const on = s.codexAutoReset || [];
-  const users = [...(s.codexUsers || [])];
-  for (const u of on) if (!users.some((x) => x.toLowerCase() === u)) users.push(u);
-  head.hidden = !users.length;
-  let after = head;
-  for (const user of users) {
-    const r = el("div", "row pref ar-own");
-    r.dataset.user = user;
-    const who = el("div", "who");
-    const name = el("div", "name", user);
-    name.title = user;
-    who.append(name);
-    // each of the two times its own Off/On (#2078)
-    const was = on.includes(user.toLowerCase()) ? autoResetWhenOf(s.codexAutoResetOnly?.[user.toLowerCase()]) : { week: false, expiring: false };
-    const cases = el("div", "ar-own-cases");
-    for (const c of AUTO_RESET_CASES) {
-      const line = el("div", "ar-own-case");
-      line.dataset.case = c.id;
-      const say = el("span", "ar-own-say", t(c.say));
-      say.title = t(was[c.id] ? c.on : c.off);
-      const pick = segs([["off", t("Off")], ["on", t("On")]], was[c.id] ? "on" : "off", async (v) => {
-        try {
-          prefs = await writingPrefs(api("settings/codex-auto-reset", { user, on: v === "on", when: c.id }));
-          if (state) state.settings = prefs;
-          const now = (prefs.codexAutoReset || []).includes(user.toLowerCase()) ? autoResetWhenOf(prefs.codexAutoResetOnly?.[user.toLowerCase()]) : { week: false, expiring: false };
-          status(autoResetStatus(user, now), "ok");
-          renderSettings();
-          if (quotas) renderQuotas(); // the account's card says the same
-        } catch (e) {
-          statusTErr(e);
-          renderSettings();
-        }
-      });
-      pick.setAttribute("aria-label", t("Auto-use resets") + " · " + t(c.say) + " · " + user);
-      line.append(say, pick);
-      cases.append(line);
-    }
-    r.append(who, cases);
-    after.after(r);
-    after = r;
-  }
+  if (window.autoResetOwnPaint) return autoResetOwnPaint(s);
+  import("./autoresetown.js").then(() => autoResetOwnPaint(s), statusErr);
 }
 
 // renderWarmAtOwn gives each ChatGPT account its own row under Daily

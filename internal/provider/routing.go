@@ -258,7 +258,7 @@ func (a Allowance) WeekUsedUp(now time.Time) bool {
 
 // Restarts is when an auto-used reset starts the account's windows again,
 // as the Codex reset about to run out is spent (expiringResetSpent):
-// resetExpiryLead before it runs out, or now when the account is held up
+// resetLead before it runs out, or now when the account is held up
 // past then. What they have left then is lost, as at their own reset, so
 // Weekly pace and Smart take it for their renewal when it comes sooner
 // (#717, #718). Zero when none will be.
