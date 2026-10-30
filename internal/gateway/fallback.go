@@ -2266,10 +2266,15 @@ func (h *holdWriter) keptQuiet() bool {
 
 // refusesAfterThinking tells whether a model's vendor may end a reply that
 // has only reasoned with its safety filter's refusal: Claude's stop_reason
-// refusal, OpenAI's content_filter or bio_policy, Gemini's SAFETY (#248).
-// Anybody else's reasoning — GLM's, DeepSeek's, Kimi's… — is shown as it
-// comes: held, GLM on a ZCode account through a group showed Claude Code
-// its thinking only once the text began, all at once (悠悠哥 on Discord).
+// refusal, OpenAI's content_filter or bio_policy, Gemini's SAFETY (#248),
+// and DeepSeek's content_filter: deepseek-v4.1-flash on WorkBuddy reasoned
+// for 5s and then ended content_filter with nothing said (the plugin takes
+// out the filter's canned line), and with its reasoning let through the
+// group's next member was never asked and DeepSeek Harness failed "The
+// model refused to complete the request" (itspig, plugins #540).
+// Anybody else's reasoning — GLM's, Kimi's… — is shown as it comes: held,
+// GLM on a ZCode account through a group showed Claude Code its thinking
+// only once the text began, all at once (悠悠哥 on Discord).
 func refusesAfterThinking(model string) bool {
 	if modelFamily(model) != "" {
 		return true
@@ -2278,7 +2283,7 @@ func refusesAfterThinking(model string) bool {
 	if i := strings.LastIndex(m, "/"); i >= 0 {
 		m = m[i+1:]
 	}
-	return strings.HasPrefix(m, "gemini")
+	return strings.HasPrefix(m, "gemini") || strings.HasPrefix(m, "deepseek")
 }
 
 // scan reads the held stream's events so far: an error before any content
