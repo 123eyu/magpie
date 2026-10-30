@@ -421,7 +421,9 @@ service tier the client asked for (Claude's fast speed reads `fast`), the
 one that try went out at (a fast pick sends `priority`, or `ultrafast`
 where the pick is set to Ultrafast; Ultrafast becomes
 `priority` on an account whose plan doesn't offer it), and the one the
-vendor's reply said it ran at, empty when the reply doesn't say. The JSON
+vendor's reply said it ran at, empty when the reply doesn't say. The
+ChatGPT backend (Codex signed in with ChatGPT) says `auto` and `default`
+whether Fast ran or not, so from it those are left empty too. The JSON
 log keeps them as `tier_asked`, `tier_sent` and `tier_served`, and each
 try in `/v1/magpie/route` has `tier` and `tier_served`. The last column,
 `upstream_stop`, is why the upstream said its reply ended, in its own

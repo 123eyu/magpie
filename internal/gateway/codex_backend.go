@@ -1455,6 +1455,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	call.TTFT, call.FirstText = first.ms()
 	call.ReasoningHidden = first.hidesReasoning(provider.Responses)
 	uu.add(sniff.usage())
+	uu.Tier = servedTierAt(provider.HostOf(base), uu.Tier)
 	call.Flow = first.flowFor(uu.Reasoning)
 	call.Usage, served = uu, uu.Served
 	errType := ""
