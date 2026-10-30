@@ -1430,7 +1430,10 @@ func visibleLocal(chunks []*rowChunk) refSet {
 	keys := msgKeysOf(chunks)
 	n := 0
 	for _, k := range keys {
-		n += len(k.keys)
+		// a settled chunk's are read below: the set grows for them
+		if k != nil {
+			n += len(k.keys)
+		}
 	}
 	seen := keptSeen.Swap(nil)
 	if seen == nil {
@@ -1438,8 +1441,16 @@ func visibleLocal(chunks []*rowChunk) refSet {
 		seen = &m
 	}
 	defer keepSeen(seen)
+	rows := lentRows()
+	defer rows.release()
+	var read chunkMsgKeys
 	for i, c := range chunks {
-		for _, k := range keys[i].keys {
+		k := keys[i]
+		if k == nil {
+			read.keys = appendMsgKeys(read.keys[:0], rows.of(c))
+			k = &read
+		}
+		for _, k := range k.keys {
 			if _, ok := (*seen)[k.k]; ok {
 				duplicates.add(rowRef{c, int(k.at)})
 			} else {
@@ -1486,8 +1497,13 @@ type msgKey struct {
 var msgKeysOpening func(*rowChunk)
 
 // msgKeysOf are chunks' message keys, read from a chunk only when none
-// are kept for its serial.
+// are kept for its serial. A chunk settled before the days a split page
+// pairs again (settledBefore) is left nil, for the caller to read on its
+// own: it is paired only when what was counted of it is missed, and a
+// cold start's pairing of the whole history kept all of them, ~67 MB of
+// its ~460 MB live heap, beside the period's that polls read (#2278).
 func msgKeysOf(chunks []*rowChunk) []*chunkMsgKeys {
+	settled := settledBefore(time.Now())
 	msgKeys.Lock()
 	msgKeys.turn++
 	turn := msgKeys.turn
@@ -1503,23 +1519,10 @@ func msgKeysOf(chunks []*rowChunk) []*chunkMsgKeys {
 	defer rows.release()
 	made := map[uint64]*chunkMsgKeys{}
 	for i, c := range chunks {
-		if out[i] != nil {
+		if out[i] != nil || !c.Latest.IsZero() && c.Latest.Before(settled) {
 			continue
 		}
-		if msgKeysOpening != nil {
-			msgKeysOpening(c)
-		}
-		k := &chunkMsgKeys{turn: turn}
-		open := rows.of(c)
-		for j := range open.Rows {
-			p := &open.Rows[j]
-			msg := open.Strings[open.text(p, rowMsg)]
-			if msg == "" {
-				continue
-			}
-			k.keys = append(k.keys, msgKey{[2]uint64{maphash.String(msgSeeds[0], msg), maphash.String(msgSeeds[1], msg)}, int32(j)})
-		}
-		k.keys = slices.Clip(k.keys)
+		k := &chunkMsgKeys{turn: turn, keys: slices.Clip(appendMsgKeys(nil, rows.of(c)))}
 		out[i] = k
 		if c.serial != 0 {
 			made[c.serial] = k
@@ -1539,6 +1542,22 @@ func msgKeysOf(chunks []*rowChunk) []*chunkMsgKeys {
 	}
 	msgKeys.Unlock()
 	return out
+}
+
+// appendMsgKeys appends the keys of open's rows that have a message id.
+func appendMsgKeys(keys []msgKey, open *rowChunk) []msgKey {
+	if msgKeysOpening != nil {
+		msgKeysOpening(open)
+	}
+	for j := range open.Rows {
+		p := &open.Rows[j]
+		msg := open.Strings[open.text(p, rowMsg)]
+		if msg == "" {
+			continue
+		}
+		keys = append(keys, msgKey{[2]uint64{maphash.String(msgSeeds[0], msg), maphash.String(msgSeeds[1], msg)}, int32(j)})
+	}
+	return keys
 }
 
 var msgSeeds = [2]maphash.Seed{maphash.MakeSeed(), maphash.MakeSeed()}

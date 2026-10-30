@@ -366,6 +366,34 @@ func TestVisibleLocalKeptBySerial(t *testing.T) {
 	}
 }
 
+// A settled chunk's message ids are read for each pairing and not kept:
+// a cold start's pairing of the whole history kept every one, ~67 MB of
+// its live heap (#2278). What is left out is the same as when they are.
+func TestVisibleLocalSettledNotKept(t *testing.T) {
+	old := time.Now().AddDate(0, 0, -30)
+	a, b := &rowChunk{}, &rowChunk{}
+	a.add(Row{Record: Record{Time: old}}, "msg_1", 0, false)
+	a.add(Row{Record: Record{Time: old}}, "msg_2", 1, false)
+	b.add(Row{}, "msg_2", 0, false)
+	b.add(Row{}, "msg_3", 1, false)
+	a, b = a.pack(), b.pack()
+	a.Latest = old
+	a.serial, b.serial = nextChunkSerial(), nextChunkSerial()
+	for i := range 3 {
+		got := refMap(visibleLocal([]*rowChunk{a, b}))
+		if want := map[rowRef]bool{{b, 0}: true}; !maps.Equal(got, want) {
+			t.Fatalf("call %d left out %v, want %v", i, got, want)
+		}
+	}
+	msgKeys.Lock()
+	_, kept := msgKeys.by[a.serial]
+	_, keptB := msgKeys.by[b.serial]
+	msgKeys.Unlock()
+	if kept || !keptB {
+		t.Fatalf("settled chunk's keys kept %v, recent chunk's %v; want false, true", kept, keptB)
+	}
+}
+
 // The ids one call saw are kept as an empty set for the next (#2278): a
 // call after another, on other chunks, leaves out what a first call does,
 // and ReleaseScratch lets the set go.
