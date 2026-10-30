@@ -991,13 +991,7 @@ var bigBuildRows = 1 << 17
 // holdBigBuild holds bigBuilds when the chunks have bigBuildRows rows or
 // more, and is what lets it go.
 func holdBigBuild(sets ...[]*rowChunk) (let func()) {
-	n := 0
-	for _, set := range sets {
-		for _, c := range set {
-			n += rowsIn(c)
-		}
-	}
-	if n < bigBuildRows {
+	if rowsOfAll(sets...) < bigBuildRows {
 		return func() {}
 	}
 	bigBuilds.Lock()
@@ -1488,10 +1482,12 @@ func visibleLocal(chunks []*rowChunk) refSet {
 		}
 	}
 	seen := keptSeen.Swap(nil)
-	if seen == nil {
-		m := make(map[[2]uint64]struct{}, n)
-		seen = &m
+	// judged by the chunks' rows, an upper bound n leaves the recent out of
+	need := rowsOfAll(chunks)
+	if seen == nil || !scratchFits(seen.made, need) {
+		seen = &seenScratch{ids: make(map[[2]uint64]struct{}, n)}
 	}
+	seen.made = max(seen.made, need)
 	defer keepSeen(seen)
 	rows := lentRows()
 	defer rows.release()
@@ -1503,10 +1499,10 @@ func visibleLocal(chunks []*rowChunk) refSet {
 			k = &read
 		}
 		for _, k := range k.keys {
-			if _, ok := (*seen)[k.k]; ok {
+			if _, ok := seen.ids[k.k]; ok {
 				duplicates.add(rowRef{c, int(k.at)})
 			} else {
-				(*seen)[k.k] = struct{}{}
+				seen.ids[k.k] = struct{}{}
 			}
 		}
 	}
@@ -1517,10 +1513,16 @@ func visibleLocal(chunks []*rowChunk) refSet {
 // call as matchScratch is: made to size for every pairing it was ~210 MB
 // of the ~2 GB 90 s of polls allocated (#2278). A cleared map keeps its
 // buckets.
-var keptSeen atomic.Pointer[map[[2]uint64]struct{}]
+var keptSeen atomic.Pointer[seenScratch]
 
-func keepSeen(seen *map[[2]uint64]struct{}) {
-	clear(*seen)
+// seenScratch is the set and the ids of the largest call it served.
+type seenScratch struct {
+	ids  map[[2]uint64]struct{}
+	made int
+}
+
+func keepSeen(seen *seenScratch) {
+	clear(seen.ids)
 	keptSeen.Store(seen)
 	lingerScratch()
 }
@@ -1714,6 +1716,7 @@ type matchCandidate struct {
 // kept until ReleaseScratch, which the window calls once its reads rest,
 // or until no pairing has used it for scratchLinger.
 type matchScratch struct {
+	made       int // the rows of the largest call it served
 	reserved   refSet
 	byID       map[string]int32
 	calls      []idCalls
@@ -1733,13 +1736,38 @@ type matchScratch struct {
 
 var keptMatch atomic.Pointer[matchScratch]
 
-// matchScratchFor is the kept scratch, or a new one when another call has
-// it or none is kept
-func matchScratchFor() *matchScratch {
-	if s := keptMatch.Swap(nil); s != nil {
+// matchScratchFor is the kept scratch for a call over need rows, or a new
+// one when another call has it, none is kept or the one kept doesn't fit
+// (scratchFits)
+func matchScratchFor(need int) *matchScratch {
+	if s := keptMatch.Swap(nil); s != nil && scratchFits(s.made, need) {
+		s.made = max(s.made, need)
 		return s
 	}
-	return &matchScratch{}
+	return &matchScratch{made: need}
+}
+
+// scratchFits says a call over need rows takes a scratch kept from one
+// over made. A kept scratch stays scratchLinger after the last call put it
+// back, and the pairings of a poll's last few days kept the one a pairing
+// of the whole history made: at a cold start ~140 MB of maps and slabs
+// made for every call stayed while the window polled, the footprint at
+// 490–530 MB from 44 s to the end of 75 s of polls, of a 548 MB peak
+// (#2278). A call that much smaller makes its own, and the large one goes.
+func scratchFits(made, need int) bool { return made <= 4*max(need, scratchFloor) }
+
+// scratchFloor is the rows below which every call takes what is kept.
+var scratchFloor = 1 << 12
+
+// rowsOfAll is the rows of every chunk of sets, packed or not.
+func rowsOfAll(sets ...[]*rowChunk) int {
+	n := 0
+	for _, set := range sets {
+		for _, c := range set {
+			n += rowsIn(c)
+		}
+	}
+	return n
 }
 
 // mapFor is m, or a new map made for n when there is none yet
@@ -1835,7 +1863,7 @@ func matchedLocal(gateway *rowChunk, chunks []*rowChunk, skip refSet, since time
 }
 
 func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip refSet, responsePairs map[rowRef]rowRef, since time.Time, newestIDs bool) refSet {
-	scratch := matchScratchFor()
+	scratch := matchScratchFor(rowsOfAll(gateways, chunks))
 	defer scratch.release()
 	scratch.reserved = mapFor(scratch.reserved, 0)
 	reserved := scratch.reserved
