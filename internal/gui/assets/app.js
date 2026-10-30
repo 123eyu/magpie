@@ -10824,13 +10824,10 @@ function renderEndpoints(p, src) {
     eps.append(e);
   }
   if (p) {
-    const test = el("button", "text action", t("Test"));
-    test.title = t("Send a tiny request through each endpoint");
-    test.onclick = async () => {
-      test.classList.add("busy");
+    const test = testButton(p, t("Test"), t("Send a tiny request through each endpoint"), async () => {
       for (const s of Object.values(slots)) { s.className = "res wait"; s.textContent = "…"; }
       try {
-        const r = await api("provider/test", { ...asTyped(), id: p.id });
+        const r = await provTest(p.id, asTyped());
         for (const x of r.results) {
           const s = slots[x.protocol];
           if (!s) continue;
@@ -10841,9 +10838,8 @@ function renderEndpoints(p, src) {
           s.append(el("span", "", x.account ? t("Tested {user}: {result}", { user: x.account, result }) : result));
           s.title = x.ok ? t("model {model}", { model: x.model }) : x.error;
         }
-      } catch (e) { for (const s of Object.values(slots)) { s.className = "res"; s.textContent = ""; } statusErr(e); }
-      test.classList.remove("busy");
-    };
+      } catch (e) { for (const s of Object.values(slots)) { s.className = "res"; s.textContent = ""; } testErr(e); }
+    });
     eps.append(test);
   }
   return eps;
@@ -10859,17 +10855,14 @@ function showRest(n, open) {
   return b;
 }
 
-// detectAPIs: which of the APIs magpie speaks to a vendor answer at the base
-// URL typed (01huadalang on Discord: 一键检测支持什么协议) — Detect sends
-// each the smallest request there, with the key typed (or the saved one)
-// and a model typed or picked from the vendor's list, and shows what each
-// answered; "Use these" takes those that answered for the provider. With
-// a model typed for a saved provider and only some APIs answering, that
-// model alone can be asked on one of them (staged with Names & levels).
-// "Each picked model" asks every model picked on each API (01huadalang:
-// 应该能看出来选择的模型支持情况…有的仅支持 response 有的双协议), a few at
-// a time, and shows model by API; its "Use these" also gives each model
-// that answered on one API only that API, staged as Names & levels does.
+// detectAPIs: which of magpie's APIs answer at the base URL typed
+// (01huadalang: 一键检测支持什么协议): each is sent the smallest request,
+// with the key typed (or saved) and a model typed or from the list; "Use
+// these" takes those that answered. A saved provider's typed model that
+// some APIs answer can be asked on one alone (staged as Names & levels).
+// "Each picked model" asks every pick on each API, a few at a time (有的仅
+// 支持 response 有的双协议); its "Use these" gives a model answered on
+// one API only that API.
 // DETECT_MAX: the most models one detection asks (provider.DetectMax)
 const DETECT_MAX = 30;
 // addFormModels: the add form's models, typed in (ex) or picked from the
@@ -11132,6 +11125,30 @@ function modelTestWhy(p) {
 // model still being asked is null
 const modelTests = {};
 
+// testsOn: a provider's tests under way, by run; Stop ends them on the server too (RIck)
+const testsOn = {};
+async function provTest(id, body) {
+  const run = Math.random().toString(36).slice(2), ac = new AbortController(), on = testsOn[id] ||= new Map();
+  on.set(run, ac);
+  testBtns(id);
+  try { return await api("provider/test", { ...body, id, run }, null, ac.signal); }
+  catch (e) { e.stopped = ac.signal.aborted; throw e; }
+  finally { on.delete(run); testBtns(id); }
+}
+const testErr = (e) => e.stopped ? status(t("Test stopped")) : statusErr(e);
+function testBtns(id) {
+  const on = testsOn[id]?.size;
+  for (const b of document.querySelectorAll("[data-tests]")) if (b.dataset.tests === id) b.textContent = on ? t("Stop") : b.dataset.label, b.title = on ? "" : b.dataset.tip;
+}
+function testButton(p, label, tip, run) {
+  const b = el("button", "text action", label), on = () => testsOn[p.id];
+  Object.assign(b.dataset, { tests: p.id, label, tip });
+  b.title = tip;
+  b.onclick = () => on()?.size ? on().forEach((ac, run) => { ac.abort(); api("provider/teststop", { run }).catch(() => {}); }) : run();
+  if (on()?.size) queueMicrotask(() => testBtns(p.id));
+  return b;
+}
+
 // typedIds: the model ids typed in an add box or a Models field: split at
 // commas and line breaks only, since an id can hold a space ("Opus 5.5",
 // #1976)
@@ -11156,8 +11173,8 @@ const bestChosen = () => !!draft.best && !draft.none && !chosenIds().length;
 const servedIds = (p) => draft.chosen.length ? draft.chosen : draft.none ? [] : p.models.filter((m) => draft.best ? m.best : m.on).map((m) => m.id);
 
 // modelsOpen: a provider editor's models let out to their full height
-// (#833), kept for the next editor opened. MCHIPS_MAX: the most the box is
-// tall held, as app.css's .mchips max-height: min(240px, 40vh) says
+// (#833), kept for the next editor. MCHIPS_MAX: the box's height held, as
+// app.css's .mchips max-height: min(240px, 40vh)
 let modelsOpen = false;
 // unpickedShown: the provider whose editor shows its unpicked models while
 // it serves Picked only (yyddbds on Discord: 选择了仅所选分类，下边的模型项
@@ -11170,10 +11187,9 @@ let unpickedShown = null;
 // list and back, every model came back picked, the 24 the list serves)
 let picksLeft = null;
 const MCHIPS_MAX = 240;
-// emptyModelsHint is what an empty model list says. Azure OpenAI's is its
-// deployments, asked for with the key after it is added (#1995): while that
-// is under way it says so, and after it says the deployments' names are
-// what to type; every other provider's is the vendor's list.
+// emptyModelsHint: what an empty model list says. Azure OpenAI's is its
+// deployments, asked for once it is added (#1995): said while asked, then
+// that their names are what to type; any other's is the vendor's list.
 function emptyModelsHint(p) {
   if (p.preset !== "azure") return "The vendor's list is empty. Fetch models again, or type a model id.";
   if (providers?.fetching && !p.fetched && !p.listError) return "Asking your resource for its deployments with this key…";
@@ -11563,15 +11579,12 @@ function renderModels(p) {
       same.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") same.blur(); else if (e.key === "Escape") { same.value = sameNow(); same.blur(); } };
       sameBox.append(el("span", "", t("Same as")), same);
       row.append(sameBox);
-      // what it costs the user, in dollars per million tokens, as the
-      // Usage page counts it (#819: only `magpie model price` set it):
-      // each box shows its list price until a price is given, a part left
-      // empty is the list's, and every part empty is its list price again
-      // the 1-hour cache write, empty, is 2× input as Anthropic bills it,
-      // and only a Claude model (or one priced with one) has the box: no
-      // other vendor has 1-hour writes (PAMI on Discord);
-      // a long-context price (OpenAI's over 272K) is what the whole request
-      // costs when its input is over its size, empty parts its list's
+      // its cost to the user, $ per million tokens, as Usage counts it
+      // (#819): a box empty is its list price. The 1-hour cache write,
+      // empty, is 2× input as Anthropic bills it, and only a Claude model
+      // (or one priced with one) has it (PAMI on Discord). A long-context
+      // price (OpenAI's over 272K) is the whole request's when its input
+      // is over that size, empty parts its list's
       const parts = [["input", "Input"], ["output", "Output"], ["cache_read", "Cache read"], ["cache_write", "Cache write"], ["cache_write_1h", "Cache write 1h"]];
       const tierParts = parts.slice(0, 4);
       const priceNow = () => prefs[id]?.ownPrice ? null : prefs[id]?.price ?? m.price ?? null;
@@ -11909,11 +11922,10 @@ function renderModels(p) {
     if (e.key === "Enter") take();
     else if (e.key === "Escape") cancelEdit();
   };
-  // named as the add form's Fetch models is, the button there before the
-  // Save (耍赖天都爱 on Discord: 模型拉取一次就没有这个按钮了 — a key moved
-  // to another group on a relay serves another list), and "again" once a
-  // list was fetched. It asks with the key typed (asTyped), and merges as
-  // Refetch does: picks the new list lacks go, ids added by hand stay
+  // named as the add form's, there before the Save (耍赖天都爱: 模型拉取一
+  // 次就没有这个按钮了 — a relay key moved to another group serves another
+  // list), "again" once fetched. Asked with the key typed (asTyped), merged
+  // as Refetch merges: picks the new list lacks go, ids added by hand stay
   const refresh = el("button", "text action fetch-models", t(p.fetched ? "Fetch models again" : "Fetch models"));
   refresh.title = t("Ask the vendor for its model list with the key typed here, and again after the key moves to another group: picks it no longer lists are dropped, ids added by hand stay");
   refresh.onclick = async () => {
@@ -11921,36 +11933,28 @@ function renderModels(p) {
     try {
       const r = await api("provider/models", { ...asTyped(), id: p.id });
       status(t("{p}: {n} models", { p: p.name, n: r.count }), "ok");
-      // picks the vendor no longer lists were dropped from the saved
-      // provider: out of this editor's draft too, if it is still this
-      // provider's, or its Save put them back
+      // picks the vendor dropped leave this editor's draft too, or Save put them back
       if (r.dropped?.length && editing === p.id && draft) draft.chosen = draft.chosen.filter((x) => !r.dropped.includes(x));
-      // the redraw keeps the editor's draft, the picks in it with it: none
-      // are put back by hand, which put them in whichever editor was open
-      // by then, another provider's too (#464)
+      // the redraw keeps the draft and its picks (#464)
       await loadProviders();
     } catch (e) { statusErr(e); refresh.classList.remove("busy"); }
   };
   // each model the agents see gets a tiny request of its own: a vendor
   // that answers can still have a model that doesn't
-  const testAll = el("button", "text action", t("Test models"));
-  testAll.title = t("Send a tiny request to each model agents see, to find the ones that don't answer") + "\n" + t("Right-click a model to test just it");
-  testAll.onclick = async () => {
+  const testAll = testButton(p, t("Test models"), t("Send a tiny request to each model agents see, to find the ones that don't answer") + "\n" + t("Right-click a model to test just it"), async () => {
     const ids = servedIds(p).filter((id) => p.decideTest || !decidesModel(p, id));
     if (!ids.length) { status(t("Pick a model first."), "err"); return; }
-    testAll.classList.add("busy");
     const got = modelTests[p.id] = {};
     for (const id of ids) got[id] = null;
     draw();
     try {
-      const r = await api("provider/test", { ...asTyped(), id: p.id, test: ids });
+      const r = await provTest(p.id, { ...asTyped(), test: ids });
       r.results.forEach((x, i) => { got[ids[i]] = x; });
       const i = r.results.findIndex((x) => !x.ok), x = r.results[i], bad = r.results.filter((x) => !x.ok).length;
       status(x ? t("{n} of {all} models didn't answer; {model}: {error}", { n: bad, all: ids.length, model: ids[i], error: (x.status ? x.status + " · " : "") + x.error }) : t("All {n} models answered", { n: ids.length }), x ? "err" : "ok");
-    } catch (e) { delete modelTests[p.id]; statusErr(e); }
-    testAll.classList.remove("busy");
+    } catch (e) { delete modelTests[p.id]; testErr(e); }
     draw();
-  };
+  });
   // one model, its dot and title as Test models leaves them, the others'
   // results kept
   const testOne = async (id, as) => {
@@ -11958,20 +11962,20 @@ function renderModels(p) {
     got[id] = null;
     draw();
     try {
-      const r = await api("provider/test", { ...asTyped(), id: p.id, test: [id], ...(as ? { as } : {}) });
+      const r = await provTest(p.id, { ...asTyped(), test: [id], ...(as ? { as } : {}) });
       const x = got[id] = r.results[0];
       const via = x.protocol ? apiLabel(x.protocol) : "";
       const error = (x.status ? x.status + " · " : "") + x.error;
       status(x.ok ? (via ? t("{model} answered via {api} in {took}", { model: id, api: via, took: ledTook(x.ms) }) : t("{model} answered in {took}", { model: id, took: ledTook(x.ms) }))
         : via ? t("{model} didn't answer via {api}: {error}", { model: id, api: via, error }) : t("{model} didn't answer: {error}", { model: id, error }), x.ok ? "ok" : "err");
-    } catch (e) { delete got[id]; statusErr(e); }
+    } catch (e) { delete got[id]; testErr(e); }
     draw();
   };
   const rename = el("button", "text action" + (naming === p.id ? " on" : ""), t("Names & levels"));
   rename.title = t("Rename the models agents see, or offer fewer of their reasoning levels");
   rename.onclick = () => { naming = naming === p.id ? null : p.id; rename.classList.toggle("on", naming === p.id); drawNames(); };
   foot.append(add, addOne, refresh);
-  if (noTest) { testAll.disabled = true; testAll.title = noTest; }
+  if (noTest) { testAll.disabled = true; testAll.title = testAll.dataset.tip = noTest; }
   foot.append(testAll);
   foot.append(rename);
   // a plugin's list that failed is its defaults, not the vendor's
