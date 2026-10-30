@@ -1919,6 +1919,14 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		desktopCheck = probe
 		asked = desktopTurn(asked, body, fromClaudeCode(r.Header), sub != "")
 		if probe {
+			// tagged on the Routing page and in the ledger as the check it
+			// is: Desktop names its model itself, the first listed when no
+			// Claude-named model is, so the row read as Desktop asking for
+			// a model the user had left while the answer came from the
+			// one chosen in its menu (cybercaius on Discord, v0.1.2212)
+			if call.Kind == "" {
+				call.Kind = KindDesktopCheck
+			}
 			// its check, asked for room every model answers in
 			if b, ok := withTokenFloor(body, desktopProbeTokens); ok {
 				body = b
