@@ -373,7 +373,7 @@ func LedgerPage(p usage.Period, f usage.Filter, offset, limit int) Ledger {
 	at := map[string]int{}
 	for _, g := range l.Accounts {
 		name := which(g.Provider).Name
-		own := provider.AccountNameOf(g.Provider, g.Account)
+		own := provider.AccountLabelOf(g.Provider, g.Account)
 		if i, ok := at[g.Account]; ok {
 			a := &out.Accounts[i]
 			if !slices.Contains(a.Providers, name) {

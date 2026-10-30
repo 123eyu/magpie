@@ -149,6 +149,11 @@ type providerJSON struct {
 	// name an account has until the user gives it one
 	AccountNames map[string]string `json:"accountNames,omitempty"`
 	AccountSeats map[string]string `json:"accountSeats,omitempty"`
+	// the name a plugin's usage gives each account where it isn't the
+	// accountId the account is kept by (Provider.PluginUser, #4416): a
+	// masked phone for an IAM id, the name the account goes by until the
+	// user gives it one
+	AccountUsers map[string]string `json:"accountUsers,omitempty"`
 	// where a custom provider's balance is asked (see provider.Balance)
 	BalanceURL    string `json:"balanceURL,omitempty"`
 	BalancePath   string `json:"balancePath,omitempty"`
@@ -650,6 +655,12 @@ func providerInfoWith(p provider.Provider, agents []agentUse, desktop map[string
 					out.AccountSeats = map[string]string{}
 				}
 				out.AccountSeats[strings.ToLower(strings.TrimSpace(r))] = s
+			}
+			if u := p.PluginUser(r); u != "" {
+				if out.AccountUsers == nil {
+					out.AccountUsers = map[string]string{}
+				}
+				out.AccountUsers[strings.ToLower(strings.TrimSpace(r))] = u
 			}
 		}
 	}

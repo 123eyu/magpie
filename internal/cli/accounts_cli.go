@@ -354,7 +354,7 @@ func accountRows(ls []provider.Login, now time.Time) []accountRow {
 	for _, l := range ls {
 		r := accountRow{Agent: l.Agent, User: l.User, Plan: l.Plan, Active: l.Active, On: l.On, Windows: []quotaSpan{}, Lapsed: l.Lapsed}
 		r.Seat = provider.SeatNameOf(l.Agent, l.User)
-		r.Alias = cmp.Or(provider.AccountNameOf(l.Agent, l.User), r.Seat)
+		r.Alias = cmp.Or(provider.AccountLabelOf(l.Agent, l.User), r.Seat)
 		for user, q := range usage[l.Agent] {
 			if !strings.EqualFold(user, l.User) {
 				continue

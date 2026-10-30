@@ -6499,7 +6499,7 @@ function providerText(p, row) {
   const a = p.account;
   return [row.textContent, p.id, p.name, p.preset, p.host, p.chat, p.responses, p.anthropic, p.gemini,
     a?.user, a?.agentName, a?.plan, ...(a?.logins || []).flatMap((l) => [l.user, l.plan]),
-    ...Object.values(p.accountNames || {}), ...(p.keyList || []).map((k) => k.name),
+    ...Object.values(p.accountNames || {}), ...Object.values(p.accountUsers || {}), ...(p.keyList || []).map((k) => k.name),
   ].filter(Boolean).join(" ").toLowerCase();
 }
 const pvSq = (s) => (s || "").toLowerCase().replace(/[\s._-]+/g, "");
@@ -8153,10 +8153,10 @@ function proxyOfDraft() {
 // the address's room kept while it isn't asked for, so a pick moves
 // nothing. null for a subscription with one account: the row above is its.
 const ACCOUNT_PROXY_HINT = "Each account can go through a proxy of its own; Provider's proxy is the one above";
-function accountProxyPicker(a) {
+function accountProxyPicker(a, p) {
   const ls = [...(a?.logins || [])];
   ls.sort((x, y) => (y.active ? 1 : 0) - (x.active ? 1 : 0));
-  return proxyLines(ls.map((l) => ({ k: l.user.toLowerCase(), name: l.user, user: l.user })), ACCOUNT_PROXY_HINT);
+  return proxyLines(ls.map((l) => ({ k: l.user.toLowerCase(), name: accountShownOf(p, l.user), user: l.user })), ACCOUNT_PROXY_HINT);
 }
 // keyProxyPicker is accountProxyPicker for a provider's keys (Beyfish_Wang
 // on X: 不同 key 走不同的代理), each by its fingerprint, named as the
@@ -9520,7 +9520,7 @@ function drawEditor(p, presetID) {
     advIn.append(...field(t("Fallback"), renderFallback(p), fallbackHint(p)));
     const proxies = el("div", "stack");
     proxies.append(proxyPicker());
-    const perAccount = subOf(a.agent) ? accountProxyPicker(a) : null;
+    const perAccount = subOf(a.agent) ? accountProxyPicker(a, p) : null;
     if (perAccount) proxies.append(perAccount);
     advIn.append(...field(t("Proxy"), proxies));
     advIn.append(...concurrencyField(p));
@@ -13915,12 +13915,14 @@ function poolLine(line, ws, q, capFor = () => 0, settable = null) {
 // the cap and opens the app's menu of shares; a mark on each meter the cap
 // counts shows where it is, and a note says when it holds the account.
 const CAP_SHARES = [50, 60, 70, 80, 90];
-// An account's name of the user's own (#1515): a team's GLM seats under
-// masked emails told apart. Kept by magpie (provider.AccountNames), never
-// in the vendor's or plugin's sign-in. accountSeatOf is the key plan the
-// account was found to stand in for, the name it goes by till it has one.
-function accountNameOf(p, user) { return p?.accountNames?.[String(user).toLowerCase()] || ""; }
-function accountSeatOf(p, user) { return p?.accountSeats?.[String(user).toLowerCase()] || ""; }
+// An account's name of the user's own (#1515), kept by magpie
+// (provider.AccountNames), never in a sign-in; accountSeatOf, the key plan
+// it stands in for; accountUserOf, its plugin usage's name (#4416).
+function acctIn(m, user) { return m?.[String(user).toLowerCase()] || ""; }
+function accountNameOf(p, user) { return acctIn(p?.accountNames, user); }
+function accountSeatOf(p, user) { return acctIn(p?.accountSeats, user); }
+function accountUserOf(p, user) { return acctIn(p?.accountUsers, user); }
+function accountShownOf(p, user) { return accountNameOf(p, user) || accountUserOf(p, user) || user; }
 // renameIn edits a name in place of at: Enter saves it changed, Escape
 // keeps it. Once: Enter or Escape draws the editor again, and the blur
 // that follows (Chromium's, as the redraw takes the input out) does nothing,
@@ -13944,22 +13946,22 @@ function renameIn(at, own, hint, save) {
 // accountNameButton is the account's name on its editor row: the name of
 // its own, the account beside it, and a click renames it.
 function accountNameButton(p, user) {
-  const own = accountNameOf(p, user), seat = accountSeatOf(p, user);
+  const own = accountNameOf(p, user), seat = accountSeatOf(p, user), vend = accountUserOf(p, user);
   if (!p) return el("span", "n", user);
   const wrap = el("span", "acct-who");
   // a span, not a button: the address stays selectable, and a drag that
   // selects it renames nothing
-  const name = el("span", "n rename", own || user);
+  const name = el("span", "n rename", accountShownOf(p, user));
   name.tabIndex = 0;
   name.setAttribute("role", "button");
-  name.title = own ? t("{user} · click to rename", { user }) : t("Name this account");
+  name.title = own || vend ? t("{user} · click to rename", { user }) : t("Name this account");
   name.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); name.onclick(); } };
   name.onclick = () => {
     if (String(getSelection?.() || "").length) return;
     renameIn(wrap, own, seat || t("Name, e.g. Personal or Team"), (alias) => accountAction("provider/accountname", { id: p.id, account: user, alias })).maxLength = 64;
   };
   wrap.append(name);
-  if (own) wrap.append(el("span", "acct-user", user));
+  if (own) wrap.append(el("span", "acct-user", vend || user));
   else if (seat) {
     const s = el("span", "acct-seat", "≡ " + seat);
     s.title = t("The same seat as the key plan {name}, shown once, on this account's card", { name: seat });
@@ -24332,7 +24334,7 @@ window.noteAccounts = noteAccounts;
       for (const n of [p.id, p.name, p.account?.agentName, p.account?.agent]) if (n) not.add(String(n).toLowerCase());
       if (p.account) { all.add((p.account.user || "").trim()); for (const l of p.account.logins || []) all.add((l.user || "").trim()); }
       // the names the user gave accounts (#1515), as the accounts are
-      for (const n of Object.values(p.accountNames || {})) all.add(String(n).trim());
+      for (const n of [...Object.values(p.accountNames || {}), ...Object.values(p.accountUsers || {})]) all.add(String(n).trim());
     }
     // a plugin's provider, signed in or not, is a provider too: its name
     // on the Plugins page and the add sheet is no account (lileo0668)
@@ -24504,7 +24506,7 @@ window.noteAccounts = noteAccounts;
   }
   const kin = (u, pid) => {
     const k = [u];
-    for (const p of providers?.providers || []) if (p.id === pid) for (const [a, n] of Object.entries(p.accountNames || {})) if (a === low(u) || n === u) k.push(a, n);
+    for (const p of providers?.providers || []) if (p.id === pid) for (const m of [p.accountNames, p.accountUsers]) for (const [a, n] of Object.entries(m || {})) if (a === low(u) || n === u) k.push(a, n);
     for (const q of quotas || []) if (q.provider === pid && (q.user === u || q.alias === u)) k.push(q.user, q.alias);
     return k.filter(Boolean).map((x) => sk(pid, x));
   };

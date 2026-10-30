@@ -164,9 +164,9 @@ func keyColumn(p provider.Provider) string {
 	case p.Account != nil && signedOut(p):
 		// every account in use refused: listed to be signed in again,
 		// as the app's row says, never "signed in"
-		return amber.Render("○ "+p.Account.User+" is signed out") + muted.Render(" · sign in again")
+		return amber.Render("○ "+p.AccountShown(p.Account.User)+" is signed out") + muted.Render(" · sign in again")
 	case p.Account != nil:
-		return green.Render("●") + " " + muted.Render("signed in as "+p.Account.User)
+		return green.Render("●") + " " + muted.Render("signed in as "+p.AccountShown(p.Account.User))
 	case p.IsVertex() && !p.Ready():
 		// no project an address can be made of (providers.json edited
 		// by hand): nothing is asked, as the app's row says
@@ -851,7 +851,7 @@ func showProvider(p provider.Provider) error {
 	}
 	switch {
 	case p.Account != nil:
-		who := p.Account.User
+		who := p.AccountShown(p.Account.User)
 		if p.Account.Plan != "" {
 			who += muted.Render("  " + p.Account.Plan)
 		}

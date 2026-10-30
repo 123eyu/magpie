@@ -550,13 +550,14 @@ function routingPage(part) {
   const uaName = (s) => String(s || "").trim().split(/[\/\s,]/)[0].toLowerCase();
   const agentName = (id) => agentOf(id)?.name || (id && id !== "other" ? id : t("your agent"));
   // userShown is an account of provider as the user named it in magpie
-  // (provider.AccountNames, #1515), else as its vendor names it. The name
+  // (provider.AccountNames, #1515), else as its plugin's usage names it
+  // (accountUsers, #4416), else as its vendor names it. The name
   // is looked up as the page is drawn, by the account a request kept (its
   // vendor's name, which the user's name is kept by), so every request
   // reads by the name the account has now, one from before a rename too
   // (plugins#310: a renamed Kiro account kept its old name on requests
   // made after). Requests are still told apart by that vendor's name.
-  const userShown = (provider, user) => user && accountNameOf(providers?.providers?.find((p) => p.id === provider), user) || user;
+  const userShown = (provider, user) => user && accountShownOf(providers?.providers?.find((p) => p.id === provider), user) || user;
   // whoShown is the account or key a weighed one is: an account by its
   // name of the user's own; a key's name is already the user's
   const whoShown = (w) => w.kind === "account" ? userShown(w.provider, w.who) : w.who;
