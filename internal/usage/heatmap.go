@@ -382,7 +382,7 @@ func heatSplit(since, now time.Time, gateways, chunks, others []*rowChunk, f Fil
 		if heatPairing != nil {
 			heatPairing(len(gateways) + len(chunks) + len(others))
 		}
-		days := pairRows(heatmapPeriod, now, gateways, chunks, others, identities).heatDaysOf(since, now, f, cache, identities, nil)
+		days := pairEvery(since, now, gateways, chunks, others, identities, cache).heatDaysOf(since, now, f, cache, identities, nil)
 		if ok {
 			n, _ := slices.BinarySearchFunc(days, cut.Format(time.DateOnly), func(d Day, day string) int { return strings.Compare(d.Date, day) })
 			parts := map[uint64]*chunkPart{}

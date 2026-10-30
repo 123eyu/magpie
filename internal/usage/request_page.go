@@ -858,7 +858,7 @@ func queryPageOf(p Period, f Filter, offset, limit int, readSource func(sessions
 	var cache *partCache
 	pk := partKey{p: p, f: f, since: p.Since(now), until: p.Until(now), loc: now.Location()}
 	if p == heatmapPeriod {
-		cache = &partCache{old: idx.heatParts[pk], next: map[uint64]*chunkPart{}, heatOld: idx.heatOld[pk], disk: heatDiskRef{root: idx.root, meta: idx.meta}}
+		cache = &partCache{old: idx.heatParts[pk], next: map[uint64]*chunkPart{}, pairs: idx.pairs[All], heatOld: idx.heatOld[pk], disk: heatDiskRef{root: idx.root, meta: idx.meta}}
 	} else if p.Last() == 0 {
 		cache = &partCache{old: idx.parts[pk], next: map[uint64]*chunkPart{}, pairs: idx.pairs[p], pageOld: idx.pageOld[pk], disk: heatDiskRef{root: idx.root, meta: idx.meta}}
 	}
@@ -899,6 +899,9 @@ func queryPageOf(p Period, f Filter, offset, limit int, readSource func(sessions
 			shared.heatOld = map[partKey]*heatOld{}
 		}
 		shared.heatOld[pk] = cache.heatOldNext
+		if cache.pairsNext != nil {
+			shared.keepPairs(All, cache.pairsNext)
+		}
 	} else if cache != nil {
 		if shared.parts == nil || len(shared.parts) >= partSets && shared.parts[pk] == nil {
 			shared.parts = map[partKey]map[uint64]*chunkPart{}
