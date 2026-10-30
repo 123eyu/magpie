@@ -2847,8 +2847,11 @@ var unstreamedQuiet = 300 * time.Millisecond
 
 // callFirst is how long a call of a client's tool in Claude Code's
 // interactive mode waits for its message in the transcript before the call
-// tells the client itself (readOutput).
-var callFirst = time.Second
+// tells the client itself (readOutput). A message written before its call
+// was read 118 to 162ms after the call came in (8 calls on a real account),
+// so half a second leaves it room and makes a late message cost half as
+// long as it did at 1s.
+var callFirst = 500 * time.Millisecond
 
 type cliUsage struct {
 	Input         int             `json:"input_tokens"`

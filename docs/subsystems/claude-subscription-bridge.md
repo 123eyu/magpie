@@ -121,7 +121,8 @@ answered: on a real account, 4 runs of 8 wrote it after its MCP call
 returned. The call can only be answered by the client, which hasn't been
 told of it. So in an interactive run, `mcpCall` hands each call to the
 reader (`run.onCall`). Not shown from the transcript within `callFirst`
-(1s), the call is a reply of its own: a message with that one `tool_use`
+(500ms; a message written before its call is read 118 to 162ms after
+it), the call is a reply of its own: a message with that one `tool_use`
 (Claude Code makes its MCP calls one at a time, a message's parallel
 calls too). The first message written after such a call is the one that
 made it. Its rows are left out (`lateID`), and its usage is told with the
