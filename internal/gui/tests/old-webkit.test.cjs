@@ -143,8 +143,9 @@ test("compat.js is the first of the page's own scripts", async () => {
   assert.equal(srcs[0], "compat.js", "loaded first: " + srcs.join(", "));
   // webfonts.js is imported by app.js in a browser tab only, cfgblocked.js
   // when magpie can't write its folder, signsheets.js when a sign-in asks a
-  // value first; the checks above still read them
-  for (const f of await scripts()) if (!["webfonts.js", "cfgblocked.js", "signsheets.js"].includes(f)) assert(all.includes(f), f + " is not loaded by index.html");
+  // value first, ruleedit.js on a masking rule's Edit; the checks above
+  // still read them
+  for (const f of await scripts()) if (!["webfonts.js", "cfgblocked.js", "signsheets.js", "ruleedit.js"].includes(f)) assert(all.includes(f), f + " is not loaded by index.html");
 });
 
 test("the styles hold up in Safari 15.0", async () => {

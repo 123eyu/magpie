@@ -22227,9 +22227,10 @@ function renderRedactRules(s, row) {
   const same = (a, b) => (a.kind || "") === (b.kind || "") && (a.prefix || "") === (b.prefix || "") && (a.regex || "") === (b.regex || "");
   if (ruleEdit && !(rules[ruleEdit.at] && same(rules[ruleEdit.at], ruleEdit.was))) ruleEdit = null;
   rules.forEach((r, n) => {
-    if (ruleEdit?.at === n) return editRedactRule(r, n, row);
+    if (ruleEdit?.at === n) return window.editRedactRule(r, n, row);
     const ed = el("button", "text rule-edit", t("Edit"));
-    ed.onclick = () => {
+    ed.onclick = async () => {
+      try { await import("./ruleedit.js"); } catch (err) { return statusErr(err); }
       ruleEdit = { at: n, was: r, kind: r.kind || "", by: r.regex ? "regex" : "prefix", match: r.regex || r.prefix || "", err: "" };
       renderSettings();
       $("#redactList input.rule-match.editing")?.focus(NO_SCROLL);
@@ -22413,57 +22414,9 @@ function maskTryDraw(out) {
   if (res.off) out.append(el("div", "mask-try-note", t("Masking is off: this is what Mask secrets and Mask personal data would do")));
 }
 
-// editRedactRule: the rule at n, open to change in its place (nf1qaz2w on
-// Discord: rules could only be removed) — its name, prefix or regex and
-// what to match, laid out as the row that adds one. Save sends it alone,
-// checked as an added rule is: one magpie can't use is said in the row,
-// what was typed kept and every rule as it was. Cancel (or Escape) leaves
-// the rule as it was.
+// a rule open to change in its place; its row is in ruleedit.js, loaded
+// on its Edit (editRedactRule)
 let ruleEdit = null; // { at, was, kind, by, match, err }
-function editRedactRule(r, n, row) {
-  const d = ruleEdit;
-  const kind = input(d.kind, "API_KEY");
-  const match = input(d.match, d.by === "prefix" ? "oc_sk_" : "oc_sk_[A-Za-z0-9]{20,}");
-  kind.className = "words rule-kind editing";
-  match.className = "words rule-match editing";
-  kind.setAttribute("aria-label", t("Name"));
-  match.setAttribute("aria-label", d.by === "prefix" ? t("Prefix") : t("Regex"));
-  const by = segs([["prefix", t("Prefix")], ["regex", t("Regex")]], d.by, (v) => {
-    d.by = v;
-    match.placeholder = v === "prefix" ? "oc_sk_" : "oc_sk_[A-Za-z0-9]{20,}";
-    match.setAttribute("aria-label", v === "prefix" ? t("Prefix") : t("Regex"));
-  });
-  const save = el("button", "text rule-save", t("Save"));
-  const cancel = el("button", "text rule-cancel", t("Cancel"));
-  cancel.onclick = () => { ruleEdit = null; renderSettings(); };
-  save.onclick = () => {
-    d.kind = kind.value; d.match = match.value.trim();
-    if (!d.match) return match.focus(NO_SCROLL);
-    const rule = { kind: d.kind.trim(), [d.by === "prefix" ? "prefix" : "regex"]: d.match };
-    save.disabled = true;
-    writingPrefs(api("settings/redact-rule", { at: n, was: d.was, rule }))
-      .then((ns) => { prefs = ns; ruleEdit = null; renderSettings(); status(t("Saved"), "ok", 1500); })
-      .catch((e) => { if (ruleEdit === d) d.err = t(e.message); statusTErr(e); renderSettings(); });
-  };
-  for (const i of [kind, match]) {
-    i.oninput = () => { d.kind = kind.value; d.match = match.value; };
-    i.onkeydown = (e) => {
-      e.stopPropagation();
-      if (e.key === "Enter") save.onclick();
-      else if (e.key === "Escape") cancel.onclick();
-    };
-  }
-  // the match with Save and Cancel, kept together: a narrow window moves
-  // them as one under the name and Prefix or Regex
-  const tail = el("div", "rule-tail");
-  tail.append(match, save, cancel);
-  row(r.kind, d.err || (r.prefix ? t("Starts with {p}", { p: r.prefix }) : t("Matches {re}", { re: r.regex })), kind, by, tail);
-  // laid out as the row that adds a rule: its words, the fields under them
-  const head = $("#redactList").lastElementChild;
-  head.classList.add("rule-row", "rule-editing");
-  head.querySelector(".val").classList.add("rule-add");
-  if (d.err) head.querySelector(".sub").classList.add("err");
-}
 
 // renderUpdate fills in the version row: whether a newer magpie is out.
 // A check asked for dims its button, ignores a second click, and isn't
