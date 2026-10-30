@@ -1432,17 +1432,34 @@ func visibleLocal(chunks []*rowChunk) refSet {
 	for _, k := range keys {
 		n += len(k.keys)
 	}
-	seen := make(map[[2]uint64]struct{}, n)
+	seen := keptSeen.Swap(nil)
+	if seen == nil {
+		m := make(map[[2]uint64]struct{}, n)
+		seen = &m
+	}
+	defer keepSeen(seen)
 	for i, c := range chunks {
 		for _, k := range keys[i].keys {
-			if _, ok := seen[k.k]; ok {
+			if _, ok := (*seen)[k.k]; ok {
 				duplicates.add(rowRef{c, int(k.at)})
 			} else {
-				seen[k.k] = struct{}{}
+				(*seen)[k.k] = struct{}{}
 			}
 		}
 	}
 	return duplicates
+}
+
+// keptSeen is visibleLocal's set of ids seen, kept empty for the next
+// call as matchScratch is: made to size for every pairing it was ~210 MB
+// of the ~2 GB 90 s of polls allocated (#2278). A cleared map keeps its
+// buckets.
+var keptSeen atomic.Pointer[map[[2]uint64]struct{}]
+
+func keepSeen(seen *map[[2]uint64]struct{}) {
+	clear(*seen)
+	keptSeen.Store(seen)
+	lingerScratch()
 }
 
 // msgKeys are a chunk's message ids as visibleLocal hashes them, each
@@ -1667,6 +1684,7 @@ func mapFor[K comparable, V any](m map[K]V, n int) map[K]V {
 func ReleaseScratch() {
 	keptMatch.Store(nil)
 	keptPicks.Store(nil)
+	keptSeen.Store(nil)
 	releaseRows()
 	releasePriced()
 }
@@ -1693,6 +1711,7 @@ func lingerScratch() {
 		scratchSweep.t = time.AfterFunc(scratchLinger, func() {
 			keptMatch.Store(nil)
 			keptPicks.Store(nil)
+			keptSeen.Store(nil)
 			releaseRows()
 		})
 		return

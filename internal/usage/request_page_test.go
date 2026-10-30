@@ -366,6 +366,38 @@ func TestVisibleLocalKeptBySerial(t *testing.T) {
 	}
 }
 
+// The ids one call saw are kept as an empty set for the next (#2278): a
+// call after another, on other chunks, leaves out what a first call does,
+// and ReleaseScratch lets the set go.
+func TestVisibleLocalSeenKeptEmpty(t *testing.T) {
+	a, b := &rowChunk{}, &rowChunk{}
+	a.add(Row{}, "msg_1", 0, false)
+	a.add(Row{}, "msg_2", 1, false)
+	b.add(Row{}, "msg_2", 0, false)
+	b.add(Row{}, "msg_3", 1, false)
+	a, b = a.pack(), b.pack()
+	t.Cleanup(ReleaseScratch)
+	ReleaseScratch()
+	if got := refMap(visibleLocal([]*rowChunk{a, b})); len(got) != 1 || !got[rowRef{b, 0}] {
+		t.Fatalf("left out %v, want b's row 0", got)
+	}
+	kept := keptSeen.Load()
+	if kept == nil || len(*kept) != 0 {
+		t.Fatal("the ids seen weren't kept empty")
+	}
+	// b alone repeats nothing; the last call's msg_2 doesn't stand
+	if got := refMap(visibleLocal([]*rowChunk{b})); len(got) != 0 {
+		t.Fatalf("after another call left out %v", got)
+	}
+	if keptSeen.Load() != kept {
+		t.Fatal("a call right after made a set of its own")
+	}
+	ReleaseScratch()
+	if keptSeen.Load() != nil {
+		t.Fatal("ReleaseScratch kept the ids seen")
+	}
+}
+
 // A page read again after a call takes each chunk's newest rows from its
 // part, refs and rows: decoding the newest chunks for every page was
 // ~390 MB of 90s while an agent worked, a long session's file among them,
