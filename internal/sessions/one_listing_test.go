@@ -1,8 +1,10 @@
 package sessions
 
 import (
+	"runtime"
 	"sync/atomic"
 	"testing"
+	"unsafe"
 )
 
 // holdsEnd ends, when the test does, every hold it left: one that fails
@@ -149,5 +151,37 @@ func TestListingPoolsGiveBackEmpty(t *testing.T) {
 	putListingBuf(fs)
 	if b := listingBuf(); len(b) != 0 || (cap(b) > 0 && b[:1][0].path != "") {
 		t.Fatalf("a listing given back kept its files: %v", b[:cap(b)])
+	}
+}
+
+// A listing or path set given back is kept across garbage collections: a
+// poll collects about twice a second, and the sync.Pools they were in,
+// emptied by each, had none for most reads (#2278).
+func TestListingPoolsKeptAcrossCollections(t *testing.T) {
+	for ok := true; ok; _, ok = listingBufs.take(nil) {
+	}
+	for ok := true; ok; _, ok = pathSets.take(nil) {
+	}
+	fs := append(listingBuf(), make([]file, 64)...)
+	room := unsafe.SliceData(fs)
+	putListingBuf(fs)
+	m := pathSet()
+	m["a"] = struct{}{}
+	putPathSet(m)
+	runtime.GC()
+	runtime.GC()
+	if b := listingBuf(); cap(b) == 0 || unsafe.SliceData(b[:1]) != room {
+		t.Error("a listing given back was let go by a garbage collection")
+	} else {
+		putListingBuf(b)
+	}
+	got := pathSet()
+	defer putPathSet(got)
+	if len(got) != 0 {
+		t.Errorf("a path set given back kept its paths: %v", got)
+	}
+	got["b"] = struct{}{}
+	if _, ok := m["b"]; !ok {
+		t.Error("a path set given back was let go by a garbage collection")
 	}
 }

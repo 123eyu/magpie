@@ -523,8 +523,8 @@ func statFiles(files []file, follow bool) []file {
 			f.size, f.mod, ok[i] = fi.Size(), fi.ModTime(), true
 		}
 	})
-	for _, l := range listed {
-		l.Done()
+	for i, l := range listed {
+		l.Done(order[i])
 	}
 	kept := files[:0]
 	for i, f := range files {
@@ -584,9 +584,17 @@ func ccFiles(agent, dir string) []file {
 	return heldFiles("cc\x00"+agent+"\x00"+dir, func() []file { return listCCFiles(agent, dir) })
 }
 
+// ccListed is how many files each folder's last listCCFiles found: its
+// listing grown from none, a file at a time, was ~35 MB of a minute of the
+// page's polls over 13 GB of Claude Code history (#2278).
+var ccListed sync.Map // dir → int
+
 func listCCFiles(agent, dir string) []file {
 	projects := filepath.Join(dir, "projects")
-	var out []file
+	n, _ := ccListed.Load(dir)
+	last, _ := n.(int)
+	out := make([]file, 0, last+last/8)
+	defer func() { ccListed.Store(dir, len(out)) }()
 	for _, project := range readDirectory(projects) {
 		if !dirent.IsFolder(projects, project) {
 			continue
@@ -674,14 +682,21 @@ func distinctInto(out []file, lists ...[]file) []file {
 // back after it: a set of every session file's path, made new on each of
 // a poll's several passes (distinctOf, refresh, pruneCalls), was ~100 MB
 // of what a minute of polls allocated over ~34k files (#2278). A set
-// keeps its room when cleared.
-var pathSets = sync.Pool{New: func() any { return map[string]struct{}{} }}
+// keeps its room when cleared. They are kept on a shelf: a poll collects
+// garbage about twice a second, which emptied a sync.Pool of them before
+// the next pass.
+var pathSets shelf[map[string]struct{}]
 
-func pathSet() map[string]struct{} { return pathSets.Get().(map[string]struct{}) }
+func pathSet() map[string]struct{} {
+	if m, ok := pathSets.take(nil); ok {
+		return m
+	}
+	return map[string]struct{}{}
+}
 
 func putPathSet(m map[string]struct{}) {
 	clear(m)
-	pathSets.Put(m)
+	pathSets.give(m, nil)
 }
 
 // distinctPaths is fs with each path kept once, the first time it is
@@ -689,11 +704,12 @@ func putPathSet(m map[string]struct{}) {
 // holds twice under one id (a TEXT and a BLOB row, #2932), or a folder
 // two agents are told to share, would otherwise be counted twice.
 func distinctPaths(fs []file) []file {
-	seen := make(map[string]bool, len(fs))
+	seen := pathSet()
+	defer putPathSet(seen)
 	out := fs[:0]
 	for _, f := range fs {
-		if !seen[f.path] {
-			seen[f.path] = true
+		if _, ok := seen[f.path]; !ok {
+			seen[f.path] = struct{}{}
 			out = append(out, f)
 		}
 	}
@@ -929,7 +945,7 @@ func listedRollouts(root string) (out []file, ok bool) {
 		if !ok {
 			return false
 		}
-		defer entries.Done()
+		defer entries.Done(real)
 		prev, _ := rolloutsSeen.Load(shown)
 		seen, _ := prev.([]file)
 		start, made, leaf := len(out), false, true

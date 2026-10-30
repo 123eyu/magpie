@@ -3,6 +3,8 @@ package dirent
 import (
 	"encoding/binary"
 	"io/fs"
+	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -41,7 +43,8 @@ var bufs = sync.Pool{New: func() any { b := make([]byte, 64<<10); return &b }}
 // stats reads dir's entries with getattrlistbulk: a Sessions read stats
 // each of ~21k session files on every 15 s poll, ~10 µs a file on APFS,
 // and this is one call for every few hundred.
-func stats(dir string, out Listing) (Listing, bool) {
+// old is dir's last listing, whose names are taken where they are the same.
+func stats(dir string, out, old Listing) (Listing, bool) {
 	fd, err := unix.Open(dir, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return nil, false
@@ -65,7 +68,7 @@ func stats(dir string, out Listing) (Listing, bool) {
 		}
 		b := buf
 		for range int(n) {
-			if !entry(b, &out) {
+			if !entry(b, &out, old) {
 				return nil, false
 			}
 			b = b[binary.NativeEndian.Uint32(b):]
@@ -75,8 +78,8 @@ func stats(dir string, out Listing) (Listing, bool) {
 
 // entry reads one entry of getattrlistbulk's answer into out: its length,
 // the attributes it returned, then each in the order of their bits, a
-// file's data length after the common ones.
-func entry(b []byte, out *Listing) bool {
+// file's data length after the common ones. A name old has is its string.
+func entry(b []byte, out *Listing, old Listing) bool {
 	if len(b) < 4 {
 		return false
 	}
@@ -99,7 +102,7 @@ func entry(b []byte, out *Listing) bool {
 		if off < 0 || n < 1 || at+n > len(e) {
 			return false
 		}
-		name = string(e[at : at+n-1])
+		name = nameOf(e[at:at+n-1], old)
 		p = p[8:]
 	}
 	typ := uint32(0)
@@ -137,4 +140,15 @@ func entry(b []byte, out *Listing) bool {
 	}
 	*out = append(*out, Entry{name, s})
 	return true
+}
+
+// nameOf is b as a string, old's where old has it.
+func nameOf(b []byte, old Listing) string {
+	if len(b) > 0 && len(old) > 0 {
+		v := unsafe.String(&b[0], len(b)) // compared only, never kept
+		if i, ok := slices.BinarySearchFunc(old, v, func(e Entry, v string) int { return strings.Compare(e.Name, v) }); ok {
+			return old[i].Name
+		}
+	}
+	return string(b)
 }

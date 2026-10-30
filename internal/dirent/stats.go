@@ -45,11 +45,13 @@ func (l Listing) Get(name string) (Stat, bool) {
 //
 // A caller done reading the listing gives it back (Done) for the next.
 func Stats(dir string) (Listing, bool) {
-	var l Listing
-	if p, _ := listings.Get().(*Listing); p != nil {
-		l = *p
+	old, room := taken(dir)
+	l, ok := stats(dir, room, old)
+	if old != nil {
+		listings.Lock()
+		keepRoom(old)
+		listings.Unlock()
 	}
-	l, ok := stats(dir, l)
 	if !ok {
 		return nil, false
 	}
@@ -58,17 +60,84 @@ func Stats(dir string) (Listing, bool) {
 }
 
 // listings are Stats' answers given back: a listing made new for each
-// folder, grown an entry at a time, was ~95 MB of a minute of the page's
-// polls (#2278).
-var listings sync.Pool
+// folder, grown an entry at a time, and each entry's name copied again,
+// was ~95 MB of a minute of the page's polls (#2278). A folder's last
+// listing is kept, so the next read of it takes its names where they are
+// the same, and the one before it is room for the next folder's. They are
+// kept here, not in a sync.Pool: a poll collects garbage about twice a
+// second, and each collection emptied the pool before the next folder was
+// read. A Sessions read holds a listing of each Claude Code project at
+// once, a few hundred, so what is kept is bounded by its entries,
+// keptEntries in all (~7 MB, and the names). Each folder's last listing
+// and the room of the one before are kept: 1<<16 kept little of a history
+// of ~23k session files, and the listings were made new again.
+var listings struct {
+	sync.Mutex
+	last    map[string]Listing // a folder's last listing
+	room    []Listing          // cleared
+	entries int                // the room of those kept
+}
 
-// Done gives l back to be the next Stats' answer: whoever had it reads it
-// no more. A Get of it before is only a copy of its entry.
-func (l Listing) Done() {
-	if cap(l) == 0 || cap(l) > 1<<14 {
-		return // none, or a folder of more files than the pool keeps room for
+const keptEntries = 1 << 17
+
+// taken is dir's last listing and room for its next, each taken from
+// what is kept, or none.
+func taken(dir string) (old, room Listing) {
+	listings.Lock()
+	defer listings.Unlock()
+	if old = listings.last[dir]; old != nil {
+		delete(listings.last, dir)
+		listings.entries -= cap(old)
 	}
+	n := len(listings.room)
+	if n == 0 {
+		return old, nil
+	}
+	at := n - 1 // room enough for dir as last listed, or the last given back
+	for i, r := range listings.room {
+		if cap(r) >= len(old) {
+			at = i
+			break
+		}
+	}
+	room = listings.room[at]
+	listings.room[at] = listings.room[n-1]
+	listings.room[n-1] = nil
+	listings.room = listings.room[:n-1]
+	listings.entries -= cap(room)
+	return old, room
+}
+
+// keepRoom keeps l, cleared, as room for a next listing, while the kept
+// have room. listings is held.
+func keepRoom(l Listing) {
 	clear(l[:cap(l)])
-	l = l[:0]
-	listings.Put(&l)
+	if listings.entries+cap(l) <= keptEntries {
+		listings.room = append(listings.room, l[:0])
+		listings.entries += cap(l)
+	}
+}
+
+// Done gives l, dir's listing, back for the next Stats of dir: whoever had
+// it reads it no more. A Get of it before is only a copy of its entry.
+func (l Listing) Done(dir string) {
+	if cap(l) == 0 || cap(l) > 1<<14 {
+		return // none, or a folder of more files than are kept
+	}
+	listings.Lock()
+	defer listings.Unlock()
+	if prev := listings.last[dir]; prev != nil { // read twice at once
+		delete(listings.last, dir)
+		listings.entries -= cap(prev)
+		keepRoom(prev)
+	}
+	if listings.entries+cap(l) > keptEntries {
+		keepRoom(l)
+		return
+	}
+	if listings.last == nil {
+		listings.last = map[string]Listing{}
+	}
+	listings.last[dir] = l
+	listings.entries += cap(l)
 }

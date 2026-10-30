@@ -1192,20 +1192,21 @@ func CallSourcesAndCodexIdentities() ([]CallSource, map[string]CodexIdentity) {
 	return sources, codexIdentitiesOf(codex)
 }
 
-// listingBufs are listings a read takes and lets go of before it ends.
-var listingBufs sync.Pool
+// listingBufs are listings a read takes and lets go of before it ends,
+// kept on a shelf: a sync.Pool, emptied by the collections a poll makes
+// about twice a second, had none for most reads (#2278).
+var listingBufs shelf[[]file]
 
 func listingBuf() []file {
-	if b, ok := listingBufs.Get().(*[]file); ok {
-		return (*b)[:0]
+	if b, ok := listingBufs.take(nil); ok {
+		return b[:0]
 	}
 	return nil
 }
 
 func putListingBuf(fs []file) {
 	clear(fs[:cap(fs)]) // its files' strings go with the listing
-	fs = fs[:0]
-	listingBufs.Put(&fs)
+	listingBufs.give(fs[:0], func(h, fs []file) bool { return cap(h) < cap(fs) })
 }
 
 func callSourcesOf(fs []file) []CallSource {
