@@ -943,6 +943,7 @@ func openCodeLike(at place, id, name, icon, bin, dir, auth string, ua []string, 
 			return wiringOff(name, path, func(k string) (string, bool) { return edit.GetJSON(path, "provider."+magpieID+".options."+k) },
 				"baseURL", at.v1(), "apiKey", openCodeKeyAt(id, at.gw()))
 		},
+		ListOnly: true,
 		Sync: func() error {
 			// a model of magpie's chosen, but its provider gone from the
 			// file: put it back, or the agent has nothing to send it to
@@ -1266,6 +1267,7 @@ func piLikeKeyed(at place, id, name, dir string, key func() string) *Agent {
 			return wiringOff(name, modelsPath, func(k string) (string, bool) { return edit.GetJSON(modelsPath, "providers."+magpieID+"."+k) },
 				"baseUrl", at.v1(), "apiKey", key())
 		},
+		ListOnly: true,
 		Sync: func() error {
 			if err := syncJSON(modelsPath, "providers."+magpieID, block); err != nil {
 				return err
@@ -1395,7 +1397,8 @@ func gooseIn(at place, cfg string) *Agent {
 			return wiringOff("Goose", provider, func(k string) (string, bool) { return edit.GetJSON(provider, k) },
 				"base_url", at.v1(), "headers.Authorization", "Bearer "+gooseKey(at))
 		},
-		Sync: func() error { return syncGooseProvider(provider, at) },
+		ListOnly: true,
+		Sync:     func() error { return syncGooseProvider(provider, at) },
 		// goose loads custom_providers when it starts
 		Notice: func() string {
 			if p, _ := gooseActive(path); p == gooseProviderID && Running(`Goose\.app/`, `(^|/)goose( |$)`) {
@@ -1676,6 +1679,7 @@ func crushAt(at place, path, data string) *Agent {
 			return wiringOff("Crush", path, func(k string) (string, bool) { return get("providers." + magpieID + "." + k) },
 				"base_url", at.v1(), "api_key", at.gwKey())
 		},
+		ListOnly: true,
 		Sync: func() error {
 			return syncJSON(path, "providers."+magpieID, provider)
 		},

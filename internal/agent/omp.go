@@ -455,6 +455,7 @@ func ompAt(at place, dir string, entry func() ompProviderEntry) *Agent {
 		// a role's thinking level is omp's, after whichever model it is on;
 		// a list of models is the user's own
 		SplitSuffix: ompSplit,
+		ListOnly:    true,
 		Sync: func() error {
 			models := pick("models")
 			if err := syncYAML(models, "providers."+magpieID, func() any { return ompProvider(models) }); err != nil {

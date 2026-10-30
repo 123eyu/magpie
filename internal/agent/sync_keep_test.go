@@ -49,6 +49,8 @@ func TestPiKeepsTheirKeysInMagpiesProvider(t *testing.T) {
   }
 }
 `)
+	// Pi runs a model of magpie's: connected, so its list follows
+	writeFile(t, filepath.Join(home, ".pi", "agent", "settings.json"), `{"defaultProvider":"magpie","defaultModel":"relay/glm-4.6"}`)
 	SyncCatalog()
 	p := providerAt(t, piModels, "providers")
 	compat, _ := p["compat"].(map[string]any)
