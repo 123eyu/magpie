@@ -3,6 +3,7 @@ package usage
 import (
 	"fmt"
 	"maps"
+	"runtime"
 	"testing"
 	"time"
 
@@ -116,6 +117,62 @@ func TestPairScratchGoesWhenUnused(t *testing.T) {
 	for deadline := time.Now().Add(30 * time.Second); keptMatch.Load() != nil || keptPicks.Load() != nil; time.Sleep(10 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatal("the scratch was kept with no pairing using it")
+		}
+	}
+}
+
+// A pass's decode buffer is kept for the next across collections, as the
+// matcher's scratch is (#2278), and goes on ReleaseScratch.
+func TestRowBufferKeptPastCollections(t *testing.T) {
+	now := time.Date(2026, 10, 1, 13, 0, 0, 0, time.UTC)
+	c := &rowChunk{}
+	for i := range 300 {
+		c.add(Row{Record: Record{Time: now.Add(-time.Duration(i) * time.Minute), Agent: "claude", Model: "m", Session: "s", Input: i, RequestID: fmt.Sprint("req-", i)}}, "", int64(i), false)
+	}
+	packed := c.pack()
+	if len(packed.Archive) == 0 {
+		t.Fatal("the chunk wasn't packed")
+	}
+	t.Cleanup(ReleaseScratch)
+	ReleaseScratch()
+	read := func() *rowBuffer {
+		rows := lentRows()
+		open := rows.of(packed)
+		if len(open.Rows) != 300 || open.row(299).Input != 299 {
+			t.Fatalf("read %d rows", len(open.Rows))
+		}
+		b := rows.b
+		rows.release()
+		return b
+	}
+	first := read()
+	runtime.GC()
+	runtime.GC()
+	if got := read(); got != first {
+		t.Fatal("a pass after a collection decoded into a new buffer")
+	}
+	// two passes at once each have one, and both are kept
+	a, b := lentRows(), lentRows()
+	a.of(packed)
+	b.of(packed)
+	if a.b == b.b {
+		t.Fatal("two passes at once shared a buffer")
+	}
+	a.release()
+	b.release()
+	n := 0
+	for i := range keptRows {
+		if keptRows[i].Load() != nil {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Fatalf("%d buffers kept after two passes", n)
+	}
+	ReleaseScratch()
+	for i := range keptRows {
+		if keptRows[i].Load() != nil {
+			t.Fatal("ReleaseScratch kept a decode buffer")
 		}
 	}
 }

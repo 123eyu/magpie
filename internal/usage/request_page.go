@@ -453,7 +453,7 @@ type chunkRows struct {
 }
 
 // rowBuffer is what a chunkRows decodes into, kept between passes
-// (rowBuffers): each of a page's passes over every chunk grew its own from
+// (keptRows): each of a page's passes over every chunk grew its own from
 // nothing, and a warm start's page and Codex's effort after it allocated
 // ~30 MB a pass to read the same rows (#3493).
 type rowBuffer struct {
@@ -464,7 +464,40 @@ type rowBuffer struct {
 	open    rowChunk
 }
 
-var rowBuffers = sync.Pool{New: func() any { return new(rowBuffer) }}
+// keptRows is the buffers passes put back, kept as matchScratch is. A
+// sync.Pool kept them until the next collection, which a poll while an
+// agent works runs several times a second, and the next pass grew one to
+// the largest session chunk again: ~550 MB of the ~2.7 GB 90 s of polls
+// allocated, in matchedBlocks alone (#2278). They go with the matcher's
+// scratch, on ReleaseScratch or scratchLinger after the last pass.
+var keptRows [4]atomic.Pointer[rowBuffer]
+
+// rowBufferFor is a kept buffer, or a new one when every kept one is out
+func rowBufferFor() *rowBuffer {
+	for i := range keptRows {
+		if b := keptRows[i].Swap(nil); b != nil {
+			return b
+		}
+	}
+	return new(rowBuffer)
+}
+
+// keepRows puts b back, unless as many are kept as keptRows holds
+func keepRows(b *rowBuffer) {
+	for i := range keptRows {
+		if keptRows[i].CompareAndSwap(nil, b) {
+			lingerScratch()
+			return
+		}
+	}
+}
+
+// releaseRows lets go of every kept buffer
+func releaseRows() {
+	for i := range keptRows {
+		keptRows[i].Store(nil)
+	}
+}
 
 // lentRows is a chunkRows whose strings are lent (chunkRows.lent).
 func lentRows() chunkRows { return chunkRows{lent: true} }
@@ -477,7 +510,7 @@ func (r *chunkRows) of(c *rowChunk) *rowChunk {
 	}
 	if r.c != c {
 		if r.b == nil {
-			r.b = rowBuffers.Get().(*rowBuffer)
+			r.b = rowBufferFor()
 		}
 		b := r.b
 		var lent *[]byte
@@ -511,7 +544,7 @@ func (r *chunkRows) release() {
 		b.open = rowChunk{}
 		clear(b.strs[:cap(b.strs)]) // the strings of a block not lent are its own
 		r.b, r.c, r.open = nil, nil, nil
-		rowBuffers.Put(b)
+		keepRows(b)
 	}
 }
 
@@ -1634,6 +1667,7 @@ func mapFor[K comparable, V any](m map[K]V, n int) map[K]V {
 func ReleaseScratch() {
 	keptMatch.Store(nil)
 	keptPicks.Store(nil)
+	releaseRows()
 	releasePriced()
 }
 
@@ -1659,6 +1693,7 @@ func lingerScratch() {
 		scratchSweep.t = time.AfterFunc(scratchLinger, func() {
 			keptMatch.Store(nil)
 			keptPicks.Store(nil)
+			releaseRows()
 		})
 		return
 	}
