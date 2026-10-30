@@ -2641,6 +2641,14 @@ type Entry struct {
 	// Codex is the entry the provider's own list gives the model in
 	// Codex's shape (catalog.Model's), handed to Codex as it is
 	Codex json.RawMessage `json:"-"`
+	// AlwaysThinks, DynamicTools and DefaultEffort are what the provider's
+	// own list says of the model (catalog.Model's): it always thinks, it
+	// loads tools mid-conversation, it thinks at this effort unasked.
+	// Kimi Code's list says them, and Kimi Code is told them (a group
+	// has none of them)
+	AlwaysThinks  bool   `json:"-"`
+	DynamicTools  bool   `json:"-"`
+	DefaultEffort string `json:"-"`
 }
 
 // Catalog lists the routing groups, then every exposed model of every ready
@@ -2814,7 +2822,8 @@ func entryFor(p Provider, m catalog.Model, s settings.Settings) Entry {
 	name := cmp.Or(m.Name, m.ID)
 	e := Entry{ID: p.ID + "/" + m.ID, Model: m.ID, Family: p.Family, Name: name, Efforts: effortsOf(m), Provider: p,
 		Images: images, ImageInput: imageInput, Context: ctx, WindowSet: p.ContextOf(m.ID) > 0, Output: output, OutputSet: outputOf(s, p.ID, m.ID) > 0, Free: m.Free, Rate: m.Rate, RateWas: m.RateWas, Tiers: m.Tiers, Released: m.Released,
-		Inputs: m.InputModalities, Outputs: m.OutputModalities, Codex: m.Codex}
+		Inputs: m.InputModalities, Outputs: m.OutputModalities, Codex: m.Codex,
+		AlwaysThinks: m.AlwaysThinks, DynamicTools: m.DynamicTools, DefaultEffort: m.DefaultEffort}
 	if lv, ok := catalog.CodexLevels(m.Codex); ok {
 		// the levels the vendor lists the model at in Codex's shape are
 		// its word, over models.dev's for the same id (Decorate)
@@ -2828,7 +2837,7 @@ func entryFor(p Provider, m catalog.Model, s settings.Settings) Entry {
 	// a model that thinks still does with the levels the user kept or
 	// none at all; one its source says nothing of thinks as most of the
 	// providers serving it say (#402)
-	e.Reasoning = m.Reasoning || len(e.Efforts) > 0 || catalog.Thinks(m.ID)
+	e.Reasoning = m.Reasoning || m.AlwaysThinks || len(e.Efforts) > 0 || catalog.Thinks(m.ID)
 	e.Efforts = effortsKept(e.Efforts, s.ModelEfforts[e.ID])
 	// levels the user gave a model with none known say it thinks too, so
 	// an agent told its levels isn't told it doesn't reason
@@ -2846,6 +2855,7 @@ func entryFor(p Provider, m catalog.Model, s settings.Settings) Entry {
 	// none (SetModelReasonless), whatever its list says
 	if s.ModelReasonless[e.ID] {
 		e.Efforts, e.Reasoning, e.AgentsV2, e.Reasonless = nil, false, false, true
+		e.AlwaysThinks, e.DefaultEffort = false, ""
 	}
 	return e
 }

@@ -647,6 +647,7 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		if codex != nil {
 			codexFacts(&m, r, codex)
 		}
+		kimiFacts(&m, r)
 		out = append(out, m)
 	}
 	return out, v.HasMore, v.LastID, nil
@@ -728,6 +729,48 @@ type liveModel struct {
 	Window    any    `json:"context_window"`
 	MaxWindow any    `json:"max_context_window"`
 	Inputs    any    `json:"input_modalities"`
+	// what Kimi Code's list (/coding/v1/models) says of a model's
+	// thinking and tools, flat and nested: supports_thinking_type
+	// "only" is a model that always thinks, supports_dynamic_tools one
+	// that loads tools mid-conversation, think_efforts' default_effort
+	// the effort it thinks at unasked (Model.AlwaysThinks, DynamicTools,
+	// DefaultEffort). any, as an odd value mustn't lose the whole list
+	ThinkingType any `json:"supports_thinking_type"`
+	DynTools     any `json:"supports_dynamic_tools"`
+	ThinkEfforts any `json:"think_efforts"`
+	Reasoning    any `json:"reasoning"`
+	Tools        any `json:"tools"`
+}
+
+// kimiFacts reads what Kimi Code's model list says of a model's thinking
+// and tools into m, from its flat fields or their nested forms
+// (reasoning.type, reasoning.effort.default, tools.dynamic_load).
+func kimiFacts(m *Model, r liveModel) {
+	field := func(v any, keys ...string) any {
+		for _, k := range keys {
+			o, ok := v.(map[string]any)
+			if !ok {
+				return nil
+			}
+			v = o[k]
+		}
+		return v
+	}
+	if t, _ := r.ThinkingType.(string); t == "only" {
+		m.AlwaysThinks = true
+	} else if t, _ := field(r.Reasoning, "type").(string); t == "only" && r.ThinkingType == nil {
+		m.AlwaysThinks = true
+	}
+	if b, ok := r.DynTools.(bool); ok {
+		m.DynamicTools = b
+	} else if b, ok := field(r.Tools, "dynamic_load").(bool); ok {
+		m.DynamicTools = b
+	}
+	if d, _ := field(r.ThinkEfforts, "default_effort").(string); d != "" {
+		m.DefaultEffort = d
+	} else if d, _ := field(r.Reasoning, "effort", "default").(string); d != "" {
+		m.DefaultEffort = d
+	}
 }
 
 // codexFacts reads what a Codex catalog entry says of its model into m:
