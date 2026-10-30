@@ -740,6 +740,13 @@ func queryPageOf(p Period, f Filter, offset, limit int, readSource func(sessions
 	}
 	limit = min(limit, 500)
 	offset = max(0, offset)
+	// this computer's zone is one key however it is named: the warm-up and
+	// the tray ask with none, the Usage page with time.Local, and each
+	// built and kept a page of its own, so the warm-up's warmed nothing the
+	// page read and page-v1.json held both (#2278)
+	if f.Zone == time.Local {
+		f.Zone = nil
+	}
 	// The time is read once, so that the rows, the chart and the day the page
 	// is kept for are of one day when midnight falls while it is worked out,
 	// and read in the reader's zone, whose days and hours the page shows.

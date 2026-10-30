@@ -15,51 +15,25 @@ import (
 // the page a pairing of every chunk does. A page of older rows, a
 // settled file changed, or no file, pairs them all.
 func TestPageSettledFromDisk(t *testing.T) {
-	pageHome(t)
-	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
-	write := func(id string, at time.Time, input int) string {
-		path := filepath.Join(sessions.CodexDir(), "sessions", at.Format("2006/01/02"), "rollout-"+at.Format("2006-01-02T15-04-05")+"-"+id+".jsonl")
-		writeCodexCall(t, path, id, "s"+id, `"vscode"`, "resp-"+id, "m", "low", at, input, 10)
-		return path
-	}
-	var settled string
-	for i, days := range []int{40, 20, 10, 5, 0} {
-		id := string(rune('a' + i))
-		at := now.AddDate(0, 0, -days).Add(-time.Hour)
-		path := write(id, at, 100+i)
-		if days == 20 {
-			settled = path
-		}
-		Append(Record{Time: at.Add(time.Minute), Agent: "codex", Provider: "openai", Model: "m", Input: 100 + i, Output: 10, Status: 200, ResponseID: "resp-" + id, Session: "s" + id})
-	}
-	paired := []int{}
-	pageSplitting = func(n int) { paired = append(paired, n) }
-	t.Cleanup(func() { pageSplitting = nil })
-	restart := func() {
-		requestCache.Lock()
-		requestCache.parts, requestCache.pageOld, requestCache.pairs, requestCache.pages = nil, nil, nil, map[pageKey]RequestPage{}
-		requestCache.Unlock()
-	}
-	restart()
-	t.Cleanup(restart)
+	now, settled, paired, restart := pageHistory(t)
 	first := QueryPage(All, Filter{}, 0, 1)
-	if len(paired) != 1 || len(first.Rows) != 1 || first.Total != 5 {
-		t.Fatalf("first page: pairings %v, %d rows of %d", paired, len(first.Rows), first.Total)
+	if len(*paired) != 1 || len(first.Rows) != 1 || first.Total != 5 {
+		t.Fatalf("first page: pairings %v, %d rows of %d", *paired, len(first.Rows), first.Total)
 	}
-	all := paired[0]
+	all := (*paired)[0]
 	if _, err := os.Stat(pageDiskPath()); err != nil {
 		t.Fatal(err)
 	}
 	restart()
-	if again := QueryPage(All, Filter{}, 0, 1); paired[len(paired)-1] >= all || !reflect.DeepEqual(again, first) {
-		t.Fatalf("started again, paired %d of %d: %+v, was %+v", paired[len(paired)-1], all, again, first)
+	if again := QueryPage(All, Filter{}, 0, 1); (*paired)[len(*paired)-1] >= all || !reflect.DeepEqual(again, first) {
+		t.Fatalf("started again, paired %d of %d: %+v, was %+v", (*paired)[len(*paired)-1], all, again, first)
 	}
 	// the fourth newest is older than cut: none of the recent chunks has it
 	restart()
-	n := len(paired)
+	n := len(*paired)
 	deep := QueryPage(All, Filter{}, 3, 1)
-	if len(paired) != n+1 || len(deep.Rows) != 1 || deep.Rows[0].Input != 101 {
-		t.Fatalf("a page of older rows: pairings %v, rows %+v", paired[n:], deep.Rows)
+	if len(*paired) != n+1 || len(deep.Rows) != 1 || deep.Rows[0].Input != 101 {
+		t.Fatalf("a page of older rows: pairings %v, rows %+v", (*paired)[n:], deep.Rows)
 	}
 	restart()
 	os.Remove(pageDiskPath())
@@ -67,23 +41,66 @@ func TestPageSettledFromDisk(t *testing.T) {
 	if cold := QueryPage(All, Filter{}, 3, 1); !reflect.DeepEqual(cold, deep) {
 		t.Fatalf("a page of older rows %+v, cold %+v", deep, cold)
 	}
-	pageSplitting = func(n int) { paired = append(paired, n) }
+	pageSplitting = func(n int) { *paired = append(*paired, n) }
 	restart()
 	os.Remove(pageDiskPath())
 	QueryPage(All, Filter{}, 0, 1)
 	writeCodexCall(t, settled, "b", "sb", `"vscode"`, "resp-b", "m", "low", now.AddDate(0, 0, -20).Add(-time.Hour), 1001, 10)
 	restart()
 	changed := QueryPage(All, Filter{}, 0, 1)
-	if paired[len(paired)-1] < all {
-		t.Fatalf("a settled file changed, paired %d of %d", paired[len(paired)-1], all)
+	if (*paired)[len(*paired)-1] < all {
+		t.Fatalf("a settled file changed, paired %d of %d", (*paired)[len(*paired)-1], all)
 	}
 	restart()
-	if again := QueryPage(All, Filter{}, 0, 1); paired[len(paired)-1] >= all || !reflect.DeepEqual(again, changed) {
-		t.Fatalf("started again after the change, paired %d of %d: %+v, was %+v", paired[len(paired)-1], all, again, changed)
+	if again := QueryPage(All, Filter{}, 0, 1); (*paired)[len(*paired)-1] >= all || !reflect.DeepEqual(again, changed) {
+		t.Fatalf("started again after the change, paired %d of %d: %+v, was %+v", (*paired)[len(*paired)-1], all, again, changed)
 	}
 	restart()
 	os.Remove(pageDiskPath())
 	if cold := QueryPage(All, Filter{}, 0, 1); !reflect.DeepEqual(cold, changed) {
 		t.Fatalf("after a settled file changed %+v, cold %+v", changed, cold)
+	}
+}
+
+// pageHistory writes five Codex calls 40, 20, 10, 5 and 0 days back, each
+// with its gateway call, and counts the chunks each page's pairing pairs.
+// settled is the 20-day call's file; restart drops what a start doesn't
+// have.
+func pageHistory(t *testing.T) (now time.Time, settled string, paired *[]int, restart func()) {
+	pageHome(t)
+	now = holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
+	for i, days := range []int{40, 20, 10, 5, 0} {
+		id := string(rune('a' + i))
+		at := now.AddDate(0, 0, -days).Add(-time.Hour)
+		path := filepath.Join(sessions.CodexDir(), "sessions", at.Format("2006/01/02"), "rollout-"+at.Format("2006-01-02T15-04-05")+"-"+id+".jsonl")
+		writeCodexCall(t, path, id, "s"+id, `"vscode"`, "resp-"+id, "m", "low", at, 100+i, 10)
+		if days == 20 {
+			settled = path
+		}
+		Append(Record{Time: at.Add(time.Minute), Agent: "codex", Provider: "openai", Model: "m", Input: 100 + i, Output: 10, Status: 200, ResponseID: "resp-" + id, Session: "s" + id})
+	}
+	paired = &[]int{}
+	pageSplitting = func(n int) { *paired = append(*paired, n) }
+	t.Cleanup(func() { pageSplitting = nil })
+	restart = func() {
+		requestCache.Lock()
+		requestCache.parts, requestCache.pageOld, requestCache.pairs, requestCache.pages = nil, nil, nil, map[pageKey]RequestPage{}
+		requestCache.Unlock()
+	}
+	restart()
+	t.Cleanup(restart)
+	return now, settled, paired, restart
+}
+
+// The Usage page names this computer's zone as time.Local and the warm-up
+// names none: one page, which the warm-up's pairing built for the page.
+func TestLocalZoneIsTheWarmUpsPage(t *testing.T) {
+	_, _, paired, _ := pageHistory(t)
+	warm := QueryPage(All, Filter{}, 0, 50)
+	if len(*paired) != 1 {
+		t.Fatalf("the warm-up paired %v", *paired)
+	}
+	if page := QueryPage(All, Filter{Zone: time.Local}, 0, 50); len(*paired) != 1 || !reflect.DeepEqual(page, warm) {
+		t.Fatalf("the page in time.Local paired %v: %+v, the warm-up's %+v", *paired, page, warm)
 	}
 }
