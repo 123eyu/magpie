@@ -20,15 +20,18 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -73,6 +76,11 @@ type shim struct {
 
 	exited chan struct{}
 	exit   error
+
+	// images is where a message's images are written for their paths to
+	// be pasted, made with the first; images counts them
+	images  string
+	nimages int
 }
 
 // Run runs Claude Code at path, args being the bridge's `claude -p` ones,
@@ -118,11 +126,13 @@ func Run(args []string) error {
 		return printMode(path, pargs)
 	}
 	defer s.stop()
+	defer s.dropImages()
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	go func() {
 		<-sigs
 		s.stop()
+		s.dropImages()
 		os.Exit(1)
 	}()
 	if err := s.ready(); err != nil {
@@ -391,13 +401,13 @@ func (s *shim) input(r io.Reader) error {
 			}
 			s.emit(map[string]any{"type": "control_response", "response": resp})
 		case "user":
-			text, ok := userText(m.Message.Content)
-			if !ok {
+			pieces, err := s.userPieces(m.Message.Content)
+			if err != nil {
 				s.emit(map[string]any{"type": "result", "subtype": "error_during_execution", "is_error": true, "session_id": s.sid,
-					"result": "an image can't be pasted into Claude Code's interactive mode"})
+					"result": "this message can't be pasted into Claude Code's interactive mode: " + err.Error()})
 				continue
 			}
-			if err := s.send(text); err != nil {
+			if err := s.send(pieces); err != nil {
 				return err
 			}
 			if m.UUID != "" {
@@ -408,34 +418,99 @@ func (s *shim) input(r io.Reader) error {
 	return sc.Err()
 }
 
-// userText is a user message's text, its blocks one after another; false
-// for one with anything but text.
-func userText(raw json.RawMessage) (string, bool) {
-	var s string
-	if json.Unmarshal(raw, &s) == nil {
-		return s, true
+// piece is a part of a user message as it is pasted: words, or the path
+// of an image file, which Claude Code's prompt takes as that image
+// ("[Image #1]") when it is pasted alone.
+type piece struct{ text, image string }
+
+// imageTypes are the images Claude Code's prompt takes, by their file's
+// extension.
+var imageTypes = map[string]string{"image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp"}
+
+// userPieces is a user message as it is pasted: its text blocks one after
+// another, an image block written to a file of its own.
+func (s *shim) userPieces(raw json.RawMessage) ([]piece, error) {
+	var str string
+	if json.Unmarshal(raw, &str) == nil {
+		return []piece{{text: str}}, nil
 	}
 	var blocks []struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
+		Type   string `json:"type"`
+		Text   string `json:"text"`
+		Source struct {
+			Type      string `json:"type"`
+			MediaType string `json:"media_type"`
+			Data      string `json:"data"`
+		} `json:"source"`
 	}
-	if json.Unmarshal(raw, &blocks) != nil {
-		return "", false
+	if err := json.Unmarshal(raw, &blocks); err != nil {
+		return nil, err
 	}
+	var out []piece
 	var b strings.Builder
 	for _, bl := range blocks {
-		if bl.Type != "text" {
-			return "", false
+		switch bl.Type {
+		case "text":
+			if bl.Text == "" {
+				continue
+			}
+			if b.Len() > 0 || len(out) > 0 {
+				b.WriteString("\n\n")
+			}
+			b.WriteString(bl.Text)
+		case "image":
+			path, err := s.writeImage(bl.Source.Type, bl.Source.MediaType, bl.Source.Data)
+			if err != nil {
+				return nil, err
+			}
+			if b.Len() > 0 {
+				b.WriteString("\n\n")
+				out = append(out, piece{text: b.String()})
+				b.Reset()
+			}
+			out = append(out, piece{image: path})
+		default:
+			return nil, fmt.Errorf("a %s block", bl.Type)
 		}
-		if bl.Text == "" {
-			continue
-		}
-		if b.Len() > 0 {
-			b.WriteString("\n\n")
-		}
-		b.WriteString(bl.Text)
 	}
-	return b.String(), true
+	if b.Len() > 0 || len(out) == 0 {
+		out = append(out, piece{text: b.String()})
+	}
+	return out, nil
+}
+
+// writeImage writes an image block's bytes to a file of its own, named
+// for its type, and returns its path.
+func (s *shim) writeImage(source, mediaType, data string) (string, error) {
+	if source != "base64" {
+		return "", fmt.Errorf("an image by %s", source)
+	}
+	b, err := base64.StdEncoding.DecodeString(data)
+	if err != nil {
+		return "", fmt.Errorf("an image's data: %w", err)
+	}
+	if mediaType == "" {
+		mediaType = http.DetectContentType(b)
+	}
+	ext, ok := imageTypes[mediaType]
+	if !ok {
+		return "", fmt.Errorf("a %s image", mediaType)
+	}
+	if s.images == "" {
+		if s.images, err = os.MkdirTemp("", "magpie-claude-images-"); err != nil {
+			return "", err
+		}
+	}
+	s.nimages++
+	path := filepath.Join(s.images, fmt.Sprintf("image-%d%s", s.nimages, ext))
+	return path, os.WriteFile(path, b, 0o600)
+}
+
+// dropImages removes the images pasted, once Claude Code has ended.
+func (s *shim) dropImages() {
+	if s.images != "" {
+		_ = os.RemoveAll(s.images)
+	}
 }
 
 // pasteable is text as a paste can carry it: no escape that would end the
@@ -444,18 +519,7 @@ func userText(raw json.RawMessage) (string, bool) {
 // shell line (!), a memory (#) or a background task (&). busy is for a
 // message sent while a turn is going, which Claude Code queues.
 func pasteable(text string, busy bool) string {
-	text = strings.ReplaceAll(text, "\r\n", "\n")
-	text = strings.Map(func(r rune) rune {
-		switch {
-		case r == '\r':
-			return '\n'
-		case r == '\n', r == '\t':
-			return r
-		case r < 0x20, r == 0x7f:
-			return -1
-		}
-		return r
-	}, text)
+	text = pasteClean(text)
 	// After a line break the prompt takes it as words: a space before it
 	// is trimmed, and a zero-width one taken out of the paste. Claude Code
 	// trims a queued message, though, and runs one opening with / as a
@@ -471,45 +535,57 @@ func pasteable(text string, busy bool) string {
 	return text
 }
 
-// send pastes text into Claude Code's prompt and presses Enter, again
-// while the message hasn't reached the transcript: an Enter that lands
-// while the paste is still being taken in is part of it.
-func (s *shim) send(text string) error {
+// pasteClean is text without an escape that would end a paste early, nor
+// other control characters, its lines ended by \n.
+func pasteClean(text string) string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == '\r':
+			return '\n'
+		case r == '\n', r == '\t':
+			return r
+		case r < 0x20, r == 0x7f:
+			return -1
+		}
+		return r
+	}, text)
+}
+
+// send pastes a message's pieces into Claude Code's prompt, each image
+// once the prompt shows the one before (its file is read as it is pasted,
+// and words pasted meanwhile would come before it), and presses Enter,
+// again while the message hasn't reached the transcript: an Enter that
+// lands while the paste is still being taken in is part of it.
+func (s *shim) send(pieces []piece) error {
 	s.rowsMu.Lock()
 	before, busy := s.rows, s.busy
 	s.rowsMu.Unlock()
-	text = pasteable(text, busy)
-	if strings.TrimSpace(text) == "" {
-		text = "."
+	text, image := "", 0
+	for i, p := range pieces {
+		if p.image != "" {
+			var err error
+			if image, err = s.pasteImage(p.image, image); err != nil {
+				return err
+			}
+			continue
+		}
+		if i == 0 {
+			p.text = pasteable(p.text, busy)
+		} else {
+			p.text = pasteClean(p.text)
+		}
+		if i == 0 && len(pieces) == 1 && strings.TrimSpace(p.text) == "" {
+			p.text = "."
+		}
+		s.clearScreen()
+		if _, err := s.pty.WriteString("\x1b[200~" + p.text + "\x1b[201~"); err != nil {
+			return err
+		}
+		text = p.text
 	}
-	s.clearScreen()
-	if _, err := s.pty.WriteString("\x1b[200~" + text + "\x1b[201~"); err != nil {
+	if err := s.shown(text); err != nil {
 		return err
-	}
-	// shown in the prompt: its last words, or Claude Code's "[Pasted text"
-	// for a long one
-	tail := strings.TrimSpace(text)
-	if i := strings.LastIndexByte(tail, '\n'); i >= 0 {
-		tail = strings.TrimSpace(tail[i+1:])
-	}
-	if r := []rune(tail); len(r) > 16 {
-		tail = string(r[len(r)-16:])
-	}
-	shownBy := time.After(pasteWait)
-shown:
-	for {
-		p := s.plain()
-		if strings.Contains(p, "Pasted text") || tail != "" && strings.Contains(strings.Join(strings.Fields(p), " "), strings.Join(strings.Fields(tail), " ")) {
-			break
-		}
-		select {
-		case <-s.changed:
-		case <-time.After(100 * time.Millisecond):
-		case <-shownBy:
-			break shown
-		case <-s.exited:
-			return fmt.Errorf("Claude Code ended (%v): %s", s.exit, s.lastScreen())
-		}
 	}
 	time.Sleep(150 * time.Millisecond)
 	for try := 0; try < 4; try++ {
@@ -535,6 +611,66 @@ shown:
 		}
 	}
 	return fmt.Errorf("Claude Code did not take the message: %s", s.lastScreen())
+}
+
+var imageShown = regexp.MustCompile(`\[Image #(\d+)\]`)
+
+// pasteImage pastes an image file's path, and waits for the prompt to show
+// it taken as an image: one numbered past after, the message's image
+// before it. It returns the number shown.
+func (s *shim) pasteImage(path string, after int) (int, error) {
+	s.clearScreen()
+	if _, err := s.pty.WriteString("\x1b[200~" + path + "\x1b[201~"); err != nil {
+		return 0, err
+	}
+	by := time.After(pasteWait)
+	for {
+		for _, m := range imageShown.FindAllStringSubmatch(s.plain(), -1) {
+			if n, _ := strconv.Atoi(m[1]); n > after {
+				return n, nil
+			}
+		}
+		select {
+		case <-s.changed:
+		case <-time.After(100 * time.Millisecond):
+		case <-by:
+			return 0, fmt.Errorf("Claude Code did not take an image pasted as its path: %s", s.lastScreen())
+		case <-s.exited:
+			return 0, fmt.Errorf("Claude Code ended (%v): %s", s.exit, s.lastScreen())
+		}
+	}
+}
+
+// shown waits for the prompt to show pasted text: its last words, or
+// Claude Code's "[Pasted text" for a long one. Text "" waits for nothing.
+func (s *shim) shown(text string) error {
+	if text == "" {
+		return nil
+	}
+	tail := strings.TrimSpace(text)
+	if i := strings.LastIndexByte(tail, '\n'); i >= 0 {
+		tail = strings.TrimSpace(tail[i+1:])
+	}
+	if r := []rune(tail); len(r) > 16 {
+		tail = string(r[len(r)-16:])
+	}
+	shownBy := time.After(pasteWait)
+shown:
+	for {
+		p := s.plain()
+		if strings.Contains(p, "Pasted text") || tail != "" && strings.Contains(strings.Join(strings.Fields(p), " "), strings.Join(strings.Fields(tail), " ")) {
+			break
+		}
+		select {
+		case <-s.changed:
+		case <-time.After(100 * time.Millisecond):
+		case <-shownBy:
+			break shown
+		case <-s.exited:
+			return fmt.Errorf("Claude Code ended (%v): %s", s.exit, s.lastScreen())
+		}
+	}
+	return nil
 }
 
 // transcript is the session's transcript, "" before Claude Code writes it.

@@ -110,6 +110,19 @@ talks to it as it talks to `-p`: stream-json in and out. The helper:
 - pastes each user message into the prompt (bracketed paste) and presses
   Enter. A message opening with `/`, `!`, `#` or `&` is pasted after a
   line break, so it is words, not a command (`pasteable`);
+- pastes a message's images as files (`userPieces`, `writeImage`): each
+  base64 image is written to `image-N.<ext>` (0600) in a
+  `magpie-claude-images-*` temp folder, and its path is pasted alone,
+  which Claude Code reads into the message as `[Image #N]` (a path inside
+  other words stays words). Claude Code reads the file after the paste
+  returns, so the helper waits for `[Image #N]` with N past the last
+  before pasting the next piece; without that wait the second of two
+  images was lost. The transcript holds real image blocks, and Claude Code
+  notes each one's path to the model (`[Image: source: …]`). The folder
+  is removed when the helper ends, on SIGINT, SIGTERM and SIGHUP too:
+  magpie's own handler (`endProbesOnSignal`) let go of the signals for
+  this command (`leaveSignals`), since it re-raised SIGTERM and killed the
+  helper before it could end Claude Code and remove its files;
 - tails `<CLAUDE_CONFIG_DIR>/projects/*/<session>.jsonl` and tells each
   row as `-p` would (`translator`): assistant messages whole (no partial
   stream), a tool's result, a `<synthetic>` API error as the turn's error
@@ -147,17 +160,18 @@ A run is `-p`, as before, when (`claudeTUI`):
 - Settings › Models › Replies › Claude Code's interactive mode is Off
   (`claudePrintMode`);
 - it is Windows, or Claude Code in WSL;
-- the request has safeguards, client cache marks, a JSON schema or images,
-  or a prompt over 400KB (`tuiPromptMost`), which a paste can't carry as
-  `-p` does.
+- the request has safeguards, client cache marks, a JSON schema, an image
+  known only by its URL (`urlImages`: the helper pastes files, and has no
+  bytes of it), or words over 400KB (`tuiPromptMost`, images not counted),
+  which a paste can't carry as `-p` does.
 
 The gateway's log says which (`claude: this run is -p: …`,
 `claudePrintWhy`), and the helper's own line when it becomes `-p` (below)
 is logged from the run's stderr (`lockedWriter`).
 
 A turn the interactive mode can't take ends the run, and the next starts
-anew: a turn with images, one that takes earlier turns back, an effort
-change. A run given up on (`letGo`) is not taken back, since the
+anew: a turn with an image known by its URL, one that takes earlier turns
+back, an effort change. A run given up on (`letGo`) is not taken back, since the
 interactive mode can't answer a control request to stop a turn.
 
 If the interactive Claude Code doesn't start or show its prompt within 45

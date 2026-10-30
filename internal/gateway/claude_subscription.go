@@ -947,7 +947,8 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 var claudeTUIRuns = true
 
 // tuiPromptMost is the longest first message a run in Claude Code's
-// interactive mode is pasted; a longer one is a -p run's.
+// interactive mode is pasted, its words without its images (each pasted
+// as its file's path); a longer one is a -p run's.
 const tuiPromptMost = 400 << 10
 
 // claudeTUI says whether a run is Claude Code's interactive mode, as a
@@ -968,7 +969,13 @@ func claudeTUI(req *Request, binary claudeCLI, prompt []map[string]any) bool {
 
 // claudePrintWhy is why a run is -p, "" when it is the interactive mode.
 func claudePrintWhy(req *Request, binary claudeCLI, prompt []map[string]any) string {
-	b, _ := json.Marshal(prompt)
+	var words []map[string]any
+	for _, bl := range prompt {
+		if bl["type"] != "image" {
+			words = append(words, bl)
+		}
+	}
+	b, _ := json.Marshal(words)
 	for _, c := range []struct {
 		is  bool
 		why string
@@ -980,7 +987,7 @@ func claudePrintWhy(req *Request, binary claudeCLI, prompt []map[string]any) str
 		{len(req.Safeguards) > 0, "safeguards"},
 		{req.clientCache != nil, "the client's cache marks"},
 		{len(req.Format.schema()) > 0, "a JSON schema"},
-		{countImages(req.Messages) > 0, "images"},
+		{urlImages(req.Messages) > 0, "an image known by its URL"},
 		{settings.Load().ClaudePrintMode, "the interactive mode is turned off"},
 		{len(b) > tuiPromptMost, "a first message over 400KB"},
 	} {
@@ -1131,8 +1138,9 @@ func (b *subscriptionBridge) resume(req *Request, owner string) (*subscriptionRu
 		return nil, nil
 	}
 	req.clientCache.selected(false)
-	if run.tui && (back != "" || countImages(since) > 0) {
+	if run.tui && (back != "" || urlImages(since) > 0) {
 		// the interactive mode can't be taken back, nor pasted an image
+		// it has no bytes of
 		run.abortFor("the interactive Claude Code can't go on with this turn")
 		return nil, nil
 	}
@@ -3177,6 +3185,25 @@ func countImages(msgs []Message) int {
 				n++
 			}
 			n += len(p.Images)
+		}
+	}
+	return n
+}
+
+// urlImages counts msgs' images known by their URL alone, which Claude
+// Code's interactive mode can't be pasted: it takes an image as a file.
+func urlImages(msgs []Message) int {
+	n := 0
+	for _, m := range msgs {
+		for _, p := range m.Parts {
+			if p.Kind == Image && p.Data == "" {
+				n++
+			}
+			for _, im := range p.Images {
+				if im.Data == "" {
+					n++
+				}
+			}
 		}
 	}
 	return n

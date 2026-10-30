@@ -41,7 +41,10 @@ func TestClaudeTUIChosen(t *testing.T) {
 		{"safeguards", &Request{Messages: text("hi"), Safeguards: json.RawMessage(`{"a":1}`)}, here, prompt, false, false, "safeguards"},
 		{"client cache marks", &Request{Messages: text("hi"), clientCache: &clientCache{}}, here, prompt, false, false, "the client's cache marks"},
 		{"a schema", &Request{Messages: text("hi"), Format: &Format{Type: "json_schema", Schema: json.RawMessage(`{"type":"object"}`)}}, here, prompt, false, false, "a JSON schema"},
-		{"an image", &Request{Messages: []Message{{Role: "user", Parts: []Part{{Kind: Image, MediaType: "image/png", Data: "AA=="}}}}}, here, prompt, false, false, "images"},
+		{"an image", &Request{Messages: []Message{{Role: "user", Parts: []Part{{Kind: Image, MediaType: "image/png", Data: "AA=="}}}}}, here, prompt, false, on, ""},
+		{"an image by its URL", &Request{Messages: []Message{{Role: "user", Parts: []Part{{Kind: Image, URL: "https://example.com/a.png"}}}}}, here, prompt, false, false, "an image known by its URL"},
+		{"a tool's image by its URL", &Request{Messages: []Message{{Role: "user", Parts: []Part{{Kind: ToolResult, Images: []Part{{Kind: Image, URL: "https://example.com/a.png"}}}}}}}, here, prompt, false, false, "an image known by its URL"},
+		{"a large image", &Request{Messages: text("hi")}, here, []map[string]any{{"type": "text", "text": "hi"}, {"type": "image", "source": map[string]any{"type": "base64", "data": strings.Repeat("A", tuiPromptMost)}}}, false, on, ""},
 		{"a long first message", &Request{Messages: text("hi")}, here, []map[string]any{{"type": "text", "text": strings.Repeat("x", tuiPromptMost)}}, false, false, "a first message over 400KB"},
 	}
 	for _, c := range cases {

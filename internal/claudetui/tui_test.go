@@ -4,6 +4,7 @@ package claudetui
 
 import (
 	"bufio"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -115,8 +116,12 @@ func fakeClaude(args []string) {
 	// what it was started with, for the test to read
 	_ = os.WriteFile(filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "args"), []byte(strings.Join(args, "\n")), 0o600)
 	fmt.Print("\r\n❯ ")
-	var typed strings.Builder
-	pasting := false
+	// the prompt's words; an image file's path pasted alone is read a
+	// moment later and becomes "[Image #<n>:<its bytes>]" where the
+	// prompt's words end then
+	var mu sync.Mutex
+	var typed, paste strings.Builder
+	pasting, images := false, 0
 	for {
 		c, err := r.ReadByte()
 		if err != nil {
@@ -129,14 +134,42 @@ func fakeClaude(args []string) {
 				return
 			}
 			pasting = string(seq) == "[200~"
+			if pasting {
+				paste.Reset()
+				continue
+			}
+			p := paste.String()
+			if b, err := os.ReadFile(p); err == nil && strings.HasPrefix(filepath.Base(p), "image-") {
+				images++
+				n := images
+				go func() {
+					time.Sleep(200 * time.Millisecond)
+					mu.Lock()
+					defer mu.Unlock()
+					typed.WriteString(fmt.Sprintf("[Image #%d:%s]", n, b))
+					fmt.Printf("[Image #%d]", n)
+				}()
+				continue
+			}
+			mu.Lock()
+			typed.WriteString(p)
+			mu.Unlock()
+			fmt.Print(p) // drawn in the prompt
 			continue
-		case c != '\r' || pasting:
+		case pasting:
+			paste.WriteByte(c)
+			continue
+		case c != '\r':
+			mu.Lock()
 			typed.WriteByte(c)
-			fmt.Printf("%c", c) // drawn in the prompt
+			mu.Unlock()
+			fmt.Printf("%c", c)
 			continue
 		}
+		mu.Lock()
 		line := typed.String()
 		typed.Reset()
+		mu.Unlock()
 		f, _ := os.OpenFile(filepath.Join(dir, sid+".jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 		rows := []any{
 			map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": line}},
@@ -178,7 +211,12 @@ func runShim(t *testing.T, env []string, pargs []string, lines []string, want in
 	})
 	t.Setenv("MAGPIE_TUI_TEST_CFG", cfg)
 	for _, l := range lines {
-		b, _ := json.Marshal(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": l}})
+		// a line that is JSON is the message's content blocks
+		var content any = l
+		if json.Valid([]byte(l)) {
+			content = json.RawMessage(l)
+		}
+		b, _ := json.Marshal(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": content}})
 		_, _ = stdin.Write(append(b, '\n'))
 	}
 	got := make(chan map[string]any)
@@ -254,6 +292,34 @@ func TestShimTurnsInteractive(t *testing.T) {
 		if !slices.Contains(got, yes) {
 			t.Errorf("the interactive Claude Code wasn't given %s: %q", yes, got)
 		}
+	}
+}
+
+// A message's images are pasted as their files' paths, each alone and
+// after the prompt shows the one before: the words and images reach
+// Claude Code in their order. One it can't take as a file is an error.
+func TestShimPastesImages(t *testing.T) {
+	b64 := func(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+	msg := `[{"type":"text","text":"look:"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"` + b64("red") + `"}},` +
+		`{"type":"text","text":"and"},{"type":"image","source":{"type":"base64","media_type":"image/gif","data":"` + b64("blue") + `"}},{"type":"text","text":"now"}]`
+	byURL := `[{"type":"text","text":"see"},{"type":"image","source":{"type":"url","url":"https://example.com/a.png"}}]`
+	out := runShim(t, nil, append([]string{fakePath(t)}, pArgs...), []string{msg, byURL}, 4)
+	var said string
+	var failed bool
+	for _, m := range out[1:] {
+		switch m["type"] {
+		case "assistant":
+			b, _ := json.Marshal(m["message"])
+			said = string(b)
+		case "result":
+			failed = failed || m["is_error"] == true && strings.Contains(fmt.Sprint(m["result"]), "an image by url")
+		}
+	}
+	if want := `echo: look:\n\n[Image #1:red]\n\nand\n\n[Image #2:blue]\n\nnow"`; !strings.Contains(said, want) {
+		t.Fatalf("Claude Code was sent %s, want %s", said, want)
+	}
+	if !failed {
+		t.Fatalf("an image by its URL wasn't an error: %v", out)
 	}
 }
 
