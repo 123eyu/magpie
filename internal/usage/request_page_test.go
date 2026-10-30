@@ -3,6 +3,7 @@ package usage
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -327,6 +328,41 @@ func TestVisibleLocalLeavesOutRepeatedMessages(t *testing.T) {
 	got := refMap(visibleLocal([]*rowChunk{a, b}))
 	if len(got) != 2 || !got[rowRef{b, 0}] || !got[rowRef{b, 3}] {
 		t.Fatalf("left out %v, want b's rows 0 and 3 only", got)
+	}
+}
+
+// A chunk's message ids are read once while its serial stands: a pairing
+// decoded every session file of the period for them on every poll
+// (#2278), and what is left out is the same either way.
+func TestVisibleLocalKeptBySerial(t *testing.T) {
+	a, b, c := &rowChunk{}, &rowChunk{}, &rowChunk{}
+	a.add(Row{}, "msg_1", 0, false)
+	a.add(Row{}, "msg_2", 1, false)
+	b.add(Row{}, "msg_2", 0, false)
+	b.add(Row{}, "msg_3", 1, false)
+	c.add(Row{}, "msg_3", 0, false)
+	c.add(Row{}, "msg_1", 1, false)
+	a, b, c = a.pack(), b.pack(), c.pack()
+	a.serial, b.serial = nextChunkSerial(), nextChunkSerial()
+	opened := 0
+	msgKeysOpening = func(*rowChunk) { opened++ }
+	t.Cleanup(func() { msgKeysOpening = nil })
+	want := map[rowRef]bool{{b, 0}: true, {c, 0}: true, {c, 1}: true}
+	for i, open := range []int{3, 1, 1} {
+		opened = 0
+		got := refMap(visibleLocal([]*rowChunk{a, b, c}))
+		if !maps.Equal(got, want) {
+			t.Fatalf("call %d left out %v, want %v", i, got, want)
+		}
+		if opened != open {
+			t.Fatalf("call %d decoded %d chunks, want %d (c has no serial)", i, opened, open)
+		}
+	}
+	// in another order, the kept keys are read in that order
+	opened = 0
+	got := refMap(visibleLocal([]*rowChunk{c, b, a}))
+	if want := map[rowRef]bool{{b, 1}: true, {a, 0}: true, {a, 1}: true}; !maps.Equal(got, want) || opened != 1 {
+		t.Fatalf("reversed: left out %v (decoded %d), want %v", got, opened, want)
 	}
 }
 

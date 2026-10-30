@@ -1394,32 +1394,101 @@ func visibleLocal(chunks []*rowChunk) refSet {
 	// made to size, as many as the rows that can have an id (a Codex call
 	// has none): grown an id at a time, it was ~250 MB of a minute and a
 	// third of polls (#2278)
+	keys := msgKeysOf(chunks)
 	n := 0
-	for _, c := range chunks {
-		if c.Source.Agent != "codex" {
-			n += c.Count
-		}
+	for _, k := range keys {
+		n += len(k.keys)
 	}
 	seen := make(map[[2]uint64]struct{}, n)
-	rows := lentRows()
-	defer rows.release()
-	for _, c := range chunks {
-		open := rows.of(c)
-		for i := range open.Rows {
-			p := &open.Rows[i]
-			msg := open.Strings[open.text(p, rowMsg)]
-			if msg == "" {
-				continue
-			}
-			k := [2]uint64{maphash.String(msgSeeds[0], msg), maphash.String(msgSeeds[1], msg)}
-			if _, ok := seen[k]; ok {
-				duplicates.add(rowRef{c, i})
+	for i, c := range chunks {
+		for _, k := range keys[i].keys {
+			if _, ok := seen[k.k]; ok {
+				duplicates.add(rowRef{c, int(k.at)})
 			} else {
-				seen[k] = struct{}{}
+				seen[k.k] = struct{}{}
 			}
 		}
 	}
 	return duplicates
+}
+
+// msgKeys are a chunk's message ids as visibleLocal hashes them, each
+// with its row, kept by the chunk's serial as matchHints are: a pairing
+// decoded every session file of the period to read them, ~840 MB of the
+// 1.1 GB visibleLocal allocated in 90s while an agent worked (#2278).
+var msgKeys struct {
+	sync.Mutex
+	by   map[uint64]*chunkMsgKeys
+	turn uint64
+}
+
+type chunkMsgKeys struct {
+	keys []msgKey
+	turn uint64
+}
+
+type msgKey struct {
+	k  [2]uint64
+	at int32
+}
+
+// msgKeysOpening, in tests, is told each chunk msgKeysOf decodes.
+var msgKeysOpening func(*rowChunk)
+
+// msgKeysOf are chunks' message keys, read from a chunk only when none
+// are kept for its serial.
+func msgKeysOf(chunks []*rowChunk) []*chunkMsgKeys {
+	msgKeys.Lock()
+	msgKeys.turn++
+	turn := msgKeys.turn
+	out := make([]*chunkMsgKeys, len(chunks))
+	for i, c := range chunks {
+		if k := msgKeys.by[c.serial]; c.serial != 0 && k != nil {
+			k.turn = turn
+			out[i] = k
+		}
+	}
+	msgKeys.Unlock()
+	rows := lentRows()
+	defer rows.release()
+	made := map[uint64]*chunkMsgKeys{}
+	for i, c := range chunks {
+		if out[i] != nil {
+			continue
+		}
+		if msgKeysOpening != nil {
+			msgKeysOpening(c)
+		}
+		k := &chunkMsgKeys{turn: turn}
+		open := rows.of(c)
+		for j := range open.Rows {
+			p := &open.Rows[j]
+			msg := open.Strings[open.text(p, rowMsg)]
+			if msg == "" {
+				continue
+			}
+			k.keys = append(k.keys, msgKey{[2]uint64{maphash.String(msgSeeds[0], msg), maphash.String(msgSeeds[1], msg)}, int32(j)})
+		}
+		k.keys = slices.Clip(k.keys)
+		out[i] = k
+		if c.serial != 0 {
+			made[c.serial] = k
+		}
+	}
+	msgKeys.Lock()
+	if msgKeys.by == nil {
+		msgKeys.by = map[uint64]*chunkMsgKeys{}
+	}
+	for serial, k := range made {
+		msgKeys.by[serial] = k
+	}
+	for serial, k := range msgKeys.by {
+		if k.turn+hintsKept < msgKeys.turn {
+			delete(msgKeys.by, serial)
+		}
+	}
+	msgKeys.Unlock()
+	return out
 }
 
 var msgSeeds = [2]maphash.Seed{maphash.MakeSeed(), maphash.MakeSeed()}
