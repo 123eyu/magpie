@@ -371,6 +371,35 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 		}
 		rw.WriteHeader(http.StatusNoContent)
 	})
+	// agents/open opens Terminal on an agent of the Agents list: the command
+	// is made here from the agent as detected (agentCommand), and the page
+	// sends only its id.
+	mux.HandleFunc("POST /api/agents/open", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Agent string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if runtime.GOOS != "darwin" || isWeb(w) {
+			fail(rw, errors.New("opening Terminal is only for the Mac app"))
+			return
+		}
+		run := ""
+		for _, a := range agent.Detected() {
+			if a.ID == in.Agent {
+				run = agentCommand(a)
+			}
+		}
+		if run == "" {
+			fail(rw, errors.New("no command starts this agent"))
+			return
+		}
+		if err := agentTerminal(run, settings.Load().SessionTerminal); err != nil {
+			fail(rw, err)
+			return
+		}
+		rw.WriteHeader(http.StatusNoContent)
+	})
 	// carry converts a session for another agent (one its Carry offers with
 	// Convert): a new session of that agent's, in its own folder, the
 	// source only read. It runs only when the user picks the agent, never
@@ -735,6 +764,30 @@ func tightenGC() (undo func()) {
 }
 
 const tightGCPercent = 25
+
+// agentCommand is the shell line that starts a: its Launch where it has
+// one (agy, Claude Science, Cursor Private Inference), else its own
+// program, quoted; "" for one in a WSL distro or with no program here (a
+// desktop app). Nothing of the page's goes into it.
+func agentCommand(a *agent.Agent) string {
+	if a.WSL != "" {
+		return ""
+	}
+	if a.Launch != nil {
+		if run := a.Launch(); run != "" {
+			return run
+		}
+	}
+	if bin := a.BinPath(); bin != "" {
+		return shellQuote(bin)
+	}
+	return ""
+}
+
+// agentTerminal is openTerminal, a var so a test opens no terminal.
+var agentTerminal = openTerminal
+
+func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
 // openTerminal runs a command in the chosen Mac terminal through a .command
 // file, as it would open from Finder: no Automation consent.

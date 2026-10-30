@@ -817,6 +817,23 @@ func (a *Agent) cliBin() (string, cliSpec) {
 	return bin, spec
 }
 
+// BinPath is where the agent's own program is, as Detected finds its Bin,
+// else where cliBin looks for one with no Bin (Grok Build's); "" for an
+// agent in a WSL distro and one with no program here (a desktop app).
+func (a *Agent) BinPath() string {
+	if a.WSL != "" {
+		return ""
+	}
+	if a.Bin == "" {
+		bin, _ := a.cliBin()
+		return bin
+	}
+	if bin := binAt(a.Bin); bin != "" {
+		return bin
+	}
+	return proc.FindTool(a.Bin)
+}
+
 // CLI is the agent's CLI: its version, the newest, and whether magpie can
 // update it, with its desktop app's version. ok is false for an agent with
 // neither a CLI magpie knows nor its app.
