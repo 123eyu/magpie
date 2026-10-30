@@ -5951,19 +5951,18 @@ function routingPage(part) {
     const sortBtn = el("button", "text rt-wsort", t("Sort by weight"));
     sortBtn.type = "button";
     sortBtn.title = t("Heaviest first. When a model fails, the next one in this order takes over");
-    const byWeight = () => d.members.slice(0, named()).map((id, i) => [id, i]).sort(([a, i], [b, j]) => Math.max(d.weights[b] || 0, 1) - Math.max(d.weights[a] || 0, 1) || i - j).map(([id]) => id);
-    sortBtn.onclick = () => { d.members.splice(0, named(), ...byWeight()); draw(); };
-    // moveMember puts the member at `from` at `to` among those named — a
-    // pattern's follow them, in the catalog's order — and keeps the
-    // keyboard on its handle when it was there
-    const named = () => d.members.filter((x) => !d.matched.includes(x)).length;
+    const byWeight = () => d.members.map((id, i) => [id, i]).sort(([a, i], [b, j]) => Math.max(d.weights[b] || 0, 1) - Math.max(d.weights[a] || 0, 1) || i - j).map(([id]) => id);
+    sortBtn.onclick = () => { d.members = byWeight(); draw(); };
+    // moveMember puts the member at `from` at `to`, a pattern's as well as
+    // one named (usrname1833 on Discord: provider.Group.Placed), and keeps
+    // the keyboard on its handle when it was there
     const moveMember = (from, to, keep) => {
-      if (to < 0 || to >= named() || to === from) return;
+      if (to < 0 || to >= d.members.length || to === from) return;
       d.members.splice(to, 0, d.members.splice(from, 1)[0]);
       draw();
       if (keep) list.querySelector(`.rt-mhandle[data-at="${to}"]`)?.focus({ preventScroll: true });
     };
-    // memberHandle is a named member's place in the order, which is also
+    // memberHandle is a member's place in the order, which is also
     // its handle (PAMI on Discord: only Up, one step a click): drag it to
     // move the model, or Alt+↑/↓ from the keyboard; Up and Down stay
     // beside it. The grip that says so shows only on hover, as on the
@@ -6053,7 +6052,7 @@ function routingPage(part) {
         sw.append(el("i"));
         sw.onclick = () => { d.off = off ? d.off.filter((x) => x !== id) : [...d.off, id]; draw(); };
         if (off) row.classList.add("muted");
-        row.append(sw, matched ? el("span", "i", String(i + 1)) : memberHandle(id, i, row), memberIcon(id), n, el("span", "grow"));
+        row.append(sw, memberHandle(id, i, row), memberIcon(id), n, el("span", "grow"));
         // what the model is, in the same chips the Gateway page's list says it
         // in (modelInfo): its reasoning levels, whether it sees images and the
         // window it holds. A group mixing members that see images with ones
@@ -6150,6 +6149,8 @@ function routingPage(part) {
         if (d.routing === "weight") row.append(memberWeight(id, off));
         if (s) row.title = s.members.map((x) => memberLabel(s, x)).join(s.routing === "order" ? " → " : " · ");
         if (!m && !s) { row.classList.add("off"); row.title = info?.providerOff ? offWords(info) : t("No provider serves {id} now; it is skipped", { id }); }
+        if (i) { const up = el("button", "text", t("Up")); up.onclick = () => moveMember(i, i - 1); row.append(up); }
+        if (i < d.members.length - 1) { const down = el("button", "text", t("Down")); down.onclick = () => moveMember(i, i + 1); row.append(down); }
         if (matched) {
           // a pattern's: it follows the catalog, so it is switched off
           // rather than taken out — the pattern would find it again
@@ -6157,8 +6158,6 @@ function routingPage(part) {
           list.append(row);
           return;
         }
-        if (i) { const up = el("button", "text", t("Up")); up.onclick = () => moveMember(i, i - 1); row.append(up); }
-        if (i < named() - 1) { const down = el("button", "text", t("Down")); down.onclick = () => moveMember(i, i + 1); row.append(down); }
         const rm = el("button", "text", t("Remove"));
         rm.onclick = () => { d.members.splice(i, 1); rematch(); draw(); drawRules(); };
         row.append(rm);
@@ -6194,7 +6193,7 @@ function routingPage(part) {
       openPicker({ id: "", name: "", fields: [] }, { key: "member", label: "model", value: "", options, multi: true, picked: (id) => !!holding(id), onPick: (id) => {
         if (!id) return;
         const m = holding(id);
-        if (!m) d.members.splice(named(), 0, id); // after those named, before a pattern's
+        if (!m) d.members.splice(d.members.findLastIndex((x) => !d.matched.includes(x)) + 1, 0, id); // after the last named
         else if (d.matched.includes(m)) return status(t("In the group by a pattern: switch it off to send it nothing"), "warn");
         else { d.members.splice(d.members.indexOf(m), 1); rematch(); }
         draw(); drawRules();
@@ -6209,11 +6208,14 @@ function routingPage(part) {
     ed.append(el("label", "", t("Models")), mw);
 
     // patterns: models found by their ids, now and as providers list new
-    // ones (#766); what they match follows the models named above
+    // ones (#766): after the models named, in the catalog's order, until
+    // the user puts them in another; then each keeps its place, one gone
+    // drops out and one new goes last
     function rematch() {
-      const named = d.members.filter((x) => !d.matched.includes(x));
+      const named = d.members.filter((x) => !d.matched.includes(x)), was = [...named, ...d.matched];
+      const placed = d.members.some((x, i) => x !== was[i]);
       d.matched = matchedBy(d.match, named);
-      d.members = [...named, ...d.matched];
+      d.members = placed ? [...d.members.filter((x) => named.includes(x) || d.matched.includes(x)), ...d.matched.filter((x) => !d.members.includes(x))] : [...named, ...d.matched];
       // a rule keeps the models still here; it goes with its last
       d.rules = d.rules.filter((r) => { setUses(r, rUses(r).filter((x) => d.members.includes(x))); return !!r.use; });
       d.fast = d.fast.filter((x) => d.members.includes(x));
@@ -7075,7 +7077,7 @@ function routingPage(part) {
       if (own && !d.levels.length) return status(t("Pick a level to offer, or leave them to its models"), "warn");
       saveBtn.classList.add("busy");
       // refused, Add can be pressed again (busy, it takes no clicks)
-      groupAction("save", { id: idOf(), from: g?.id, name: d.name.trim() || idOf(), members: namedOf(d), match: d.match, routing: d.routing, pick: d.pick || "", affinity: d.affinity, sink: !!d.sink && sinkable(d.routing), firstToken: d.firstToken || 0, patience: d.patience || 0, rules: d.rules, effort: d.effort, classifier: d.rules.some((r) => r.intent) || d.effort === "auto" ? d.classifier : "", context: d.context || 0, levels: own ? d.levels : [], family: g?.family || "", fast: d.fast.filter((x) => d.members.includes(x)), off: d.off.filter((x) => d.members.includes(x)), weights: Object.fromEntries(Object.entries(d.weights).filter(([x, n]) => d.members.includes(x) && n > 1)), unlists: !!d.unlists }, t(g ? "{name} saved" : "{name} added", { name: d.name.trim() || idOf() }))
+      groupAction("save", { id: idOf(), from: g?.id, name: d.name.trim() || idOf(), members: namedOf(d), placed: d.members, match: d.match, routing: d.routing, pick: d.pick || "", affinity: d.affinity, sink: !!d.sink && sinkable(d.routing), firstToken: d.firstToken || 0, patience: d.patience || 0, rules: d.rules, effort: d.effort, classifier: d.rules.some((r) => r.intent) || d.effort === "auto" ? d.classifier : "", context: d.context || 0, levels: own ? d.levels : [], family: g?.family || "", fast: d.fast.filter((x) => d.members.includes(x)), off: d.off.filter((x) => d.members.includes(x)), weights: Object.fromEntries(Object.entries(d.weights).filter(([x, n]) => d.members.includes(x) && n > 1)), unlists: !!d.unlists }, t(g ? "{name} saved" : "{name} added", { name: d.name.trim() || idOf() }))
         .then(() => saveBtn.classList.remove("busy"));
     };
     // what goes wrong is said where it is seen, never a click that does nothing

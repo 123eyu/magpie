@@ -108,6 +108,9 @@ func Rename(from, to string) error {
 		for k, m := range g.Fast {
 			g.Fast[k] = renamedRef(m, from, to)
 		}
+		for k, m := range g.Placed {
+			g.Placed[k] = renamedRef(m, from, to)
+		}
 		for k, m := range g.Off {
 			g.Off[k] = renamedRef(m, from, to)
 		}

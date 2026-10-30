@@ -177,7 +177,15 @@ type Group struct {
 	Match []string `json:"match,omitempty"`
 	// Matched are the members the patterns match now, as Members has them
 	// after its own. Derived each time the group is read, never stored.
-	Matched  []string `json:"matched,omitempty"`
+	Matched []string `json:"matched,omitempty"`
+	// Placed is the order the user put the members in, those the
+	// patterns match among those it names (usrname1833 on Discord), as
+	// Members spells them. Read, the members follow it: a model matched
+	// since comes after them in the catalog's order, and one no longer
+	// matched drops out (placedIn). Empty when it is the order the group
+	// has unasked, its own members first, then the matched. Saved, it
+	// places the matched; the named go in Members' order (placedOver).
+	Placed   []string `json:"placed,omitempty"`
 	Routing  string   `json:"routing,omitempty"`  // as Provider.Routing, over all the members' keys and accounts; or Manual
 	Affinity string   `json:"affinity,omitempty"` // as Provider.Affinity
 	// Sink is Provider.Sink over the group's members' accounts and keys
@@ -399,7 +407,7 @@ func cloneGroups(gs []Group) []Group {
 	}
 	out := make([]Group, len(gs))
 	for i, g := range gs {
-		g.Members, g.Match, g.Matched = slices.Clone(g.Members), slices.Clone(g.Match), slices.Clone(g.Matched)
+		g.Members, g.Match, g.Matched, g.Placed = slices.Clone(g.Members), slices.Clone(g.Match), slices.Clone(g.Matched), slices.Clone(g.Placed)
 		g.Off, g.Levels, g.Fast = slices.Clone(g.Off), slices.Clone(g.Levels), slices.Clone(g.Fast)
 		g.Weights = maps.Clone(g.Weights)
 		if g.Rules != nil {
@@ -514,6 +522,7 @@ func (g Group) own() Group {
 	g.Members = slices.Clone(g.Members)
 	g.Match = slices.Clone(g.Match)
 	g.Matched = slices.Clone(g.Matched)
+	g.Placed = slices.Clone(g.Placed)
 	g.Off = slices.Clone(g.Off)
 	g.Levels = slices.Clone(g.Levels)
 	g.Fast = slices.Clone(g.Fast)
@@ -1366,6 +1375,23 @@ func SaveGroup(g Group) error {
 	}
 	own := cleanList(g.Members[:named])
 	g.Members = append(slices.Clone(own), slices.DeleteFunc(cleanList(g.Members[named:]), func(m string) bool { return slices.Contains(own, m) })...)
+	// the order the user put them in, a pattern's members among them: as
+	// the caller sends it (the Routing page's editor), or as it was. The
+	// models named go in the order the caller names them, so one added
+	// to a group as read (models+=, the TUI) goes after those named
+	before := g.Placed
+	if len(before) == 0 {
+		if i := slices.IndexFunc(f.Groups, func(x Group) bool { return x.ID == g.ID }); i >= 0 {
+			before = f.Groups[i].Placed
+		}
+	}
+	key := func(m string) string {
+		id, _ := memberFastIn(entries, strings.TrimSpace(m))
+		return cleanMember(entries, id)
+	}
+	if g.Placed = placedOver(g.Members, mapEach(before, key), mapEach(members, key)); g.Placed != nil {
+		own = slices.DeleteFunc(slices.Clone(g.Placed), func(m string) bool { return !slices.Contains(own, m) })
+	}
 	var off []string
 	for _, m := range cleanList(g.Off) {
 		if m = cleanMember(entries, m); slices.Contains(g.Members, m) && !slices.Contains(off, m) {
@@ -1778,6 +1804,11 @@ func RenameGroup(from, to string) error {
 		for j, m := range f.Groups[i].Members {
 			if m == old {
 				f.Groups[i].Members[j] = now
+			}
+		}
+		for j, m := range f.Groups[i].Placed {
+			if m == old {
+				f.Groups[i].Placed[j] = now
 			}
 		}
 		for j := range f.Groups[i].Rules {
