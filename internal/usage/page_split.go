@@ -85,7 +85,11 @@ func pageSplit(p Period, f Filter, now time.Time, take int, pass *cellPass, gate
 			fresh.settled, fresh.at = serials, time.Now()
 			old, kept = &fresh, true
 		default:
-			if c, found := pageDiskRead(key); found {
+			if c, at, found := pageDiskRead(key); found {
+				if at >= pageDiskPages/2 {
+					// read again near the end: kept from being the next dropped
+					_ = pageDiskWrite(key, c)
+				}
 				old, kept = &pageOld{cut: cut, since: since, settled: serials, before: before, at: time.Now(), key: key, cells: c}, true
 			}
 		}
@@ -211,9 +215,11 @@ type pageDiskEntry struct {
 	Cells []pageDiskCell `json:"cells"`
 }
 
-// pageDiskPages bounds the pages the file holds: a page is open on one
-// period and filter, and the warm-up and the Sessions page ask for All's.
-const pageDiskPages = partSets
+// pageDiskPages bounds the pages the file holds, the last written or read
+// again first: the warm-up's All, the Usage page's period, the tray's
+// periods and the filters a reader picks. Four let a reader's few filters
+// drop the warm-up's, and every start after paired the whole history again.
+const pageDiskPages = 8
 
 func pageDiskEntries() []pageDiskEntry {
 	b, err := os.ReadFile(pageDiskPath())
@@ -227,9 +233,10 @@ func pageDiskEntries() []pageDiskEntry {
 	return all
 }
 
-// pageDiskRead is the cells the file holds under key, or false.
-func pageDiskRead(key string) (*chunkPart, bool) {
-	for _, e := range pageDiskEntries() {
+// pageDiskRead is the cells the file holds under key and where in the file
+// they are, or false.
+func pageDiskRead(key string) (*chunkPart, int, bool) {
+	for at, e := range pageDiskEntries() {
 		if e.Key != key {
 			continue
 		}
@@ -244,9 +251,9 @@ func pageDiskRead(key string) (*chunkPart, bool) {
 				source: c.Source, bits: c.Bits, bucket: c.Bucket, n: c.N, d: c.D,
 			}
 		}
-		return part, true
+		return part, at, true
 	}
-	return nil, false
+	return nil, 0, false
 }
 
 // pageDiskWrite keeps part under key with the pages written last, through

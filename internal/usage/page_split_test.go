@@ -1,6 +1,7 @@
 package usage
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -102,5 +103,29 @@ func TestLocalZoneIsTheWarmUpsPage(t *testing.T) {
 	}
 	if page := QueryPage(All, Filter{Zone: time.Local}, 0, 50); len(*paired) != 1 || !reflect.DeepEqual(page, warm) {
 		t.Fatalf("the page in time.Local paired %v: %+v, the warm-up's %+v", *paired, page, warm)
+	}
+}
+
+// A page read from near the end of page-v1.json is moved first: pages
+// written after it don't drop it, and the next start reads it again.
+func TestPageReadAgainStaysOnDisk(t *testing.T) {
+	_, _, paired, restart := pageHistory(t)
+	QueryPage(All, Filter{}, 0, 1)
+	all := (*paired)[0]
+	for i := range pageDiskPages - 1 {
+		if err := pageDiskWrite(fmt.Sprint("other", i), &chunkPart{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	restart()
+	if QueryPage(All, Filter{}, 0, 1); (*paired)[len(*paired)-1] >= all {
+		t.Fatalf("the last page in the file, paired %d of %d", (*paired)[len(*paired)-1], all)
+	}
+	if err := pageDiskWrite("one more", &chunkPart{}); err != nil {
+		t.Fatal(err)
+	}
+	restart()
+	if QueryPage(All, Filter{}, 0, 1); (*paired)[len(*paired)-1] >= all {
+		t.Fatalf("read again, then another page written: paired %d of %d", (*paired)[len(*paired)-1], all)
 	}
 }
