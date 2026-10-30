@@ -129,3 +129,48 @@ func TestPageReadAgainStaysOnDisk(t *testing.T) {
 		t.Fatalf("read again, then another page written: paired %d of %d", (*paired)[len(*paired)-1], all)
 	}
 }
+
+// A page whose settled days are kept prices none of the gateway's blocks
+// before them: a start held every block of the history priced, ~53 MB of
+// its heap, for a page that reads the last days' rows only (#2278). A page
+// of older rows prices them, and is what a cold build shows.
+func TestKeptPageLeavesSettledBlocksUnpriced(t *testing.T) {
+	pageHome(t)
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
+	for i := range logBlockRows {
+		Append(Record{Time: now.AddDate(0, 0, -30).Add(time.Duration(i) * time.Second), Agent: "claude-code", Provider: "anthropic", Model: "x", Input: 1, Status: 200})
+	}
+	for i, days := range []int{10, 1, 0} {
+		Append(Record{Time: now.AddDate(0, 0, -days).Add(-time.Hour), Agent: "codex", Provider: "openai", Model: "m", Input: 100 + i, Output: 10, Status: 200})
+	}
+	priced := 0
+	blockPricing = func() { priced++ }
+	t.Cleanup(func() { blockPricing = nil })
+	restart := func() {
+		releasePriced()
+		requestCache.Lock()
+		requestCache.parts, requestCache.pageOld, requestCache.pairs, requestCache.pages = nil, nil, nil, map[pageKey]RequestPage{}
+		requestCache.Unlock()
+		priced = 0
+	}
+	restart()
+	t.Cleanup(restart)
+	first := QueryPage(All, Filter{}, 0, 1)
+	if priced != 2 || first.Total != logBlockRows+3 {
+		t.Fatalf("first page: %d blocks priced, %d rows", priced, first.Total)
+	}
+	restart()
+	if again := QueryPage(All, Filter{}, 0, 1); priced != 1 || !reflect.DeepEqual(again, first) {
+		t.Fatalf("started again, %d blocks priced: %+v, was %+v", priced, again, first)
+	}
+	restart()
+	deep := QueryPage(All, Filter{}, 3, 1)
+	if priced != 2 || len(deep.Rows) != 1 || deep.Rows[0].Agent != "claude-code" {
+		t.Fatalf("a page of older rows: %d blocks priced, rows %+v", priced, deep.Rows)
+	}
+	restart()
+	os.Remove(pageDiskPath())
+	if cold := QueryPage(All, Filter{}, 3, 1); !reflect.DeepEqual(cold, deep) {
+		t.Fatalf("a page of older rows %+v, cold %+v", deep, cold)
+	}
+}

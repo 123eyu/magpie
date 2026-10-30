@@ -143,6 +143,11 @@ type rowChunk struct {
 	serial uint64
 	// mapped is the file Archive was read from, when it is of its pages
 	mapped *diskMapping
+	// raw is the gateway block a chunk is priced of. lazy is the pricer of
+	// one not priced yet (priceStubs), which only its serial and raw stand
+	// for: a page whose settled days are kept never reads them (#2278).
+	raw  *rowChunk
+	lazy *blockPricer
 }
 
 // rowMsg is the Text of a row's Claude message id, after rowText's, and
@@ -401,10 +406,33 @@ func (h *newestHeap) Pop() any          { a := *h; v := a[len(a)-1]; *h = a[:len
 
 // rowsIn is how many rows c has, packed or not.
 func rowsIn(c *rowChunk) int {
+	if c.lazy != nil {
+		return rowsIn(c.raw)
+	}
 	if len(c.Archive) != 0 {
 		return c.Count
 	}
 	return len(c.Rows)
+}
+
+// settledBefore is when the gateway's blocks a split page, heatmap or
+// effort keeps the days of (pageSplit, heatSplit, effortSplit) end before.
+func settledBefore(now time.Time) time.Time {
+	return time.Date(now.Year(), now.Month(), now.Day()-heatRecent, 0, 0, 0, 0, now.Location()).Add(-heatReach)
+}
+
+// priceStubs prices the blocks of gateways left unpriced (rowChunk.lazy),
+// in place, before their rows are read.
+func priceStubs(gateways []*rowChunk) {
+	for _, c := range gateways {
+		if b := c.lazy; b != nil {
+			if priced := b.block(c.raw); priced != nil {
+				*c = *priced
+			} else {
+				*c = rowChunk{serial: c.serial, raw: c.raw}
+			}
+		}
+	}
 }
 
 // chunkRows reads chunks' rows one chunk at a time. A page of the whole
@@ -804,7 +832,11 @@ func queryPageOf(p Period, f Filter, offset, limit int, readSource func(sessions
 	shared := idx
 	idx = shared.private()
 	shared.Unlock()
-	b := readRequestBlocks(idx, st, p, now, readSource, share)
+	var settled time.Time
+	if cache != nil {
+		settled = settledBefore(now)
+	}
+	b := readRequestBlocks(idx, st, p, now, settled, readSource, share)
 	defer b.priced.release() // on a panic too: a shared block is held until let go
 	var names map[string]string
 	if someShared {
@@ -875,7 +907,7 @@ func codexEffortOfIndex(st requestState, p Period, now time.Time) map[string][]s
 	memo := shared.pairs[p]
 	idx := shared.private()
 	shared.Unlock()
-	b := readRequestBlocks(idx, st, p, now, sessions.ReadCallSource, true)
+	b := readRequestBlocks(idx, st, p, now, settledBefore(now), sessions.ReadCallSource, true)
 	defer b.priced.release()
 	sums := effortSums{}
 	var next *pairMemo
@@ -946,7 +978,9 @@ type requestBlocks struct {
 // day is read again only when it changed since its chunk was made. share
 // says readSource is sessions.ReadCallSource: a file another query is
 // making a chunk of now is waited for, not read beside it (sharedBuild).
-func readRequestBlocks(idx *requestIndex, st requestState, p Period, now time.Time, readSource func(sessions.CallSource) []sessions.Call, share bool) requestBlocks {
+// The gateway's blocks before settled are left to be priced when a pairing
+// reads them (priceStubs).
+func readRequestBlocks(idx *requestIndex, st requestState, p Period, now, settled time.Time, readSource func(sessions.CallSource) []sessions.Call, share bool) requestBlocks {
 	sources, cfg, snapshot, days := st.sources, st.cfg, st.snapshot, st.days
 	price := Pricer()
 	// Swapped's names are a few hundred pairs over thousands of files' calls,
@@ -995,6 +1029,11 @@ func readRequestBlocks(idx *requestIndex, st requestState, p Period, now time.Ti
 	priced.share(meta)
 	for _, packed := range snapshot.blocks {
 		if !gatewaySince.IsZero() && packed.Latest.Before(gatewaySince) {
+			continue
+		}
+		if len(packed.Archive) != 0 && packed.serial != 0 && packed.Latest.Before(settled) {
+			// named as its priced copy is (heatSettledKey)
+			gateways = append(gateways, &rowChunk{Source: packed.Source, Count: packed.Count, Latest: packed.Latest, Computer: packed.Computer, serial: packed.serial, raw: packed, lazy: priced})
 			continue
 		}
 		if c := priced.block(packed); c != nil {
@@ -1975,6 +2014,7 @@ func pairRows(p Period, now time.Time, gateways, chunks, others []*rowChunk, ide
 
 // pairRowsIn is pairRows over the rows from since to until.
 func pairRowsIn(since, until time.Time, gateways, chunks, others []*rowChunk, identities map[string]sessions.CodexIdentity) *pairedRows {
+	priceStubs(gateways)
 	if pairing != nil {
 		pairing()
 	}

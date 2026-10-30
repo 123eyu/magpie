@@ -346,7 +346,7 @@ func TestRequestBlocksKeepOneChunkASource(t *testing.T) {
 	shared.adopt(st)
 	read := func() (*rowChunk, *requestIndex) {
 		idx := shared.private()
-		b := readRequestBlocks(idx, st, All, now, sessions.ReadCallSource, true)
+		b := readRequestBlocks(idx, st, All, now, time.Time{}, sessions.ReadCallSource, true)
 		defer b.priced.release()
 		if len(b.chunks) != 1 {
 			t.Fatalf("%d chunks, want 1", len(b.chunks))

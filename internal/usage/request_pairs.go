@@ -57,6 +57,7 @@ func unnamedSerial(c *rowChunk) uint64 {
 // pairRowsMemo is pairRows, through old when it paired these chunks over
 // the same window. The memo it returns is for the next call (nil: none).
 func pairRowsMemo(p Period, now time.Time, gateways, chunks, others []*rowChunk, identities map[string]sessions.CodexIdentity, old *pairMemo) (*pairedRows, *pairMemo) {
+	priceStubs(gateways)
 	since, until := p.Since(now), p.Until(now)
 	serials, ok := pairSerials(gateways, chunks, others)
 	if !ok {

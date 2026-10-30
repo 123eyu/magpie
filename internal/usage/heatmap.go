@@ -239,6 +239,7 @@ type heatSum struct {
 // rollout forked from an old one), and they change the days the last
 // pairing of every chunk counted.
 func heatBefore(cut time.Time, recent [3][]*rowChunk) heatSum {
+	priceStubs(recent[0])
 	rows := lentRows()
 	defer rows.release()
 	var s heatSum

@@ -223,8 +223,14 @@ func (b *blockPricer) block(packed *rowChunk) *rowChunk {
 	return e.c
 }
 
+// blockPricing, in tests, is told of each block priced.
+var blockPricing func()
+
 // priceBlock is the priced copy of a raw block, and the pooled rows it is in.
 func (b *blockPricer) priceBlock(packed *rowChunk) (*rowChunk, *[]packedRow) {
+	if blockPricing != nil {
+		blockPricing()
+	}
 	buf := pricedRows.Get().(*[]packedRow)
 	raw := packed.unpackInto(*buf)
 	// unpackInto decodes into the buffer whenever it is large enough
@@ -241,6 +247,7 @@ func (b *blockPricer) priceBlock(packed *rowChunk) (*rowChunk, *[]packedRow) {
 	if raw == packed {
 		c.Rows = slices.Clone(raw.Rows) // a block too small to compress is shared
 	}
+	c.raw = packed
 	c.Strings = slices.Clip(c.Strings)
 	added := map[string]uint32{}
 	intern := func(s string, was uint32) uint32 {

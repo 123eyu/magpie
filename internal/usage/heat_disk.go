@@ -106,6 +106,12 @@ func heatSettledKey(d heatDiskRef, cut, since time.Time, f Filter, identities ma
 				continue
 			}
 			h.Write(b)
+			if c.raw != nil {
+				// a gateway block by its rows as logged: meta names what
+				// prices them, and one not priced has no rows of its own
+				hashRows(h, rows.of(c.raw))
+				continue
+			}
 			hashRows(h, rows.of(c))
 		}
 	}
