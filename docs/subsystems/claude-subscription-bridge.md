@@ -606,6 +606,18 @@ in its system prompt (`leanSystem`), the named-folder note worded as
 `envElsewhereLeanNote` since the environment comes after it there
 (`envNote` picks the note).
 
+Claude Code 2.1.296 and later, as a client, give their own environment
+the same way: a `{role: "system"}` message after the user's first, not
+in the system prompt. For such a caller (`Request.envInTurns`, from
+`clientNamedWorkPlace`) "the environment these instructions describe"
+pointed at instructions that describe none, while the caller's came
+after them as a message (packinggoods again, after v0.1.2093). Its
+instructions, or a lean run's system prompt, end with `envTurnsNote`
+instead: of the environments the conversation gives, the last one is
+where every tool runs. The run's own is always the first, at the start
+of its first message, so the last is the caller's. Not measured: whether
+a real model on a Windows gateway then stops writing PowerShell.
+
 Nothing else of the folder reaches the run. `--setting-sources ""` loads
 no CLAUDE.md, settings or skills from it. Auto memory is off, and
 `CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS=1` keeps the repository's status out

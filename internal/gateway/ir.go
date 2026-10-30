@@ -181,6 +181,10 @@ type Request struct {
 	// Windows with Claude Code in WSL), so the run's own prompt describes
 	// another machine than the one the tools run on (envElsewhereNote).
 	envElsewhere bool
+	// envInTurns: that working directory is named in a message (Claude
+	// Code's environment as a {role: "system"} message), not in the
+	// caller's instructions (envTurnsNote).
+	envInTurns bool
 	// envUnknown: the caller is on another computer (remoteCaller) and its
 	// instructions name no working directory, so the run's own prompt
 	// describes a machine no tool runs on, and nothing says which does

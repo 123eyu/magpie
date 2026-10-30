@@ -429,28 +429,37 @@ func clientWorkDir(req *Request) string {
 // clientNamedWorkDir is the working directory the caller's instructions
 // name, as they write it, wherever it is; "" when they name none.
 func clientNamedWorkDir(req *Request) string {
-	texts := []string{req.System}
+	dir, _ := clientNamedWorkPlace(req)
+	return dir
+}
+
+// clientNamedWorkPlace is clientNamedWorkDir, and whether the caller
+// named it in a message rather than in its instructions: Claude Code
+// 2.1.296 and later give their environment as a {role: "system"} message
+// after the user's first, so the run is told it in the conversation,
+// after the caller's instructions (envTurnsNote).
+func clientNamedWorkPlace(req *Request) (dir string, inTurns bool) {
+	look := func(t string, turn bool) {
+		for _, m := range clientCwdPattern.FindAllStringSubmatch(t, -1) {
+			for _, g := range m[1:] {
+				if g = strings.Trim(strings.TrimSpace(g), "`'\""); g != "" {
+					dir, inTurns = g, turn
+				}
+			}
+		}
+	}
+	look(req.System, false)
 	for _, m := range req.Messages {
 		if m.Role == "assistant" {
 			continue
 		}
 		for _, p := range m.Parts {
 			if p.Kind == Text {
-				texts = append(texts, p.Text)
+				look(p.Text, true)
 			}
 		}
 	}
-	dir := ""
-	for _, t := range texts {
-		for _, m := range clientCwdPattern.FindAllStringSubmatch(t, -1) {
-			for _, g := range m[1:] {
-				if g = strings.Trim(strings.TrimSpace(g), "`'\""); g != "" {
-					dir = g
-				}
-			}
-		}
-	}
-	return dir
+	return dir, inTurns
 }
 
 var clientCwdPattern = regexp.MustCompile(`(?m)(?:Primary working directory|^\s*(?:-\s*)?Working directory|Current working directory): *([^\r\n]+)$|<cwd>([^<\r\n]+)</cwd>`)
@@ -739,7 +748,9 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	client := work != ""
 	if !client {
 		work, err = claudeWorkDir()
-		req.envElsewhere = clientNamedWorkDir(req) != ""
+		named, inTurns := clientNamedWorkPlace(req)
+		req.envElsewhere = named != ""
+		req.envInTurns = inTurns
 		// a caller on another computer that names no folder: Claude Code's
 		// environment is this computer's, and the tools run on the
 		// caller's (packinggoods on Discord: a Mac client of a Windows
@@ -2890,11 +2901,25 @@ const envElsewhereLeanNote = "\n\nThe environment these instructions describe (w
 // gateway's shell. It names no app and no vendor.
 const envUnknownNote = "\n\nThe environment given elsewhere in this conversation (its working directory, platform, OS and shell) is not the one the tools run on: don't take a platform, shell or path for a tool call from it."
 
+// envTurnsNote is envElsewhereNote, in either mode, for a caller whose
+// environment is in its messages, not its instructions (Claude Code
+// 2.1.296 and later, req.envInTurns). envElsewhereNote pointed the model
+// at instructions that describe no environment, while the caller's own
+// came after them as a message, and the gateway's Claude Code gave its
+// own before them all (packinggoods on Discord: a Mac client of a
+// Windows gateway still had commands wrapped in PowerShell). The run's
+// own environment is always the first one given, at the start of its
+// first message, and the caller's comes after it, so the last one given
+// is the caller's. It names no app and no vendor.
+const envTurnsNote = "\n\nOf the environments given in this conversation (working directory, platform, OS, shell, git status), the last one given is the one every tool runs in. Where an earlier one differs, go by the last; nothing has changed and there is no need to check."
+
 // envNote is what a run is told after the caller's instructions of where
 // its tools run: "" for a run in the caller's own folder, or for a caller
 // on this computer that names none.
 func envNote(req *Request) string {
 	switch {
+	case req.envElsewhere && req.envInTurns:
+		return envTurnsNote
 	case req.envElsewhere && req.leanPrompt:
 		return envElsewhereLeanNote
 	case req.envElsewhere:
