@@ -1024,7 +1024,8 @@ func CachePath() string { return filepath.Join(filepath.Dir(catalog.CachePath())
 // 24: Claude Code's compact summaries' uuids (Compacts).
 // 25: the skills Codex calls up by reading their SKILL.md.
 // 26: Grok Build's tool calls and skills.
-const cacheVersion = 26
+// 27: Factory Droid's skills (its Skill tool and /<name> prompts).
+const cacheVersion = 27
 
 type cacheFile struct {
 	Version int               `json:"version"`
