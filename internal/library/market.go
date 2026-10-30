@@ -239,7 +239,8 @@ var seenServers = struct {
 // that match it, then the registry's. A search that is an address — a
 // repository, a page, an endpoint, a package — finds the ones at it.
 func MarketServers(q string) ([]MarketServer, error) {
-	q = strings.ToLower(strings.TrimSpace(q))
+	raw := strings.TrimSpace(q)
+	q = strings.ToLower(raw)
 	addr := address(q)
 	var out []MarketServer
 	for _, m := range featured {
@@ -257,9 +258,9 @@ func MarketServers(q string) ([]MarketServer, error) {
 	if q != "" {
 		var found []MarketServer
 		if addr != "" {
-			found, err = searchRegistryAt(addr)
+			found, err = searchAt(raw, addr)
 		} else {
-			found, err = searchRegistry(q)
+			found, err = searchWords(q)
 		}
 		for _, f := range found {
 			if !slices.ContainsFunc(out, func(m MarketServer) bool { return serverKey(&m.server) == serverKey(&f.server) }) {
