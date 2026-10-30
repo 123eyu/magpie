@@ -137,6 +137,11 @@ type Session struct {
 	Unpriced int     `json:"unpriced"` // models that spent tokens but have no known price
 	Resume   string  `json:"resume"`   // the command that picks the session up again
 	Path     string  `json:"path"`     // its (main) file
+	// App is the agent the session ran in when it isn't the one whose files
+	// hold it: claude-desktop for a Claude Code session Claude Desktop's Code
+	// tab ran (its entrypoint, desktopEntrypoint). Usage counts the session
+	// under App; the key, resume and transcript stay Agent's.
+	App string `json:"app,omitempty"`
 	// Carry are the other agents that can carry the session on, reading its
 	// file as it is (carry.go)
 	Carry []Carry `json:"carry,omitempty"`
@@ -213,6 +218,9 @@ type state struct {
 	// Days is Models again, split by the local date each message was
 	// written on: a session that runs past midnight counts on both days.
 	Days named[*day] `json:"days,omitempty"`
+	// Claude Code: the entrypoint its first line naming one says, which
+	// tells a session Claude Desktop's Code tab ran (desktopEntrypoint)
+	Entry string `json:"entry,omitempty"`
 	// Claude Code: the message last counted, whose later lines repeat it,
 	// and the day it was counted on
 	Msg      string `json:"msg,omitempty"`
@@ -1046,7 +1054,8 @@ func CachePath() string { return filepath.Join(filepath.Dir(catalog.CachePath())
 // 26: Grok Build's tool calls and skills.
 // 27: Factory Droid's skills (its Skill tool and /<name> prompts).
 // 28: OpenCode 2's, Cline's and dsh's tool calls and skills.
-const cacheVersion = 28
+// 29: Claude Code's entrypoint (Entry), Desktop's Code tab apart.
+const cacheVersion = 29
 
 type cacheFile struct {
 	Version int               `json:"version"`
@@ -1674,6 +1683,9 @@ func assembleListed(fs []file, price func(string) *catalog.Price, codexTitle fun
 			}
 			if first == "" {
 				first = st.First
+			}
+			if s.Agent == "claude" && s.App == "" && desktopEntrypoint(st.Entry) {
+				s.App = "claude-desktop"
 			}
 			s.Convs = append(s.Convs, st.Convs...)
 		}

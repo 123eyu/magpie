@@ -2963,11 +2963,13 @@ function renderSessions() {
   // the agent filter is a menu, as the model and folder ones beside it: a
   // strip of a segment per agent ran past the window with a dozen of them
   // in range, and scrolled sideways to reach the last
-  const agents = [...new Map([...all.map((s) => [s.agent, s.name]), ...Object.entries(st.agents || {})]).entries()];
+  // a session is under the agent it ran in: s.app, when its files are
+  // another's (Claude Desktop's Code tab's, in Claude Code's folder)
+  const agents = [...new Map([...all.map((s) => [s.app || s.agent, s.name]), ...Object.entries(st.agents || {})]).entries()];
   if (sessAgent !== "all" && !agents.some(([id]) => id === sessAgent)) sessAgent = "all";
 
   // the model and folder filters offer what the range has, under the other filters
-  const byAgent = (x) => sessAgent === "all" || x.agent === sessAgent;
+  const byAgent = (x) => sessAgent === "all" || (x.app || x.agent) === sessAgent;
   const byModel = (x) => !sessModel || x.model === sessModel;
   const byFolder = (x) => !sessFolder || x.cwd === sessFolder;
   const spent = (list, key) => {
@@ -3471,7 +3473,7 @@ function renderSessTop() {
   const list = ov.top?.[sessTopBy] || [];
   const body = el("div", "sess-tops");
   if (!list.length) body.append(el("div", "sess-none", ov.top ? t("Nothing in this range.") : "…"));
-  const icons = new Map((sessions?.sessions || []).map((s) => [s.agent, s.icon]));
+  const icons = new Map((sessions?.sessions || []).map((s) => [s.app || s.agent, s.icon]));
   const names = sessStats?.agents || {};
   for (const s of list) {
     const open = sessTopOpen === s.key;

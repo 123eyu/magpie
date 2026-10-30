@@ -66,7 +66,19 @@ the gateway's `omp|<sub id>` is its own in the same places as Raft's `pi|`
 key, and is never a second session counted again (Jumy, Discord 10-30:
 `TestOmpSubagentsAreTheSessionsToTheGateway`,
 `TestOmpSubagentCountedOnceWithTheGateway`). A Claude Code session's
-copies (`Copies`) are among its keys the same way. On `/api/sessions/manage`, in its
+copies (`Copies`) are among its keys the same way. A Claude Code
+session Claude Desktop's Code tab ran is in Claude Code's folder, and only its lines' `entrypoint`
+(`claude-desktop`, `claude-desktop-3p`) tells it apart: its parse keeps the
+entrypoint of the line its folder came from (`state.Entry`), and the
+session is listed under `claude` with `App` `claude-desktop`. It is the
+gateway's `claude-desktop|<id>` too, as the gateway knows the Code tab by
+Desktop's user agent, in `MergeExternal`, the stats' native keys, the GUI's
+list and Via. Usage counts it under Desktop, as its calls are: the stats'
+rows and its summary carry `claude-desktop`, its key stays `claude:<id>`,
+and Usage › Sessions files it under its `app` (`TestStatsDesktopCodeTab`,
+`usage-sessions-desktop-app.test.cjs`). `NativeIDs` for `claude-desktop`
+doesn't read Claude Code's files yet (#4333). On `/api/sessions/manage`,
+in its
 counts as in its list, and on `/api/sessions/delete`, a native session is any
 session file the agent keeps, one nothing was said in too, with no limit
 (`sessions.NativeIDs`); one pass over the agents' files (`sessions.Manage`)
