@@ -944,11 +944,38 @@ func TestCRTidyTwentyFourMBLine(t *testing.T) {
 			b.WriteString(`{"type":"function_call","id":"fc_1","call_id":"call_1","name":"n","arguments":"{\"a\":\"x\\ry\"}"},`)
 		}
 		for i := 0; i < rep; i++ {
+			if i > 0 {
+				b.WriteString(",")
+			}
 			b.WriteString(unit)
-			b.WriteString(",")
 		}
 		b.WriteString(`]}}` + "\n\n")
 		return b.String()
+	}
+	// the mended line is said again with its keys sorted, so it is read
+	// back rather than compared byte for byte
+	mended := func(t *testing.T, got string) {
+		if strings.Count(got, "data: ") != 1 || !strings.HasSuffix(got, "\n\n") {
+			t.Fatal("the mended line is not one data line")
+		}
+		var ev struct {
+			Response struct {
+				Output []map[string]any `json:"output"`
+			} `json:"response"`
+		}
+		if err := json.Unmarshal([]byte(strings.TrimSuffix(strings.TrimPrefix(got, "data: "), "\n\n")), &ev); err != nil {
+			t.Fatalf("the mended line does not read: %v", err)
+		}
+		out := ev.Response.Output
+		if len(out) != rep+1 {
+			t.Fatalf("%d items came out, want %d", len(out), rep+1)
+		}
+		if out[0]["id"] != "fc_1" || out[0]["arguments"] != `{"a":"xy"}` {
+			t.Fatalf("arguments %q, want {\"a\":\"xy\"}", out[0]["arguments"])
+		}
+		if out[rep]["text"] != `hello "world" padding ` {
+			t.Fatalf("the last text item came out as %v", out[rep])
+		}
 	}
 	for _, c := range []struct {
 		name string
@@ -956,7 +983,7 @@ func TestCRTidyTwentyFourMBLine(t *testing.T) {
 		want string
 	}{
 		{"no escape", big(false), big(false)},
-		{"one call mended", big(true), strings.Replace(big(true), `x\ry`, `xy`, 1)},
+		{"one call mended", big(true), ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			tidy := &crTidy{proto: provider.Responses, sse: true}
@@ -973,7 +1000,9 @@ func TestCRTidyTwentyFourMBLine(t *testing.T) {
 			}
 			elapsed := time.Since(start)
 			t.Logf("24MB line in 32KB reads: %s", elapsed)
-			if string(got) != c.want {
+			if c.want == "" {
+				mended(t, string(got))
+			} else if string(got) != c.want {
 				t.Fatal("the line came out other than wanted")
 			}
 			if elapsed > 8*time.Second {
