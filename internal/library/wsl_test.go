@@ -253,6 +253,17 @@ func TestWSLMagpieImage(t *testing.T) {
 		t.Errorf("the distro was asked %d times", probed)
 	}
 
+	// the hub on: an agent in WSL is given magpie-image itself still, run
+	// in its distro, whose paths it saves to; the hub gives it nothing
+	ok(t)(SetMCPHub(true))
+	if s := read(t, filepath.Join(h, ".codex/config.toml")); !strings.Contains(s, "[mcp_servers.magpie-image]") {
+		t.Errorf("codex@wsl lost magpie-image to the hub:\n%s", s)
+	}
+	if got := hubServers(wslCodex); len(got) != 0 {
+		t.Errorf("the hub gives codex@wsl %v", got)
+	}
+	ok(t)(SetMCPHub(false))
+
 	// drives mounted elsewhere: the server is told where
 	reset()
 	answer = "/win/d/tools/Magpie/magpie-windows-amd64.exe\ninterop:on\n"

@@ -678,7 +678,7 @@ arguments are never kept, not even masked.
   and `/v1/videos` itself, so it reports each call it answered to the
   gateway's image MCP server with the JSON-RPC method `magpie/toolCalled`
   (`gateway.MCPCalledMethod`, params `MCPCalled`: tool, ms, model,
-  error); a tool not Magpie Image's is -32602. An older gateway that
+  error); a tool not Magpie Image's is -32602. Behind the [MCP hub](mcp-hub.md) it sends none: the hub's `tools/call` is the row. An older gateway that
   doesn't know the method just leaves the call unlisted.
 - **Counted nowhere:** `Record.IsProbe` is true for these rows, so they
   ride the probe lane above: listed (`probeChunk`, kept as they are),

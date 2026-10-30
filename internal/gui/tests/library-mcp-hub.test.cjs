@@ -49,7 +49,7 @@ const fixture = (on, st = {}) => ({
   servers: [
     { name: "my-tools", transport: "stdio", command: "node", args: [`${HOME}/code/my-tools/index.js`], agents: ["claude", "codex", "claude-desktop", ...(st.cursorOn ? ["cursor"] : [])] },
     { name: "notes", transport: "stdio", command: "uvx", args: ["notes-mcp"], agents: ["claude", "codex", ...(st.cursorOn ? ["cursor"] : [])] },
-    // magpie's own: given to each agent as it is, and the hub says so
+    // magpie's own: in the hub too, saving into the calling agent's project
     { name: "magpie-image", transport: "stdio", command: "/Applications/magpie.app/Contents/MacOS/magpie", args: ["mcp", "image"], agents: ["claude"] },
   ],
 });
@@ -176,9 +176,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(st.sent, [{ on: true }]);
         await page.waitForFunction(() => document.querySelector("#view-library .lib-hub .lib-switch")?.getAttribute("aria-checked") === "true");
         assert.equal((await v.locator(".lib-hub .sub.wraps").textContent()).trim(), w("Each agent is given one server, magpie, in place of these. magpie runs each server once for all of them and hands each call to it, as server__tool. Restart an agent for it to read the change."));
-        // what it serves: two servers, 2 tools each once checked, in Claude Code
+        // what it serves: three servers, magpie-image among them, 2 tools each once checked, in Claude Code
         await page.waitForFunction((x) => document.querySelector("#view-library .lib-hubstats")?.textContent === x,
-          [w("{n} servers", { n: 2 }), w("{n} tools", { n: 4 }), w("in {agents}", { agents: "Claude Code" }), w("{name} is given to each agent directly", { name: "magpie-image" })].join(" · "));
+          [w("{n} servers", { n: 3 }), w("{n} tools", { n: 6 }), w("in {agents}", { agents: "Claude Code" })].join(" · "));
         // the hub's mark is magpie's bird (the owner didn't like a made-up glyph)
         assert.equal(await v.locator('.lib-hub > .lib-hubmark use[href="#bird"]').count(), 1);
         // the address any other app connects at
@@ -211,7 +211,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // one agent that can be: named, not counted
         assert.equal(await lead(), web ? w("{agent} uses the library's servers through magpie", { agent: "Claude Code" }) : w("{on} of {all} agents use the library's servers through magpie", { on: 1, all: 2 }));
         assert.equal((await sheet.locator(".lib-hubsub").textContent()).trim().replace(/\u00a0/g, " "),
-          [web ? w("Each server runs once, for all of them") : w("{n} more can be connected", { n: 1 }), w("{n} keep each server's own entry", { n: 2 }), w("{name} is given to each agent directly", { name: "magpie-image" })].join(" · "));
+          [web ? w("Each server runs once, for all of them") : w("{n} more can be connected", { n: 1 }), w("{n} keep each server's own entry", { n: 2 })].join(" · "));
+        // the diagram's servers are the library's three, magpie-image's mark too (the owner: why isn't its logo there?)
+        assert.equal(await sheet.locator(".lib-hubroute > .lib-hubstack").last().locator(":scope > *").count(), 3);
         assert.equal(await sheet.locator('.ehead > .lib-hubmark use[href="#bird"]').count(), 1);
         // a few agents: no search, nothing folded
         assert.equal(await sheet.locator(".lib-hubsearch, .lib-hubfolded, .lib-hubfold").count(), 0);

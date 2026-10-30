@@ -3,7 +3,8 @@
 // server can stay each agent's own entry. Its editor has a switch,
 // "Through the MCP hub", on for a server shared as before; off saves it
 // with hub "direct", the row says so with a tag, and the hub's line
-// counts it with magpie's own image server as given directly. With the
+// counts it as given directly. magpie's own image server is behind the hub
+// as the others are, and can be kept direct the same way. With the
 // hub off there is neither switch nor tag. Every language, Chromium and
 // WebKit, 1100 and 390 wide; nothing scrolls sideways. No backend: the
 // API is faked here.
@@ -104,7 +105,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
               continue;
             }
             assert.equal(await tag.count(), 0, "a shared server has no tag");
-            assert.ok((await stats()).startsWith(w("{n} servers", { n: 2 })), await stats());
+            assert.ok((await stats()).startsWith(w("{n} servers", { n: 3 })), await stats());
             // on for a server shared as before; the hint says what off does
             await open();
             assert.equal(await sw.getAttribute("aria-checked"), "true");
@@ -119,7 +120,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             assert.equal(await tag.getAttribute("title"), w(WORDS[2]));
             await page.waitForFunction((x) => document.querySelector("#view-library .lib-hubstats")?.textContent.startsWith(x[0]) &&
               document.querySelector("#view-library .lib-hubstats")?.textContent.endsWith(x[1]),
-            [w("1 server"), w("{name} is given to each agent directly", { name: "index, magpie-image" })]);
+            [w("{n} servers", { n: 2 }), w("{name} is given to each agent directly", { name: "index" })]);
             await open();
             assert.equal(await sw.getAttribute("aria-checked"), "false");
             // on again, saved as shared
@@ -127,9 +128,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             await save();
             assert.deepEqual(calls, ['index "direct"', 'index ""']);
             await tag.waitFor({ state: "detached" });
-            // magpie's own image server is always direct: no switch to offer
+            // magpie's own image server is behind the hub too, on like the others
             await open(rowOf("magpie-image"));
-            assert.equal(await sw.count(), 0, "a switch on magpie's own image server");
+            assert.equal(await sw.getAttribute("aria-checked"), "true", "magpie's own image server's switch");
             await ed.locator(":scope > .bar button", { hasText: w("Cancel") }).click();
             await ed.waitFor({ state: "detached" });
             // Cancel keeps it as it was

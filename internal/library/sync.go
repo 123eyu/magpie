@@ -241,11 +241,11 @@ func (l *Library) syncMCP(t *Target, b *backups, res *Result) {
 		// nor is a gone agent given the hub anew
 		hub = nil
 		if l.MCPHub && slices.Contains(a.MCP, HubEntry) && l.server(HubEntry) == nil &&
-			slices.ContainsFunc(l.MCP, func(s *Server) bool { return slices.Contains(s.Agents, id) && inHub(s) }) {
+			slices.ContainsFunc(l.MCP, func(s *Server) bool { return slices.Contains(s.Agents, id) && inHub(s, id) }) {
 			hub = hubServerFor(t)
 		}
 	}
-	hubbed := func(s *Server) bool { return hub != nil && inHub(s) }
+	hubbed := func(s *Server) bool { return hub != nil && inHub(s, id) }
 	var mine []string
 	for _, name := range a.MCP {
 		if s := l.server(name); s != nil && slices.Contains(s.Agents, id) && t.MCP.supports(s) == nil && !hubbed(s) {

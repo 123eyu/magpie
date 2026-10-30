@@ -1695,11 +1695,10 @@ magpie.plugin("library", (ctx) => {
     }
     return out;
   }
-  // magpie's own image server is given as it is, never through the hub: it
-  // asks its agent for the project's folder (inHub in mcp_hub.go)
-  const isSelf = (s) => s.transport === "stdio" && s.args?.[0] === "mcp" && s.args?.[1] === "image";
-  // nor is a server the user keeps direct (#4382): each agent's own entry
-  const inHub = (s) => !isSelf(s) && s.hub !== "direct";
+  // every server is behind the hub, magpie's own image server too, but one
+  // the user keeps direct (#4382): each agent's own entry (inHub in
+  // mcp_hub.go)
+  const inHub = (s) => s.hub !== "direct";
   // the servers each agent is given directly, by name, for the hub's lines
   const directNames = () => lib.servers.filter((s) => !inHub(s)).map((s) => s.name).join(", ");
   // what the hub serves: its servers, their tools as far as checked, and
@@ -2656,10 +2655,9 @@ magpie.plugin("library", (ctx) => {
     ed.append(...field(t("This computer only"), hereBox, t("Sync never carries it to your other computers, and a sync from them neither removes it nor puts theirs in its place")));
     // with the hub on, a server can stay each agent's own entry (#4382,
     // cuipengcx90): one that reads its project from the folder it starts
-    // in, or keeps a session's state. Shown only while the hub is on, and
-    // never for magpie's own image server, which is always direct
+    // in, or keeps a session's state. Shown only while the hub is on
     d.hub = d.hub === "direct" ? "direct" : "";
-    if (lib.mcpHub && !isSelf(d)) {
+    if (lib.mcpHub) {
       const hubBox = el("div", "lib-hubbox");
       const drawHub = () => hubBox.replaceChildren(toggle(d.hub !== "direct", t("Through the MCP hub"), (on) => { d.hub = on ? "" : "direct"; drawHub(); }));
       drawHub();
