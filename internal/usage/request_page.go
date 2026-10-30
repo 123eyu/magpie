@@ -1423,7 +1423,8 @@ type matchCandidate struct {
 // and growing these afresh each time was ~1.9 of the ~2.2 GB the matcher
 // allocated in 80 s of polls (#2278). A sync.Pool kept nothing: a poll
 // collects several times a second, and each collection empties it. One is
-// kept until ReleaseScratch, which the window calls once its reads rest.
+// kept until ReleaseScratch, which the window calls once its reads rest,
+// or until no pairing has used it for scratchLinger.
 type matchScratch struct {
 	reserved   map[rowRef]bool
 	byID       map[string]int32
@@ -1469,6 +1470,34 @@ func ReleaseScratch() {
 	releasePriced()
 }
 
+// scratchLinger is how long the matcher's scratch is kept once the last
+// pairing put it back. While an agent works every poll pairs again and
+// finds it kept; with nothing new to pair, a poll is answered from the
+// pairings kept (pairMemo) and pairs nothing, and the scratch of one pairing
+// of the whole history sat unused while the window polled: ~120 MB of the
+// ~270 MB held over 60 s of polls on a 65 GB history (#2278).
+var scratchLinger = 30 * time.Second
+
+var scratchSweep struct {
+	sync.Mutex
+	t *time.Timer
+}
+
+// lingerScratch has the kept scratch let go scratchLinger after the last
+// pairing put it back.
+func lingerScratch() {
+	scratchSweep.Lock()
+	defer scratchSweep.Unlock()
+	if scratchSweep.t == nil {
+		scratchSweep.t = time.AfterFunc(scratchLinger, func() {
+			keptMatch.Store(nil)
+			keptPicks.Store(nil)
+		})
+		return
+	}
+	scratchSweep.t.Reset(scratchLinger)
+}
+
 // sized is s[:n], zeroed, in s's array when it holds n
 func sized[T any](s []T, n int) []T {
 	if cap(s) < n {
@@ -1495,6 +1524,7 @@ func (s *matchScratch) release() {
 	s.calls, s.found, s.refs, s.groups, s.ks = s.calls[:0], s.found[:0], s.refs[:0], s.groups[:0], s.ks[:0]
 	s.ends, s.counts, s.unique, s.candidates = s.ends[:0], s.counts[:0], s.unique[:0], s.candidates[:0]
 	keptMatch.Store(s)
+	lingerScratch()
 }
 
 // agyMatchSession stands for the session of an Antigravity CLI (agy) call
