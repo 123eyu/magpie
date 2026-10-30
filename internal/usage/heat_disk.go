@@ -80,9 +80,16 @@ func heatSettledKey(d heatDiskRef, cut, since time.Time, f Filter, identities ma
 	if d.root == "" {
 		return "", false
 	}
+	// the filter's zone by its name: %#v writes its pointer, another in
+	// each run
+	zone := ""
+	if f.Zone != nil {
+		zone = f.Zone.String()
+	}
+	f.Zone = nil
 	h := sha256.New()
-	fmt.Fprintf(h, "heat-v1\x00%s\x00%s\x00%s\x00%d\x00%d\x00%s\x00%#v\x00%d:%d:%d\x00",
-		requestDiskBinary(), d.root, d.meta, cut.UnixNano(), since.UnixNano(), cut.Location(), f, before.n, before.at, before.tokens)
+	fmt.Fprintf(h, "heat-v1\x00%s\x00%s\x00%s\x00%d\x00%d\x00%s\x00%#v\x00%s\x00%d:%d:%d\x00",
+		requestDiskBinary(), d.root, d.meta, cut.UnixNano(), since.UnixNano(), cut.Location(), f, zone, before.n, before.at, before.tokens)
 	hashCodexIdentities(h, identities)
 	var b []byte
 	rows := lentRows()

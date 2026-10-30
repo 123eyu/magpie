@@ -382,3 +382,25 @@ func TestHeatmapSettledDaysFromDisk(t *testing.T) {
 		t.Fatalf("after a settled file changed %+v, cold %+v", changed, cold)
 	}
 }
+
+// The settled days' key names a filter's zone by its name: written with
+// %#v it named the zone's pointer, another in each run, and every start
+// paired the whole history again for the heatmap.
+func TestHeatSettledKeyNamesTheZone(t *testing.T) {
+	cut := time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC)
+	d := heatDiskRef{root: "r", meta: "m"}
+	key := func(f Filter) string {
+		k, ok := heatSettledKey(d, cut, time.Time{}, f, nil, [3][]*rowChunk{}, heatSum{})
+		if !ok {
+			t.Fatal("not named")
+		}
+		return k
+	}
+	a, b := key(Filter{Zone: time.FixedZone("Z", 3600)}), key(Filter{Zone: time.FixedZone("Z", 3600)})
+	if a != b {
+		t.Fatalf("one zone, two keys: %s, %s", a, b)
+	}
+	if key(Filter{}) == a || key(Filter{Zone: time.FixedZone("Y", 7200)}) == a {
+		t.Fatal("another zone, the same key")
+	}
+}
