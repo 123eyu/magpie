@@ -11,6 +11,7 @@ package usage
 import (
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/sessions"
@@ -237,28 +238,92 @@ type heatSum struct {
 // heatBefore is the sum of the recent chunks' rows before cut: a recent
 // chunk can hold calls of the days before (a session file copied in, a
 // rollout forked from an old one), and they change the days the last
-// pairing of every chunk counted.
+// pairing of every chunk counted. A named chunk's sum is kept by its
+// serial and the cut: the heatmap, the page and Codex's effort each asked
+// it of every recent chunk, unpacked whole, on each read, ~120 MB of a
+// start's first 18s's allocations on a year's history (#2278).
 func heatBefore(cut time.Time, recent [3][]*rowChunk) heatSum {
 	priceStubs(recent[0])
-	rows := lentRows()
-	defer rows.release()
+	heatBefores.Lock()
+	heatBefores.turn++
+	turn := heatBefores.turn
 	var s heatSum
+	var open []*rowChunk
 	for _, set := range recent {
 		for _, c := range set {
-			open := rows.of(c)
-			for i := range open.Rows {
-				if pr := &open.Rows[i]; pr.Time.Before(cut) {
-					s.n++
-					s.at += pr.Time.UnixNano()
-					for _, t := range pr.Tokens {
-						s.tokens += t
-					}
+			if k := c.serial; k != 0 {
+				if kept, ok := heatBefores.by[k]; ok && kept.cut.Equal(cut) {
+					kept.turn = turn
+					heatBefores.by[k] = kept
+					s.plus(kept.sum)
+					continue
+				}
+			}
+			open = append(open, c)
+		}
+	}
+	heatBefores.Unlock()
+	rows := lentRows()
+	defer rows.release()
+	made := map[uint64]heatSum{}
+	for _, c := range open {
+		if heatBeforeOpening != nil {
+			heatBeforeOpening(c)
+		}
+		var part heatSum
+		unpacked := rows.of(c)
+		for i := range unpacked.Rows {
+			if pr := &unpacked.Rows[i]; pr.Time.Before(cut) {
+				part.n++
+				part.at += pr.Time.UnixNano()
+				for _, t := range pr.Tokens {
+					part.tokens += t
 				}
 			}
 		}
+		s.plus(part)
+		if c.serial != 0 {
+			made[c.serial] = part
+		}
 	}
+	heatBefores.Lock()
+	if heatBefores.by == nil {
+		heatBefores.by = map[uint64]heatBeforeOf{}
+	}
+	for k, part := range made {
+		heatBefores.by[k] = heatBeforeOf{cut: cut, sum: part, turn: turn}
+	}
+	for k, kept := range heatBefores.by {
+		if kept.turn+hintsKept < heatBefores.turn {
+			delete(heatBefores.by, k)
+		}
+	}
+	heatBefores.Unlock()
 	return s
 }
+
+func (s *heatSum) plus(o heatSum) {
+	s.n += o.n
+	s.at += o.at
+	s.tokens += o.tokens
+}
+
+// heatBeforeOf is a chunk's rows before cut, kept as hintsOf keeps a
+// chunk's hints, for as many reads after the last that asked for it.
+type heatBeforeOf struct {
+	cut  time.Time
+	sum  heatSum
+	turn uint64
+}
+
+var heatBefores struct {
+	sync.Mutex
+	by   map[uint64]heatBeforeOf
+	turn uint64
+}
+
+// heatBeforeOpening, in tests, is told each chunk heatBefore unpacks.
+var heatBeforeOpening func(*rowChunk)
 
 // heatSplit is heatOf of the rows of every chunk, paired. A call through
 // magpie changes the gateway's newest block and a session file, and the
