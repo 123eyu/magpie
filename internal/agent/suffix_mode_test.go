@@ -34,6 +34,7 @@ func TestSuffixModesReachAgentFiles(t *testing.T) {
 	writeFile(t, piModels, `{"providers":{"magpie":{"name":"magpie","models":[]}}}`)
 	// Pi runs a model of magpie's: connected, so its list follows
 	writeFile(t, filepath.Join(home, ".pi", "agent", "settings.json"), `{"defaultProvider":"magpie","defaultModel":"relay/glm-4.6"}`)
+	setUpInMagpie("pi")
 	codexDir := filepath.Join(home, ".codex")
 	codexCat := filepath.Join(codexDir, "magpie-models.json")
 	writeFile(t, filepath.Join(codexDir, "config.toml"), "model = \"relay/glm-4.6\"\nmodel_provider = \"magpie\"\nmodel_catalog_json = \""+tomlString(codexCat)+"\"\n")

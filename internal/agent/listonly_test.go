@@ -82,10 +82,18 @@ func TestCatalogSyncLeavesAHandWrittenMagpieBlock(t *testing.T) {
 		t.Errorf("after Disconnect, MiMo's own magpie provider written over:\n%s", got)
 	}
 
-	// a model of magpie's picked in MiMo connects it: the list is
-	// magpie's again
-	connected := strings.Replace(own, `"mimo/mimo-v2.5-pro"`, `"magpie/relay/glm-4.6"`, 1)
-	writeFile(t, mimo, connected)
+	// a model of magpie's picked in MiMo on that provider of its own
+	// doesn't connect it (JFunfunfun on X: handWired); connecting it in
+	// magpie does, and the list is magpie's again
+	picked := strings.Replace(own, `"mimo/mimo-v2.5-pro"`, `"magpie/relay/glm-4.6"`, 1)
+	writeFile(t, mimo, picked)
+	SyncCatalog()
+	if got := readFile(mimo); got != picked {
+		t.Errorf("a magpie model picked on MiMo's own magpie provider, written over:\n%s", got)
+	}
+	if err := a.Connect(); err != nil {
+		t.Fatal(err)
+	}
 	SyncCatalog()
 	if got := readFile(mimo); !strings.Contains(got, `"later/m3"`) {
 		t.Errorf("a connected MiMo's list not kept current:\n%s", got)
