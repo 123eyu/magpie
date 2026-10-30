@@ -2379,7 +2379,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		}
 		// one that installs a CLI first has no URL yet: the window opens it
 		// once there is one
-		writeJSON(rw, signInOpened{st, openError(w, st.URL)})
+		writeJSON(rw, openSignIn(w, st))
 	})
 	mux.HandleFunc("GET /api/signin/{id}", func(rw http.ResponseWriter, r *http.Request) {
 		st, ok := provider.SignInStatus(r.PathValue("id"))

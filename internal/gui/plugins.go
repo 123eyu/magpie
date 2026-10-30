@@ -818,11 +818,7 @@ func pluginRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, err)
 			return
 		}
-		var failed string
-		if w != nil && !st.Opened {
-			failed = openError(w, st.URL)
-		}
-		writeJSON(rw, signInOpened{st, failed})
+		writeJSON(rw, openSignIn(w, st))
 	})
 }
 

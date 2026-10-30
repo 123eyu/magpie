@@ -12424,7 +12424,7 @@ async function startSignIn(agent, risky, site, o = {}) {
     if (o.user) body.user = o.user;
     if (o.proxy != null) body.proxy = o.proxy;
     signing = { ...(await api("signin", body)), ...keep };
-    if (web && signing.url) {
+    if (web && signing.url && !signing.linkOnly) {
       const id = signing.id;
       openSignInPage(signing.url).catch((e) => {
         if (signing?.id === id) { signing = { ...signing, openError: e.message }; renderProviders(); }
@@ -12462,7 +12462,7 @@ async function followSignIn(id) {
     if (signing?.id !== id) continue;
     if (st.state === "waiting" || st.state === "installing") {
       // the CLI it needed is in: now the vendor's page can open
-      if (signing.state === "installing" && st.state === "waiting" && st.url && !st.opened) {
+      if (signing.state === "installing" && st.state === "waiting" && st.url && !st.opened && !signing.linkOnly) {
         openSignInPage(st.url).catch((e) => {
           if (signing?.id === id) { signing = { ...signing, openError: e.message }; renderProviders(); }
         });
@@ -12481,7 +12481,7 @@ async function followSignIn(id) {
 // again and a proxy picked for it — its site and way, the account signed
 // in to again, the proxy picked
 function signingKept() {
-  return { site: signing.site, method: signing.method, inputs: signing.inputs, forUser: signing.forUser, picked: signing.picked, askProxy: signing.askProxy, customProxy: signing.customProxy, openError: signing.openError };
+  return { site: signing.site, method: signing.method, inputs: signing.inputs, forUser: signing.forUser, picked: signing.picked, askProxy: signing.askProxy, customProxy: signing.customProxy, openError: signing.openError, linkOnly: signing.linkOnly };
 }
 
 // signInProxyOf: the proxy an account's sign-in goes through when none is
@@ -12550,7 +12550,7 @@ async function startPluginSignIn(sub, method, inputs = {}, o = {}) {
     if (o.proxy != null) body.proxy = o.proxy;
     signing = { ...(await api("plugin-signin", body)), ...keep };
     // opened: the plugin's own CLI opened the page already (Grok Build's)
-    if (web && signing.url && !signing.opened) {
+    if (web && signing.url && !signing.opened && !signing.linkOnly) {
       const id = signing.id;
       openSignInPage(signing.url).catch((e) => {
         if (signing?.id === id) { signing = { ...signing, openError: e.message }; renderProviders(); }
@@ -12961,6 +12961,7 @@ function renderSigning(sub) {
   }
   tt.append(el("span", "n", t("Finish signing in to {name} in your browser", { name: sub.name })),
     el("span", "s", signing.state === "starting" ? t("Starting the sign-in…")
+      : signing.linkOnly && !signing.opened ? t("magpie didn't open the sign-in page, as set in Settings. Copy the link below into the browser you sign in with.")
       : signing.openError === openBlocked ? t("Your browser blocked the sign-in page from opening. Open it with Open again below, or copy the link into a browser.")
       : signing.openError ? t("magpie couldn't open your browser: {error}. Open the sign-in link below in a browser yourself.", { error: signing.openError })
       : sub.plugin ? (signing.instructions || (signing.pasteCode ? t("magpie opened the sign-in page. Paste the code it shows below.") : t("magpie opened the sign-in page. The account shows up here as soon as you're done.")))
@@ -12984,7 +12985,7 @@ function renderSigning(sub) {
     link.append(u, cp);
     tt.append(link);
     const acts = el("span", "acts");
-    const open = el("button", "link", t("Open again"));
+    const open = el("button", "link", signing.linkOnly && !signing.opened ? t("Open") : t("Open again"));
     // one that fails says why, where "magpie opened the sign-in page" was (#2043)
     // a poll may have put a fresh copy of the same sign-in in its place
     const flow = signing;
@@ -19957,7 +19958,7 @@ function renderSettings() {
   renderReplies(s, keep);
   renderDisabledModels(s);
   renderRedact(s, keep);
-  renderDiscovery(s);
+  renderDiscovery(s, keep);
   renderSessionReads(s);
   renderOTel(s, keep);
   renderPort(s);
@@ -21835,7 +21836,7 @@ const REDACT_KINDS = [
 // the rest — and serves them as subscriptions (#1535). Set on its own:
 // saved, magpie forgets the accounts it read, and API-key providers go on.
 // MAGPIE_NO_ACCOUNTS keeps it off for that run whatever is saved.
-function renderDiscovery(s) {
+function renderDiscovery(s, keep) {
   const box = $("#discoveryList");
   const r = el("div", "row pref");
   const who = el("div", "who");
@@ -21859,7 +21860,17 @@ function renderDiscovery(s) {
       .catch(settingsErr);
   }));
   r.append(who, val);
+  // sign-in pages left to a browser the user picks (max2020 on Discord)
+  const o = el("div", "row pref");
+  o.id = "signInOpenRow";
+  const ow = el("div", "who");
+  ow.append(el("div", "name", t("Open sign-in pages in the browser")),
+    el("div", "sub", t("Adding an account opens its sign-in page in your default browser. Off, magpie only shows the link, to copy into the browser you sign in with")));
+  const ov = el("div", "val");
+  ov.append(segs([["off", t("Off")], ["on", t("On")]], s.signInLinkOnly ? "off" : "on", (v) => savePrefs({ ...keep, signInLinkOnly: v === "off" })));
+  o.append(ow, ov);
   box.replaceChildren(r);
+  $("#signInOpenList").replaceChildren(o);
 }
 // what turning discovery off stops: the subscriptions signed in now, by
 // name, the Providers list read for it when no page has yet
@@ -22754,7 +22765,7 @@ function prefsKeep(s) {
     trayUsages: s.trayUsages || [],
     redact: !!s.redact, redactPersonal: !!s.redactPersonal, redactKinds: s.redactKinds || {}, redactWords: s.redactWords || [], redactWordsAnyCase: !!s.redactWordsAnyCase, redactWordsWhole: !!s.redactWordsWhole, redactShape: !!s.redactShape, codexWarmup: s.codexWarmup || "",
     claudeWarmup: s.claudeWarmup || "", codexWarmAt: s.codexWarmAt || "", claudeWarmAt: s.claudeWarmAt || "",
-    codexWarmAts: warmTimes(s.codexWarmAts, s.codexWarmAt), claudeWarmAts: warmTimes(s.claudeWarmAts, s.claudeWarmAt), workbuddyCheckin: !!s.workbuddyCheckin, traeCheckin: !!s.traeCheckin, minimaxCheckin: !!s.minimaxCheckin, qoderCheckin: !!s.qoderCheckin, noStats: !!s.noStats, noUsageStats: !!s.noUsageStats,
+    codexWarmAts: warmTimes(s.codexWarmAts, s.codexWarmAt), claudeWarmAts: warmTimes(s.claudeWarmAts, s.claudeWarmAt), workbuddyCheckin: !!s.workbuddyCheckin, traeCheckin: !!s.traeCheckin, minimaxCheckin: !!s.minimaxCheckin, qoderCheckin: !!s.qoderCheckin, noStats: !!s.noStats, noUsageStats: !!s.noUsageStats, signInLinkOnly: !!s.signInLinkOnly,
     memberModel: !!s.memberModel, noLoopGuard: !!s.noLoopGuard, claudeLeanPrompt: !!s.claudeLeanPrompt, refusalRetries: s.refusalRetries ?? null,
     noUpdatePill: !!s.noUpdatePill, noAutoUpdate: !!s.noAutoUpdate, updateEvery: s.updateEvery || 360, autoRestart: !!s.autoRestart, noAutoDownload: !!s.noAutoDownload, updateChannel: s.updateChannel || "",
     trayUsage: s.trayUsage || "", trayUsageEvery: s.trayUsageEvery || 3, trayNoLogos: !!s.trayNoLogos, trayNoBird: !!s.trayNoBird, trayPace: !!s.trayPace, trayNoCost: !!s.trayNoCost, trayWindows: s.trayWindows || {}, vision: s.vision || "", visionEffort: s.visionEffort || "", searcherEffort: s.searcherEffort || "", imageGen: s.imageGen || "", imageTimeout: s.imageTimeout || 0, classifyTimeout: s.classifyTimeout || 0, searcher: s.searcher || "", searchFirst: s.searchFirst || "", currency: s.currency || "usd",

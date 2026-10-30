@@ -17,6 +17,7 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // accountsCmd: `magpie accounts [agent] [--json]`, `magpie accounts add <agent>`,
@@ -476,12 +477,20 @@ func addAccount(agentID string) error {
 			return fmt.Errorf("sign-in didn't finish: %s", st.Error)
 		}
 	}
-	fmt.Println("Finish signing in in your browser. If it didn't open, go to:")
+	linkOnly := settings.Load().SignInLinkOnly
+	if linkOnly {
+		// the user keeps sign-in pages to a browser of their own
+		fmt.Println("Open this link in the browser you sign in with:")
+	} else {
+		fmt.Println("Finish signing in in your browser. If it didn't open, go to:")
+	}
 	fmt.Println(faint.Render(st.URL))
 	if st.Code != "" {
 		fmt.Println("and confirm the code", st.Code)
 	}
-	openInBrowser(st.URL)
+	if !linkOnly {
+		openInBrowser(st.URL)
+	}
 	ctx, stop := interruptContext()
 	defer stop()
 	if st.PasteCallback || st.PasteCode {

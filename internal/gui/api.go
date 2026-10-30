@@ -2728,6 +2728,23 @@ func state() stateJSON {
 type signInOpened struct {
 	provider.SignInState
 	OpenError string `json:"openError,omitempty"`
+	// LinkOnly is a sign-in whose page magpie didn't open, as the user
+	// asked (settings.SignInLinkOnly): the window says to copy its link
+	LinkOnly bool `json:"linkOnly,omitempty"`
+}
+
+// openSignIn opens an account sign-in's page, unless the user keeps those
+// pages to a browser of their own (settings.SignInLinkOnly), and says how
+// it went for signInOpened.
+func openSignIn(w Windows, st provider.SignInState) signInOpened {
+	if settings.Load().SignInLinkOnly {
+		return signInOpened{SignInState: st, LinkOnly: true}
+	}
+	var failed string
+	if w != nil && !st.Opened {
+		failed = openError(w, st.URL)
+	}
+	return signInOpened{SignInState: st, OpenError: failed}
 }
 
 // mcpSignInOpened is signInOpened for a sign-in to an MCP server.

@@ -1672,6 +1672,15 @@ with a click, with no left-border accent. The copy button beside it
 says it was copied. Open again is still there, and nothing scrolls. The
 checks run in English and Chinese, in Chromium and WebKit.
 
+`signin-link-only.test.cjs` checks Settings › Privacy › Sign-in pages (max2020
+on Discord, who signs in from a separate fingerprint browser). "Open sign-in
+pages in the browser" is On by default, and Off saves signInLinkOnly without
+moving the page or scrolling sideways, at 900px and 360px. A sign-in the
+server kept to its link (linkOnly) opens no tab. It says so, shows the link
+with Copy link, and offers Open where it would say Open again. A sign-in
+without linkOnly opens its page once, as before. Every language, in Chromium
+and WebKit; the API is faked.
+
 `copy-command.test.cjs` copies from a tab with no clipboard API, as
 `magpie web` on a NAS is when opened from another computer over http:
 /api/copy refuses and navigator.clipboard is missing, so the copy command

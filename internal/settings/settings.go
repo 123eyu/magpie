@@ -372,6 +372,13 @@ type Settings struct {
 	// as by default, subscriptions are found as ever. This computer's own
 	// (KeepOwn), set only by its own switch or `magpie accounts discovery`.
 	NoAccountDiscovery bool `json:"noAccountDiscovery,omitempty"`
+	// SignInLinkOnly keeps an account's sign-in page out of the default
+	// browser: the window (and the command line) shows its link to copy
+	// into a browser the user picks, a separate or fingerprint browser
+	// (max2020 on Discord). Off, as by default, the page opens as ever. A
+	// plugin whose own CLI opens its page (Grok Build on macOS and
+	// Windows) still does: magpie can't stop that.
+	SignInLinkOnly bool `json:"signInLinkOnly,omitempty"`
 	// NoStats stops the one event a day that counts magpie's users (see
 	// internal/stats).
 	NoStats bool `json:"noStats,omitempty"`
