@@ -107,6 +107,10 @@ type host struct {
 	loading map[*application.WebviewWindow]bool
 	// the main window placed as it was last left (placeMain), and so shown
 	placed atomic.Pointer[application.WebviewWindow]
+
+	// the quick panel's shortcut bound now, "" for none (panelkey_app.go)
+	keyMu    sync.Mutex
+	panelKey string
 }
 
 // whenReady runs fn once the main window can be shown safely.
@@ -576,6 +580,7 @@ func Run(version string, showMain bool, link string) error {
 		}
 	}
 	h.watchTrayUsage()
+	h.startPanelKey(before)
 	// Omarchy's bar shows magpie once: as its widget (Settings → Bar
 	// icon) or as the tray's item, not both
 	onBarIcon = h.setTrayInBar
@@ -815,6 +820,8 @@ func (h *host) leaveMenuBar() {
 			h.main.Hide()
 		}
 		setDock(false, false)
+		// and its shortcut, for the new version to bind
+		go h.dropPanelKey()
 	})
 }
 
