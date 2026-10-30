@@ -23590,13 +23590,9 @@ matchMedia("(max-width: 760px), (pointer: coarse) and (max-width: 1024px)").addE
 // centring and take the room between, and at the narrowest they draw in,
 // further still when they don't fit (the 560px window at 150%).
 function fitTop() {
-  const top = $(".top"), nav = $("#nav"), brand = $(".brand"), actions = $(".actions");
-  // the tray panel has no sidebar, so no .side-top
-  const st = $(".side-top");
-  if (st) {
-    st.classList.remove("tight");
-    st.classList.toggle("tight", st.scrollWidth > st.clientWidth);
-  }
+  const top = $(".top"), nav = $("#nav"), brand = $(".brand"), actions = $(".actions"), st = $(".side-top");
+  st?.classList.remove("tight");
+  st?.classList.toggle("tight", st.scrollWidth > st.clientWidth);
   // a phone's browser: the tabs have a row of their own (app.css), at their size;
   // and beside the sidebar the header holds only where the reader is and the icons
   if (phoneWeb() || sideNav()) { top.classList.remove("tight", "cramped", "inrow", "crowded", "packed"); return; }
