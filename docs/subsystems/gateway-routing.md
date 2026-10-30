@@ -1036,6 +1036,48 @@ user group and auto group, over Chat, Responses and Messages) and
 `TestImageRefused`
 ([`vision_refused_test.go`](../../internal/gateway/vision_refused_test.go)).
 
+## An image the describer can't describe
+
+`seer` names one describer, and before kelvinjason11 on X ("图片识别好像只支持一个模型识别 没有fallback") that was the only one asked: when it
+failed (a 5xx, out of its allowance, a timeout, an image it turned away, an
+empty answer) the latest turn's image failed the request, though other
+models that see were enabled. `describe` now asks through `describeWith`:
+the describer first, always, and when it fails, the next model that sees,
+as `AutoVision` ranks them (`seersRanked`, the ranking `autoVision` takes
+its first from), passing over the models already asked and any that
+turned an image away (`sightRefused`). Up to `visionTries` (3) models are
+asked, within `visionWaitMost` all told (each try is given what is left,
+`askVisionWith`'s `most`). A model out of its allowance is not asked in
+another's place: `seersRanked` puts those last, so the first being out
+means every one is. A request whose context ended (the agent canceled it)
+asks no other.
+
+- The description's header names the model that described it (`seenBody`,
+  `sight.by`).
+- The Routing row of a description asked in another's place carries
+  `CallFor.Instead` (the one asked before it), `Why` (its error) and
+  `Picked` (it was Settings' pick), and says so (`kindWhy`), as a search
+  in another searcher's place does. Each try is a row of its own.
+- When none answers, the error is the first's reason as before, then
+  "nor could X, asked in its place: why" for each other one
+  (`visionFailed`).
+- `sights` keeps a description under the describer asked first, whichever
+  model answered: the image sent again next turn is asked of no one, and a
+  new image is asked of the pick first again, so a pick that failed once is
+  not given up for good. A failure is still not kept.
+
+This differs from a searcher named in Settings, which gives way to no other
+provider: a failed search still leaves the search APIs and the model's own
+answer, while an image that isn't described fails the turn.
+
+Covered by `TestPickedDescriberThatFailsGivesWayToTheNextThatSees`,
+`TestAutoDescriberThatFailsGivesWayToTheNext`,
+`TestNoDescriberAnswersNamesEach`,
+`TestPickedDescriberThatAnswersIsTheOnlyOneAsked`,
+`TestCanceledDescriptionAsksNoOther`
+([`vision_fallback_test.go`](../../internal/gateway/vision_fallback_test.go))
+and `vision-instead.test.cjs`.
+
 ## Image recognition as an MCP server
 
 `VisionMCPPath`, `/mcp/magpie/vision`, serves the model that describes
@@ -1046,8 +1088,9 @@ is answered, guarded and Origin-checked the same way, with a 32 MB body so
 an image fits as a data URL, and each call reserves the calling key's limit
 (`budget.Reserve`). The tool takes `image` and an optional `prompt`. With no
 prompt it is described as a model's image is (`describe`, the same cache and
-`visionSystem`); with one, `askVisionWith` asks the prompt beside it under
-`visionAskSystem`. `image` is an http(s) URL or a `data:image/…;base64,` URL,
+`visionSystem`); with one, `describeWith` asks the prompt beside it under
+`visionAskSystem`, with the same fallback as a description (see "An image
+the describer can't describe"). `image` is an http(s) URL or a `data:image/…;base64,` URL,
 passed on as they are, or an absolute file path (`~/` and `file://` taken),
 read into a data URL up to 20 MB when `http.DetectContentType` says it is an
 image. A path is read only for a `local` caller: another machine's path
@@ -1167,7 +1210,9 @@ agents what magpie offers, don't flip with a window. Such a pick isn't
 asked: `askVisionWith` (`autoSpent`) answers with the reason and when it is
 back, and `modelSearch` (`searcherSpent`) skips it, puts spent searchers
 after the others and joins the reason into its error. A model named in
-Settings is asked as before, and a searcher named there is not handed on
+Settings is asked as before (an image it can't describe goes on to the next
+model that sees, see "An image the describer can't describe"), and a
+searcher named there is not handed on
 to another provider when it fails (see "A searcher that fails or finds
 nothing"). Image and video generation (`AutoDrawer`,
 `AutoVideomaker`) are not held this way.
