@@ -303,7 +303,8 @@ type Change struct {
 	// "reset-limit-key" resets (#2227), counted from 0: one past the last
 	// adds a limit, a nil Limit there removes that one. Without it,
 	// "limit-key" makes Limit the key's only limit, and "reset-limit-key"
-	// resets every one.
+	// resets every one. For "move-key" it is the place in the list the key
+	// goes to, counted from 0.
 	Index *int `json:"index,omitempty"`
 	// Models is what "models-key" sets; none lets the key use every model.
 	Models []string `json:"models,omitempty"`
@@ -473,12 +474,21 @@ func Update(action string, in Change) (string, error) {
 				mirror = &k
 			}
 			keys = slices.Delete(keys, i, i+1)
+		case "move-key":
+			// the keys are listed in the order they are kept in, which the
+			// user sets by dragging one (alextjy on Discord); nothing else
+			// about the key changes
+			if in.Index == nil || *in.Index < 0 || *in.Index >= len(keys) {
+				return "", errors.New("There is no such place in the list of keys")
+			}
+			k := keys[i]
+			keys = slices.Insert(slices.Delete(keys, i, i+1), *in.Index, k)
 		case "copy-key":
 			return keys[i].Secret, nil
 		default:
 			return "", fmt.Errorf("unknown key action %q", action)
 		}
-		if defaultKey && action != "remove-key" && action != "rename-key" && action != "limit-key" && action != "reset-limit-key" && action != "models-key" && action != "accounts-key" && action != "quotas-key" && action != "access-key" {
+		if defaultKey && action != "remove-key" && action != "rename-key" && action != "limit-key" && action != "reset-limit-key" && action != "models-key" && action != "accounts-key" && action != "quotas-key" && action != "access-key" && action != "move-key" {
 			mirror = &keys[i]
 		}
 	}

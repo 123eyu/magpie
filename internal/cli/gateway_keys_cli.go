@@ -44,6 +44,10 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		access.MigrateLegacyLANKeyBestEffort()
 		return gatewayKeyAccess(out, args[1:])
 	}
+	if action == "move" {
+		access.MigrateLegacyLANKeyBestEffort()
+		return gatewayKeyMove(out, args[1:])
+	}
 	// add <name> --read-only: a key that reads stats and uses no model
 	// (Steven on Discord: a desk display)
 	readOnly := false
@@ -72,7 +76,7 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		args = args[:2]
 	}
 	if (action == "list" && len(args) != 1) || (action != "list" && len(args) != 2) {
-		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] [--read-only] | rotate <id> | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|<N>d|<N>h [--tokens N] [--cost USD] [--cache-reads]] | models <id> [all | <provider>/<model>|<provider>/* ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off] | access <id> [read-only | full]")
+		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] [--read-only] | rotate <id> | remove <id> | limit <id> [list | off | reset [<n>] | remove <n> | [add] day|week|month|<N>d|<N>h [--tokens N] [--cost USD] [--cache-reads]] | models <id> [all | <provider>/<model>|<provider>/* ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...] | quotas <id> [on | off] | access <id> [read-only | full] | move <id> <place>")
 	}
 	switch action {
 	case "list", "add", "rotate", "remove":
@@ -556,5 +560,31 @@ func gatewayKeyAccess(out io.Writer, args []string) error {
 	} else {
 		_, err = fmt.Fprintf(out, "%s: full access, models and stats as its other limits let it\n", k.Name)
 	}
+	return err
+}
+
+// gatewayKeyMove puts a key at a place in the list, counted from 1 as
+// `magpie gateway-key list` shows them, the order the app's Gateway page
+// lists them in too, where a key is dragged to its place (alextjy on
+// Discord):
+//
+//	magpie gateway-key move <id> <place>
+func gatewayKeyMove(out io.Writer, args []string) error {
+	if len(args) != 2 {
+		return fmt.Errorf("usage: magpie gateway-key move <id> <place>")
+	}
+	keys, err := access.List()
+	if err != nil {
+		return err
+	}
+	n, err := strconv.Atoi(args[1])
+	if err != nil || n < 1 || n > len(keys) {
+		return fmt.Errorf("a key's place is 1 to %d, as `magpie gateway-key list` lists them: %q", len(keys), args[1])
+	}
+	n--
+	if _, err := access.Update("move-key", access.Change{Key: args[0], Index: &n}); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(out, "Gateway key moved to place %d\n", n+1)
 	return err
 }
