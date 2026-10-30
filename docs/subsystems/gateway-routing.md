@@ -1085,7 +1085,19 @@ Each image comes back as MCP image content (up to 5 MB each) and at a URL
 under `/mcp/magpie/image/files/` (a vendor's URL is fetched first). The
 file store is in memory, kept an hour and 256 MB at most, oldest first out.
 A file and a job belong to the gateway key that made them: another key gets
-404 (`KeyID`). The URL's base is `MAGPIE_PUBLIC_URL` when set, else the
+404 (`KeyID`). The URL handed out carries `?t=<exp>.<sig>`
+(`imageFileToken`: HMAC-SHA256 of the file's name, its expiry and the
+making key's id, under a secret made at the first file and kept only in
+memory), so it opens with no header, in a browser too (dhanyqaz on
+Discord: a model relays the link to a person). `lanGuard` lets a keyless
+GET or HEAD of a file with a `t` through (`imageTokenAsked`) after the
+allow list and sharing are judged, and `imageMCPFile` serves it only when
+the token is that file's, unexpired, and its key still on (`access.On`);
+anything else is the 401 a keyless request gets. A wrong key with a token
+is still 401, a page's Origin still 403, and the token names neither the
+key nor its id. Rotating the key keeps its id, so its links stay
+good for the rest of their hour (they never held the secret); turning it
+off or removing it ends them at once. The URL's base is `MAGPIE_PUBLIC_URL` when set, else the
 request's scheme and `Host`. A video is started through `videosCreate` and
 polled through `videosGet` in-process; when done the tool gives
 `/v1/videos/<id>/content`, which needs the same key. Image generation Off
