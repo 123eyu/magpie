@@ -52,6 +52,9 @@ func init() {
 	// and when Codex is connected or disconnected, or its route otherwise
 	// changes, so a running app sends where its config now says
 	provider.CodexAppRoute = codexAppRoute
+	// but not when Codex's account is switched while its provider takes
+	// no ChatGPT account: the app-server goes by none
+	provider.CodexNoAccount = codexNoAccount
 	// and when none starts in place of the one ended, the app is
 	// reopened on Windows, where its stdout was held open
 	provider.CodexAppOpen = codexAppOpen
@@ -104,6 +107,37 @@ func codexAppRoute() (route string, out, known bool) {
 		b.WriteString("out\n")
 	}
 	return b.String(), out, true
+}
+
+// codexNoAccount is whether the provider Codex's config.toml names takes
+// no ChatGPT account: a model_provider whose [model_providers] table
+// doesn't say requires_openai_auth = true (magpie's with the user's own
+// false, or magpie as the provider with no sign-in to keep). Codex then
+// sends the table's own key and its app-server reads no account
+// (codex-rs ModelProviderInfo::account_state, resolve_provider_auth), so
+// switching the account in auth.json changes nothing a running Codex
+// goes by. The built-in openai provider, a provider with no table here, a
+// profile (which may name another provider) or a config that can't be
+// read is false: those may go by the account.
+func codexNoAccount() bool {
+	defer filememo.Hold()()
+	home, _ := homes()
+	a := codex(home)
+	if _, err := os.ReadFile(a.Path); err != nil {
+		return false
+	}
+	if p, _ := edit.GetTOMLTop(a.Path, "profile"); p != "" {
+		return false
+	}
+	id, _ := edit.GetTOMLTop(a.Path, "model_provider")
+	if id == "" || id == "openai" {
+		return false
+	}
+	t, err := edit.GetTOMLTable(a.Path, "model_providers."+id)
+	if err != nil || t == nil {
+		return false
+	}
+	return t["requires_openai_auth"] != "true"
 }
 
 // others are clients that reach the gateway without being agents magpie

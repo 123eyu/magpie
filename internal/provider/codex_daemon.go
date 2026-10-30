@@ -203,9 +203,20 @@ func noteLeft(left *leftDaemon, pid int, from, to string) {
 // it isn't running or is on the account Codex is.
 func CodexDaemonStale() string {
 	codexDaemonMu.Lock()
-	defer codexDaemonMu.Unlock()
 	recheckLeft()
-	return codexDaemonLeft.user
+	was := codexDaemonLeft.user
+	codexDaemonMu.Unlock()
+	return leftOnAccount(was)
+}
+
+// leftOnAccount is was, the account an app-server is left on, or "" when
+// Codex's provider takes no ChatGPT account (CodexNoAccount): the
+// app-server goes by none, so nothing is to be restarted for it.
+func leftOnAccount(was string) string {
+	if was == "" || codexNoAccount() {
+		return ""
+	}
+	return was
 }
 
 // CodexAppStale answers the account the Codex desktop app is still signed
@@ -215,9 +226,10 @@ func CodexDaemonStale() string {
 // until it is quit and opened again.
 func CodexAppStale() string {
 	codexDaemonMu.Lock()
-	defer codexDaemonMu.Unlock()
 	recheckLeft()
-	return codexAppLeft.user
+	was := codexAppLeft.user
+	codexDaemonMu.Unlock()
+	return leftOnAccount(was)
 }
 
 // recheckLeft forgets an app-server left on an account before that has

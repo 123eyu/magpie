@@ -51,6 +51,22 @@ import (
 // itself (its model pick) is in route, or a pick would restart it.
 var CodexAppRoute func() (route string, out, known bool)
 
+// CodexNoAccount is set by the agent package: whether the provider Codex's
+// config names takes no ChatGPT account at all (a [model_providers] table
+// without requires_openai_auth = true, such as magpie's with the user's
+// own requires_openai_auth = false; danzi002 on Discord). Such a provider
+// sends its own key, and the app-server answers account/read with no
+// account for it (codex-rs ModelProviderInfo::account_state and
+// resolve_provider_auth), so which ChatGPT account auth.json holds is
+// nothing the app-server, the Codex app or the daemon goes by: an account
+// switch restarts none of them. false when it can't be told.
+var CodexNoAccount func() bool
+
+// codexNoAccount is CodexNoAccount, false while it isn't set.
+func codexNoAccount() bool {
+	return CodexNoAccount != nil && CodexNoAccount()
+}
+
 // An app-server ended is not yet one started in its place. The app starts
 // another only once it has read the end of the old one's stdout and seen
 // it exit (its StdioConnection closes on both, ChatGPT.exe 26.1021's
@@ -324,6 +340,18 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 	}
 	home := codexHome()
 	c := &codexApp
+	c.Lock()
+	switched := c.switched
+	c.Unlock()
+	// an account switch is nothing to an app-server on a provider that
+	// takes no ChatGPT account (CodexNoAccount): it is forgotten, and a
+	// route change later restarts it all the same
+	if switched && codexNoAccount() {
+		log.Printf("codex: Codex's account was switched while its provider takes no ChatGPT account; the Codex app's app-server is left running")
+		c.Lock()
+		c.switched, c.spent = false, false
+		c.Unlock()
+	}
 	c.Lock()
 	// at the first look only a used-up account's app-servers are ended:
 	// what the others read before magpie started isn't known
