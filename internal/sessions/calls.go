@@ -331,12 +331,18 @@ func callFileLists(codex []file) [][]file {
 func callSources() []file { return callSourcesWith(codexFiles()) }
 
 // callSourcesWith is callSources with codex the rollouts codexFiles found.
-func callSourcesWith(codex []file) []file {
+func callSourcesWith(codex []file) []file { return callSourcesInto(nil, codex) }
+
+// callSourcesInto is callSourcesWith appended to out.
+func callSourcesInto(out []file, codex []file) []file {
 	lists := append(callFileLists(codex), openCodeCallFiles(), zcodeCallFiles(), dshCallFiles(),
 		minimaxCallFiles(), kimiCallFiles(), wslFiles("kimi"), piCallFiles(), codebuddyCallFiles(),
 		agyCallFiles(), // #2097
 		workbuddyCallFiles())
-	return allowed(distinctOf(lists...))
+	if out == nil {
+		return allowed(distinctOf(lists...))
+	}
+	return allowed(distinctInto(out, lists...))
 }
 
 // desktopDataDirs are Claude Desktop's folders on this computer that
@@ -1178,8 +1184,28 @@ func CallSources() []CallSource { return callSourcesOf(callSources()) }
 // ~150ms of each rebuild.
 func CallSourcesAndCodexIdentities() ([]CallSource, map[string]CodexIdentity) {
 	codex := codexFiles()
-	sources := callSourcesOf(callSourcesWith(codex))
+	// the listing is let go once its sources are taken: made new on each
+	// Requests and effort ask, it was ~100 MB of a minute of polls (#2278)
+	fs := callSourcesInto(listingBuf(), codex)
+	sources := callSourcesOf(fs)
+	putListingBuf(fs)
 	return sources, codexIdentitiesOf(codex)
+}
+
+// listingBufs are listings a read takes and lets go of before it ends.
+var listingBufs sync.Pool
+
+func listingBuf() []file {
+	if b, ok := listingBufs.Get().(*[]file); ok {
+		return (*b)[:0]
+	}
+	return nil
+}
+
+func putListingBuf(fs []file) {
+	clear(fs[:cap(fs)]) // its files' strings go with the listing
+	fs = fs[:0]
+	listingBufs.Put(&fs)
 }
 
 func callSourcesOf(fs []file) []CallSource {

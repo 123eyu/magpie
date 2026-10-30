@@ -645,8 +645,13 @@ func distinctOf(lists ...[]file) []file {
 	for _, fs := range lists {
 		n += len(fs)
 	}
-	out := make([]file, 0, n)
-	seen := make(map[string]struct{}, n)
+	return distinctInto(make([]file, 0, n), lists...)
+}
+
+// distinctInto is distinctOf appended to out.
+func distinctInto(out []file, lists ...[]file) []file {
+	seen := pathSet()
+	defer putPathSet(seen)
 	for _, fs := range lists {
 		for _, f := range fs {
 			if _, ok := seen[f.path]; !ok {
@@ -656,6 +661,20 @@ func distinctOf(lists ...[]file) []file {
 		}
 	}
 	return out
+}
+
+// pathSets are sets of paths made for one pass over a listing and given
+// back after it: a set of every session file's path, made new on each of
+// a poll's several passes (distinctOf, refresh, pruneCalls), was ~100 MB
+// of what a minute of polls allocated over ~34k files (#2278). A set
+// keeps its room when cleared.
+var pathSets = sync.Pool{New: func() any { return map[string]struct{}{} }}
+
+func pathSet() map[string]struct{} { return pathSets.Get().(map[string]struct{}) }
+
+func putPathSet(m map[string]struct{}) {
+	clear(m)
+	pathSets.Put(m)
 }
 
 // distinctPaths is fs with each path kept once, the first time it is
@@ -742,10 +761,10 @@ func codexFiles() []file {
 	warmListing.Lock()
 	defer warmListing.Unlock()
 	if warmListing.files != nil && time.Since(warmListing.at) < warmListingFor {
-		return slices.Clone(warmListing.files)
+		return warmListing.files // only read, as heldFiles' are
 	}
-	files := listCodexFiles()
-	warmListing.at, warmListing.files = time.Now(), slices.Clone(files)
+	files := slices.Clip(listCodexFiles())
+	warmListing.at, warmListing.files = time.Now(), files
 	return files
 }
 
@@ -1165,12 +1184,13 @@ func refresh(want, all []file) {
 	}
 	gone := false
 	if len(cache) > 0 && all != nil {
-		on := make(map[string]bool, len(all))
+		on := pathSet()
+		defer putPathSet(on)
 		for _, f := range all {
-			on[f.path] = true
+			on[f.path] = struct{}{}
 		}
 		for p := range cache {
-			if !on[p] {
+			if _, ok := on[p]; !ok {
 				delete(cache, p)
 				gone = true
 			}
