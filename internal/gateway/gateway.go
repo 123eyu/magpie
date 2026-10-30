@@ -423,8 +423,11 @@ type Server struct {
 	calls  uint64 // the last Call.ID given
 	// unfit remembers the endpoints each provider's models were turned away
 	// from, so every later turn goes straight to one that takes them.
-	unfit        map[string]bool
-	subscription *subscriptionBridge
+	unfit map[string]bool
+	// refusedThinking is the thinking blocks each provider and account
+	// refused as signed for another conversation (thinking_bound.go)
+	refusedThinking map[string]bool
+	subscription    *subscriptionBridge
 	// imageStore is the image MCP server's jobs and images (image_mcp.go)
 	imageStore   imageMCPStore
 	debug        bool
@@ -4379,7 +4382,8 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 	}
 	// and what of Claude Code's newest asks it turns away (thinking.display
 	// "updates", a turn's output_config in messages: anthropic_shapes.go),
-	// each learned once
+	// each learned once, and the thinking blocks Claude says were signed
+	// for another conversation or account (thinking_bound.go)
 	for range 3 {
 		if err != nil || to != provider.Anthropic || res.StatusCode != http.StatusBadRequest && res.StatusCode != http.StatusUnprocessableEntity {
 			return res, err
@@ -4387,8 +4391,10 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 		res.Body.Close()
 		res.Body = io.NopCloser(bytes.NewReader(b))
+		sent := s.withoutRefusedShapes(p, body)
 		betas := len(s.refuseBetas(p, b)) > 0
-		if shapes := s.refuseShapes(p, b, body); !betas && !shapes {
+		shapes := s.refuseShapes(p, b, body)
+		if bound := s.refuseBoundThinking(p, b, sent); !betas && !shapes && !bound {
 			return res, nil
 		}
 		res, err = s.forwardOnce(ctx, p, to, path, body, in)
@@ -4437,6 +4443,9 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 			body = adaptiveThinking(body)
 		}
 		body = s.withoutRefusedShapes(p, body)
+		// the thinking blocks it refused as another conversation's
+		// (thinking_bound.go), every route to it alike
+		body = s.withoutRefusedThinking(p, body)
 		if isKimi(p, to) || p.IsOpenCode() && strings.Contains(strings.ToLower(modelOf(body)), "deepseek") {
 			// Claude Code's deferred-tool blocks, for which Kimi's
 			// Anthropic endpoint turns the whole request away with a 400
