@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -37,6 +38,51 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// fakeTrust asks whether to trust the folder as Claude Code 2.1.314 does:
+// its words placed by cursor moves, "No, exit" chosen, and drawn again on
+// No once it listens, the keys before that lost. Enter on No exits.
+func fakeTrust(r *bufio.Reader) {
+	var mu sync.Mutex
+	yes, deaf := false, true
+	draw := func() {
+		marks := map[bool]string{true: "\x1b[38;2;177;185;249m❯\x1b[39m", false: " "}
+		fmt.Printf("\x1b[2GDo\x1b[5Gyou\x1b[9Gtrust\x1b[15Gthis\x1b[20Gfolder?\r\n\x1b[2G%s\x1b[4GNo,\x1b[8Gexit\r\n\x1b[2G%s\x1b[4GYes,\x1b[9GI\x1b[11Gtrust\x1b[17Gthis\x1b[22Gfolder\r\n", marks[!yes], marks[yes])
+	}
+	draw()
+	time.AfterFunc(150*time.Millisecond, func() {
+		mu.Lock()
+		defer mu.Unlock()
+		deaf, yes = false, false
+		draw()
+	})
+	for {
+		c, err := r.ReadByte()
+		if err != nil {
+			os.Exit(0)
+		}
+		if c == 0x1b {
+			seq := make([]byte, 2)
+			if _, err := io.ReadFull(r, seq); err != nil {
+				os.Exit(0)
+			}
+			c = seq[1]
+		}
+		mu.Lock()
+		switch {
+		case deaf:
+		case c == 'B' || c == 'A':
+			yes = c == 'B'
+			draw()
+		case c == '\r' && !yes:
+			os.Exit(1)
+		case c == '\r':
+			mu.Unlock()
+			return
+		}
+		mu.Unlock()
+	}
+}
+
 func fakeClaude(args []string) {
 	if slices.Contains(args, "-p") {
 		sc := bufio.NewScanner(os.Stdin)
@@ -55,15 +101,6 @@ func fakeClaude(args []string) {
 	}
 	dir := filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "projects", "work")
 	_ = os.MkdirAll(dir, 0o700)
-	if os.Getenv("FAKE_TRUST") == "1" {
-		fmt.Print("Do you trust this folder?\r\n ❯ Yes, I trust this folder\r\n   No, exit\r\n")
-		r := bufio.NewReader(os.Stdin)
-		if _, err := r.ReadString('\n'); err != nil {
-			return
-		}
-	}
-	// what it was started with, for the test to read
-	_ = os.WriteFile(filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "args"), []byte(strings.Join(args, "\n")), 0o600)
 	// raw, as Claude Code's terminal is: a paste is taken whole, and Enter
 	// outside one sends it
 	if tio, err := unix.IoctlGetTermios(0, ioctlGetTermios); err == nil {
@@ -71,8 +108,13 @@ func fakeClaude(args []string) {
 		tio.Iflag &^= unix.ICRNL
 		_ = unix.IoctlSetTermios(0, ioctlSetTermios, tio)
 	}
-	fmt.Print("\r\n❯ ")
 	r := bufio.NewReader(os.Stdin)
+	if os.Getenv("FAKE_TRUST") == "1" {
+		fakeTrust(r)
+	}
+	// what it was started with, for the test to read
+	_ = os.WriteFile(filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "args"), []byte(strings.Join(args, "\n")), 0o600)
+	fmt.Print("\r\n❯ ")
 	var typed strings.Builder
 	pasting := false
 	for {

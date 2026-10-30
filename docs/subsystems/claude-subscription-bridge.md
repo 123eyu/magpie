@@ -121,7 +121,11 @@ yes only when the bridge sets `MAGPIE_CLAUDE_TUI_TRUST=1`, which it does
 for magpie's own working folder or a saved account's config directory,
 both magpie's. In the caller's folder under the account Claude Code is
 signed in to, the question is the user's: a folder the user has not
-trusted makes that run `-p`.
+trusted makes that run `-p`. The question opens on "No, exit", and a key
+sent as it is first drawn can be lost to its being drawn again, so the
+helper presses ↓ until "Yes" is the last choice drawn and Enter only once
+it has stayed so for 300ms (`ready`, `trustSettle`). Pressing Enter blind
+chose "No, exit" in the real gateway, and every run went `-p`.
 
 A run is `-p`, as before, when (`claudeTUI`):
 

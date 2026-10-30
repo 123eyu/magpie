@@ -280,7 +280,18 @@ func (s *shim) lastScreen() string {
 var (
 	trustNo  = regexp.MustCompile(`❯\s*No,\s*exit`)
 	trustYes = regexp.MustCompile(`❯\s*Yes,\s*I trust`)
+	// how long a Yes stays drawn before Enter is pressed on it
+	trustSettle = 300 * time.Millisecond
 )
+
+// lastAt is where re's last match in p starts, -1 with none.
+func lastAt(re *regexp.Regexp, p string) int {
+	m := re.FindAllStringIndex(p, -1)
+	if len(m) == 0 {
+		return -1
+	}
+	return m[len(m)-1][0]
+}
 
 var errUntrusted = errors.New("Claude Code asks whether to trust the folder, which only its user answers")
 
@@ -289,27 +300,37 @@ var errUntrusted = errors.New("Claude Code asks whether to trust the folder, whi
 func (s *shim) ready() error {
 	deadline := time.After(readyWait)
 	answered := 0
+	var yesAt, downAt time.Time
 	for {
 		p := s.plain()
 		switch {
 		case strings.Contains(p, "trust this folder") && os.Getenv(TrustEnv) != "1":
 			return errUntrusted
 		case strings.Contains(p, "trust this folder") && answered < 3:
-			keys := ""
+			// the choice is the last one drawn after ❯, "No, exit" at
+			// first. A key sent as the question is first drawn can be lost
+			// to its being drawn again on No, so Enter goes only to a Yes
+			// drawn trustSettle ago and not drawn over since.
+			no, yes := lastAt(trustNo, p), lastAt(trustYes, p)
 			switch {
-			case trustNo.MatchString(p):
-				keys = "\x1b[B"
-			case trustYes.MatchString(p):
-			default:
-				goto wait
+			case yes > no:
+				if yesAt.IsZero() {
+					yesAt = time.Now()
+				}
+				if time.Since(yesAt) < trustSettle {
+					break
+				}
+				answered++
+				yesAt = time.Time{}
+				s.clearScreen()
+				_, _ = s.pty.WriteString("\r")
+			case no >= 0:
+				yesAt = time.Time{}
+				if time.Since(downAt) >= time.Second {
+					downAt = time.Now()
+					_, _ = s.pty.WriteString("\x1b[B")
+				}
 			}
-			answered++
-			s.clearScreen()
-			if keys != "" {
-				_, _ = s.pty.WriteString(keys)
-				time.Sleep(300 * time.Millisecond)
-			}
-			_, _ = s.pty.WriteString("\r")
 		case strings.Contains(p, "keep browser tools off"):
 			// Claude in Chrome found: kept off, as the bridge runs it
 			// --no-chrome
@@ -323,7 +344,6 @@ func (s *shim) ready() error {
 			time.Sleep(300 * time.Millisecond)
 			return nil
 		}
-	wait:
 		select {
 		case <-s.changed:
 		case <-time.After(200 * time.Millisecond):
