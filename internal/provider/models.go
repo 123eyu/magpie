@@ -1866,7 +1866,9 @@ var makerCatalogs = sync.OnceValue(func() []string {
 // at gpt-6-astra's or gemini-3.8-flash's maker's price, as a Claude
 // account is at Anthropic's. A remote magpie's is what that magpie counts
 // the model at, as its list says (remotePrice). A model no catalog prices
-// is at the price its plugin lists it at (pluginListPrice), else, when the
+// is at its vendor's own list price where a moved built-in's plugin serves
+// it (vendorListPrice), else at the price its plugin lists it at
+// (pluginListPrice), else, when the
 // plugin says the plan serves it free, costs nothing (pluginFree). Codex's
 // auto-review through the Codex subscription costs nothing too, as OpenAI
 // serves it a ChatGPT sign-in (codexReviewFree).
@@ -1912,6 +1914,9 @@ func (p Provider) ListPrice(model string) (catalog.Price, bool) {
 			return pr, true
 		}
 	}
+	if pr, ok := p.vendorListPrice(model); ok {
+		return pr, true
+	}
 	if pr, ok := p.pluginListPrice(model); ok {
 		return pr, true
 	}
@@ -1919,6 +1924,26 @@ func (p Provider) ListPrice(model string) (catalog.Price, bool) {
 		return catalog.Price{}, true
 	}
 	return catalog.Price{}, false
+}
+
+// vendorCatalogs are the models.dev catalogs of the vendors a moved
+// built-in's plugin sends its calls to, by the subscription's id: what
+// the vendor's own API lists a model at, as its preset is priced
+// (EndpointCatalog). A plugin's provider has no such catalog of its own.
+var vendorCatalogs = map[string]string{CommandCodePlanID: "commandcode"}
+
+// vendorListPrice is model's price in its vendor's own catalog
+// (vendorCatalogs), for a model no maker's price is found for: Command
+// Code's deepseek/deepseek-v4.1-flash, which models.dev's DeepSeek lists
+// only as deepseek-flash, a canonical of deepseek-v4.1-flash-1017, so its
+// calls on the plan were counted at no price at all (treeman on Discord).
+// Only after the maker's, so a model its maker prices keeps that price.
+func (p Provider) vendorListPrice(model string) (catalog.Price, bool) {
+	c, ok := vendorCatalogs[p.ID]
+	if !ok {
+		return catalog.Price{}, false
+	}
+	return catalog.PricedBy([]string{c}, model)
 }
 
 // pluginListPrice is the price the plugin serving p lists model at
@@ -2293,7 +2318,8 @@ func priceOf(s settings.Settings, p Provider, known bool, model string, at time.
 
 // tariffOf is a price without a rate window's rate: what the user set
 // for the model as they set it, else the provider's list price, else its
-// maker's, each at the price rate.
+// maker's, each at the price rate. Either is doubled in the peak hours of
+// a vendor that bills by the hour (PeakOf).
 func tariffOf(s settings.Settings, p Provider, known bool, model string) (catalog.Price, bool) {
 	id := p.ID
 	// then what they said the model costs from any provider (*/model):
@@ -2303,6 +2329,11 @@ func tariffOf(s settings.Settings, p Provider, known bool, model string) (catalo
 			if pr, bad := m.Price(); bad == "" {
 				// a Claude model's 1-hour cache write left out: 2× input
 				catalog.OneHourFor(model, &pr)
+				// a vendor that bills by the hour doubles any price in its
+				// peak hours: the user's is the off-peak one, as its list
+				// price is, so setting one keeps the split (treeman on
+				// Discord)
+				pr.Peak = p.PeakOf(model)
 				return pr, true
 			}
 		}
@@ -2326,8 +2357,8 @@ func tariffOf(s settings.Settings, p Provider, known bool, model string) (catalo
 	if !ok {
 		pr, ok = SamePriceIn(s, id, model)
 	} else if k := p.PeakOf(model); k != "" {
-		// billed by the hour it is made at (PeakOf), never a price the
-		// user set above, nor the one of the model they said it is
+		// billed by the hour it is made at (PeakOf), as a price the user
+		// set above is, never the one of the model they said it is
 		pr.Peak = k
 	}
 	// what the provider bills against it (#819)

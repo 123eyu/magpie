@@ -43,9 +43,14 @@ var peakBills = []peakBill{
 
 // PeakOf is the hours a call to model at p is billed double in, by the
 // vendor p sends it to: its base URLs say which, and only a provider with
-// none is told by its preset or id. Empty for any other provider or model.
+// none is told by its preset or id. A plugin's base (plugin://) names no
+// vendor, so the Command Code plan its plugin serves is told by its id
+// (treeman on Discord: its DeepSeek models showed no peak hours). Empty
+// for any other provider or model.
 func (p Provider) PeakOf(model string) catalog.Peak {
-	urls := slices.DeleteFunc([]string{p.Chat, p.Responses, p.Anthropic}, func(u string) bool { return strings.TrimSpace(u) == "" })
+	urls := slices.DeleteFunc([]string{p.Chat, p.Responses, p.Anthropic}, func(u string) bool {
+		return strings.TrimSpace(u) == "" || strings.HasPrefix(u, pluginBase)
+	})
 	m := strings.ToLower(strings.TrimSpace(model))
 	m = m[strings.LastIndexByte(m, '/')+1:]
 	for _, b := range peakBills {

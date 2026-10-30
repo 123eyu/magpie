@@ -11,6 +11,10 @@ import (
 	"github.com/yetone/magpie/internal/settings"
 )
 
+// ccPlugin is the Command Code plan as its plugin serves it: its
+// requests go to plugin://, which names no vendor (treeman on Discord).
+var ccPlugin = Provider{ID: CommandCodePlanID, Chat: pluginBase + CommandCodePlanID + "/v1", Responses: pluginBase + CommandCodePlanID + "/v1"}
+
 // Only the vendors whose own pricing bills DeepSeek's models by the hour
 // are: DeepSeek's API, Command Code's DeepSeek V4 models (not its flat
 // deepseek-v4-flash-fast) and OpenCode Go's two. OpenCode Zen, a relay, a
@@ -36,6 +40,9 @@ func TestPeakOf(t *testing.T) {
 		{"commandcode flash-fast", preset("commandcode"), "deepseek/deepseek-v4-flash-fast", ""},
 		{"commandcode other", preset("commandcode"), "moonshotai/kimi-k3", ""},
 		{"commandcode plan", Provider{ID: CommandCodePlanID}, "deepseek/deepseek-v4.1-flash", catalog.PeakWeekdays},
+		{"commandcode plan's plugin", ccPlugin, "deepseek/deepseek-v4.1-flash", catalog.PeakWeekdays},
+		{"commandcode plan's plugin flash-fast", ccPlugin, "deepseek/deepseek-v4-flash-fast", ""},
+		{"another plugin", Provider{ID: "zen-free", Chat: pluginBase + "zen-free/v1"}, "deepseek-v4.1-flash", ""},
 		{"opencode go", preset("opencode-go"), "deepseek-v4.1-flash", catalog.PeakWeekdays},
 		{"opencode go other", preset("opencode-go"), "kimi-k3", ""},
 		{"opencode zen", preset("opencode-zen"), "deepseek-v4.1-flash", ""},
@@ -84,9 +91,9 @@ func useDeepSeekCatalog(t *testing.T) {
 }
 
 // A DeepSeek model's list price doubles at DeepSeek's peak hours, at the
-// provider's price rate still; a price the user set holds at every hour,
-// and so do OpenCode Zen's flat price and another vendor's model at the
-// same times.
+// provider's price rate still, and so does a price the user set for it:
+// the vendor doubles whatever its off-peak price is. OpenCode Zen's flat
+// price and another vendor's model hold at every hour, set or not.
 func TestPriceOfPeak(t *testing.T) {
 	useDeepSeekCatalog(t)
 	peak := time.Date(2026, 10, 29, 2, 0, 0, 0, time.UTC) // a Thursday
@@ -132,12 +139,92 @@ func TestPriceOfPeak(t *testing.T) {
 	in, out, cache := 0.2, 0.8, 0.02
 	for _, key := range []string{"deepseek/deepseek-flash", "deepseek/*", AnyPriceKey("deepseek-flash")} {
 		s := settings.Settings{ModelPrices: map[string]settings.ModelPrice{key: {Input: &in, Output: &out, CacheRead: &cache, CacheWrite: &cache}}}
-		if a, b := at(s, ds, "deepseek-flash", peak), at(s, ds, "deepseek-flash", off); a != 0.2 || b != 0.2 {
-			t.Errorf("set at %s: %v at peak, %v off-peak; want 0.2 both", key, a, b)
+		if a, b := at(s, ds, "deepseek-flash", peak), at(s, ds, "deepseek-flash", off); a != 0.4 || b != 0.2 {
+			t.Errorf("set at %s: %v at peak, %v off-peak; want 0.4, 0.2", key, a, b)
+		}
+	}
+	for _, c := range []struct {
+		p     Provider
+		model string
+	}{{zen, "deepseek-v4.1-flash"}, {oa, "gpt-6-astra"}} {
+		for _, key := range []string{c.p.ID + "/" + c.model, AnyPriceKey(c.model)} {
+			s := settings.Settings{ModelPrices: map[string]settings.ModelPrice{key: {Input: &in, Output: &out, CacheRead: &cache, CacheWrite: &cache}}}
+			if a, b := at(s, c.p, c.model, peak), at(s, c.p, c.model, off); a != 0.2 || b != 0.2 {
+				t.Errorf("%s set at %s: %v at peak, %v off-peak; want 0.2 both", c.p.ID, key, a, b)
+			}
 		}
 	}
 	// a provider gone since, priced at its maker's
 	if pr, ok := priceOf(none, Provider{ID: "deepseek"}, false, "deepseek-flash", time.Time{}); !ok || pr.In(peak).Input != 0.3 {
 		t.Errorf("removed deepseek: %+v %v", pr, ok)
+	}
+}
+
+// commandCodeCatalog is models.dev's api.json as magpie had it on
+// 2026-10-30, these entries byte for byte (descriptions and the like left
+// out). DeepSeek lists V4.1 Flash only as deepseek-flash, by a dated
+// canonical id, so no maker price is found for Command Code's undated
+// deepseek/deepseek-v4.1-flash; Command Code's own catalog lists it.
+const commandCodeCatalog = `{
+"deepseek":{"id":"deepseek","api":"https://api.deepseek.com","name":"DeepSeek","models":{
+"deepseek-flash":{"id":"deepseek-flash","name":"DeepSeek Flash","cost":{"input":0.15,"output":0.6,"cache_read":0.003},"canonical_model_id":"deepseek/deepseek-v4.1-flash-1017"},
+"deepseek-v4-pro":{"id":"deepseek-v4-pro","name":"DeepSeek V4 Pro","cost":{"input":0.66,"output":1.98,"cache_read":0.013},"canonical_model_id":"deepseek/deepseek-v4-pro"}}},
+"commandcode":{"id":"commandcode","env":["CMD_API_KEY"],"npm":"@ai-sdk/openai-compatible","api":"https://api.commandcode.ai/provider/v1","name":"CommandCode","doc":"https://commandcode.ai/docs/provider","models":{
+"deepseek/deepseek-v4.1-flash":{"id":"deepseek/deepseek-v4.1-flash","name":"DeepSeek V4.1 Flash","family":"deepseek-flash","cost":{"input":0.15,"output":0.6,"cache_read":0.003},"canonical_model_id":"deepseek/deepseek-v4.1-flash"},
+"deepseek/deepseek-v4-pro":{"id":"deepseek/deepseek-v4-pro","name":"DeepSeek V4 Pro","cost":{"input":0.9,"output":2.7,"cache_read":0.02},"canonical_model_id":"deepseek/deepseek-v4-pro"}}}
+}`
+
+// The Command Code plan, served by its plugin, prices DeepSeek V4.1 Flash
+// at Command Code's list price, doubled in its peak hours, where it showed
+// no price at all and its calls were counted at nothing (treeman on
+// Discord). A model DeepSeek prices keeps DeepSeek's price, and a price
+// the user set is doubled at peak too.
+func TestCommandCodePlanPrice(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	if err := os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(catalog.CachePath(), []byte(commandCodeCatalog), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+	peak := time.Date(2026, 10, 29, 2, 0, 0, 0, time.UTC) // a Thursday
+	off := time.Date(2026, 10, 29, 11, 0, 0, 0, time.UTC)
+	price := func(s settings.Settings, model string) catalog.Price {
+		t.Helper()
+		pr, ok := priceOf(s, ccPlugin, true, model, time.Time{})
+		if !ok {
+			t.Fatalf("%s: unpriced", model)
+		}
+		return pr
+	}
+	none := settings.Settings{}
+	if pr, ok := ccPlugin.ListPrice("deepseek/deepseek-v4.1-flash"); !ok || pr.Input != 0.15 || pr.Output != 0.6 || pr.CacheRead != 0.003 {
+		t.Errorf("list price: %+v %v; want 0.15/0.6/0.003", pr, ok)
+	}
+	pr := price(none, "deepseek/deepseek-v4.1-flash")
+	if a, b := pr.In(peak), pr.In(off); a.Input != 0.3 || a.Output != 1.2 || b.Input != 0.15 || b.Output != 0.6 {
+		t.Errorf("deepseek-v4.1-flash: %+v at peak, %+v off-peak", a, b)
+	}
+	// DeepSeek's own price comes first, as before
+	if pr := price(none, "deepseek/deepseek-v4-pro"); pr.In(off).Input != 0.66 || pr.In(peak).Input != 1.32 {
+		t.Errorf("deepseek-v4-pro: %+v", pr)
+	}
+	in, out, cache := 0.1, 0.4, 0.0
+	for _, key := range []string{CommandCodePlanID + "/deepseek/deepseek-v4.1-flash", AnyPriceKey("deepseek/deepseek-v4.1-flash")} {
+		s := settings.Settings{ModelPrices: map[string]settings.ModelPrice{key: {Input: &in, Output: &out, CacheRead: &cache, CacheWrite: &cache}}}
+		pr := price(s, "deepseek/deepseek-v4.1-flash")
+		if a, b := pr.In(peak), pr.In(off); a.Input != 0.2 || a.Output != 0.8 || b.Input != 0.1 || b.Output != 0.4 {
+			t.Errorf("set at %s: %+v at peak, %+v off-peak", key, a, b)
+		}
+	}
+	// another provider's id says nothing of Command Code's catalog
+	if _, ok := (Provider{ID: "relay", Chat: "https://relay.example/v1"}).ListPrice("deepseek/deepseek-v4.1-flash"); ok {
+		t.Error("a relay took Command Code's list price")
 	}
 }
