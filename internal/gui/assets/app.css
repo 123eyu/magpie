@@ -683,6 +683,7 @@ body.panel #agents > .row .ag-handle::before { left: -8px; }
 .ag-who > svg { flex: none; }
 .ag-who .v { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .ag-who.open { background: var(--pill); color: var(--fg); }
+.ag-open .field.ag-who .ok { order: 2; }
 .ag-who .ok { display: none; flex: none; align-items: center; gap: 3px; color: var(--green); font-weight: 600; }
 .ag-who.done .ok { display: inline-flex; }
 .ag-fix.busy svg > * { transform-box: view-box; transform-origin: 50% 50%; animation: spin .8s linear infinite; }

@@ -2121,6 +2121,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		st := providersState()
 		st.Moved = moved
 		writeJSON(rw, st)
+		// the tray panel's account switch draws the kept list: a change
+		// made here is in it at once
+		keepProviders(st)
 	})
 	// How much of its allowance each of an agent's accounts has used.
 	mux.HandleFunc("GET /api/login/usage", func(rw http.ResponseWriter, r *http.Request) {
@@ -2161,6 +2164,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		st := providersState()
 		st.Moved = moved
 		writeJSON(rw, st)
+		keepProviders(st) // as a provider action's: the panel's switch draws it
 	})
 	// Codex's background app-server, left on the account before a switch
 	// or on the model list before a change (the Agents row's Restart):

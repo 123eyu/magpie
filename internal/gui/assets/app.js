@@ -682,6 +682,8 @@ function renderAgents() {
       connectRow(a, row, who, { fields, extras, fieldBtn, sw, kind });
       return row;
     }
+    const acct = openBox && switchEntry(a);
+    if (acct) openBox.querySelector(".ag-body").prepend(acct.button);
     if (sw && openBox) {
       const line = el("div", "ag-conn-row");
       line.append(el("span", "k", t("magpie")), el("span", "ag-conn-said", connectSaid(a)), sw);
@@ -1585,13 +1587,15 @@ function connectRow(a, row, who, { fields, extras, fieldBtn, sw, kind }) {
 }
 
 // Switch accounts only (the owner on X): a Claude Code or Codex not
-// connected says its account, and its menu signs it in to another, as the
-// account rows do; the window's, the panel reads no provider list
-let accountSwitched = null;
+// connected says its account, and its menu signs it in to another. The
+// panel's (shuizhuyu on X) is drawn from the kept list (?last=1): a fresh
+// read takes seconds after a start, so it waits for the menu
+let accountSwitched = null, panelAccts = null;
+const switchesAccounts = (a) => !a.wired && (a.id === "claude" || a.id === "codex");
 
 function switchable(a) {
-  if (a.wired || mode === "panel" || (a.id !== "claude" && a.id !== "codex")) return null;
-  const p = (providers || providersEarly?.got)?.providers?.find((x) => x.id === a.id && x.account?.agent === a.id);
+  if (!switchesAccounts(a)) return null;
+  const p = (mode === "panel" ? panelAccts : providers || providersEarly?.got)?.providers?.find((x) => x.id === a.id && x.account?.agent === a.id);
   return p && loginsInOrder(p.account, p)[0]?.user ? p : null;
 }
 
@@ -1599,12 +1603,13 @@ function switchEntry(a) {
   const p = switchable(a);
   if (!p) return null;
   const ls = loginsInOrder(p.account, p), cur = ls.find((l) => l.active)?.user || "", ag = { agent: a.name };
-  const b = el("button", "ag-acc ag-who"), cx = a.id === "codex";
+  // the panel's a line of its opened row
+  const pn = mode === "panel", b = el("button", pn ? "field ag-who" : "ag-acc ag-who"), cx = a.id === "codex";
   b.type = "button";
   b.setAttribute("aria-haspopup", "menu");
   b.setAttribute("aria-expanded", "false");
   if (cur) b.title = t("Switch accounts only: {agent} is signed in as {user}. Pick another of its accounts to sign {agent} in to it, without connecting it to magpie.", { ...ag, user: cur });
-  b.append(svg(EXTRA_GLYPH["sign-in"], 12, 1.5), el("span", "v", cur || t("Not signed in")));
+  b.append(pn ? el("span", "k", t("account")) : svg(EXTRA_GLYPH["sign-in"], 12, 1.5), el("span", "v", cur || t("Not signed in")));
   const ago = performance.now() - (accountSwitched?.at || -1e9);
   if (accountSwitched?.agent === a.id && accountSwitched.user === cur && ago < 5000) {
     const ok = el("span", "ok");
@@ -1613,20 +1618,26 @@ function switchEntry(a) {
     b.classList.add("done");
     setTimeout(() => b.classList.remove("done"), 5000 - ago);
   }
-  b.append(svg(CHEV, 10, 1.6));
+  b.append(pn ? el("span", "chev", svg(CHEV, 11, 1.7)) : svg(CHEV, 10, 1.6));
   const opts = ls.filter((l) => !l.token).map((l) => ({ v: "u:" + l.user, name: l.user, literalName: true, note: l.lapsed ? "Sign-in required" : accountPlan({ agent: a.id, plan: l.plan }) }));
   const on = cx ? t("magpie only switches {agent}'s sign-in; its requests go straight to OpenAI", ag) : t("magpie serves no requests on these accounts");
   // the Only switch setting, where the accounts page offers it
   if (!cx || ls.filter((l) => !l.lapsed && (l.active || l.on)).length > 1) opts.push({ v: "only", name: t("Only switch {agent}'s sign-in", ag), literalName: true, ticked: !!p.switchOnly, note: on });
   opts.push({ v: "manage", name: "Manage accounts…", note: "" });
-  b.onclick = (e) => {
+  b.onclick = async (e) => {
     e.stopPropagation();
     if (b.classList.contains("open")) return closeProtoMenu();
+    const s = pn && panelAccts?.last && await api("providers").catch(() => null);
+    if (s) {
+      panelAccts = s;
+      renderAgents();
+      return $(`.row.agent[data-id="${a.id}"] .ag-who`)?.click();
+    }
     openProtoMenu(b, opts, "u:" + cur, (v) => {
       const l = ls.find((x) => "u:" + x.user === v);
       if (v === "only") accountAction("provider/switchonly", { id: p.id, switchOnly: !p.switchOnly }, !p.switchOnly ? on
         : cx ? t("{agent}'s requests go through magpie to fail over to your other accounts again", ag) : t("magpie serves requests on these accounts again"));
-      else if (v === "manage" || l?.lapsed) openProvider(a.id);
+      else if (v === "manage" || l?.lapsed) pn ? api("window/main?view=providers", {}).catch((e) => status(e.message, "err")) : openProvider(a.id);
       else if (l && l.user !== cur) switchAccountTo(a, p, l.user);
     }, "Switch accounts only", "sess-menu", "right");
   };
@@ -1638,6 +1649,16 @@ async function switchAccountTo(a, p, user) {
   // kept signed in to one of the user's choosing (#524): that choice moves
   if (!await (keptLogin(p) ? accountAction("provider/keeplogin", { id: p.id, keepLogin: true, keepLoginAs: user }, said) : accountAction("login/switch", { agent: a.id, user }, said))) return;
   accountSwitched = { agent: a.id, user, at: performance.now() };
+  renderAgents();
+}
+
+// the panel's list for it: the kept one, a fresh read only with none kept
+async function panelAccounts() {
+  if (!state.agents.some(switchesAccounts)) return;
+  const s = await api("providers?last=1").then((s) => s || api("providers")).catch(() => null);
+  const key = (l) => JSON.stringify(l?.providers?.filter((p) => p.account).map((p) => [p.id, p.account, p.switchOnly, p.keepLoginAs]));
+  if (!s || panelAccts === s || key(s) === key(panelAccts)) return;
+  panelAccts = s;
   renderAgents();
 }
 
@@ -4297,7 +4318,7 @@ async function load(again) {
     loadInstalls();
     // the Providers page made ready behind the one shown (#1519)
     if (mode !== "panel" && !(view === "providers" || providersPage(view))) prefetchProviders();
-    if (mode === "panel") { renderPanelQuota(true); if (!early) panelQuotasNow(again); }
+    if (mode === "panel") { renderPanelQuota(true); if (!early) panelQuotasNow(again); panelAccounts(); }
     // an open provider editor is someone typing: coming back to the window
     // must not rebuild it under them
     if ((view === "providers" || providersPage(view)) && !(editing || adding)) await loadProviders();
@@ -14392,6 +14413,7 @@ async function accountAction(path, body, okMsg, confirmed = false, say = (m) => 
     "This account or key will stop being used for requests. You will need to add it again to use it.")) return false;
   try {
     providers = await api(path, body);
+    if (mode === "panel") panelAccts = providers;
     renderProviders();
     state = await api("state");
     renderAgents();
@@ -15947,19 +15969,11 @@ function renderQuotas(lazy) {
   requestAnimationFrame(focusQuotaCard);
 }
 
-// A subscription with several accounts shows each of them, one in full —
-// the one that answered last, else the first — and the others in brief,
-// their bars alone, a click opening one (whqtian on Discord: 只显示一个账号
-// 即可，其他的可以点击展开; ARNO, 17 subscriptions and 29 accounts: 以前每个
-// 账号所占的空间很小，基本能一页看到所有账号… 关了magpie后又得一个个展开).
-// The tray panel, with less room, leaves the ones in brief out. Each
-// account's full or brief is remembered by provider and account
-// (magpie.usageAccounts), for the window and the panel alike; a provider
-// opened before that (magpie.usageOpen) starts with every account in full.
-// The accounts the card's button opened are remembered too
-// (magpie.usageAcctsOpened), so that its fold puts those back in brief,
-// and only those (WuSix on Discord: with both accounts in brief, 展开 opened
-// both and 收起其余账号 folded only the second).
+// A subscription's accounts: one in full (the last to answer, else the
+// first), the others in brief, a click opening one (whqtian, ARNO on
+// Discord); the panel leaves the brief out. Remembered per account
+// (magpie.usageAccounts; magpie.usageOpen before it), and what the card's
+// button opened (magpie.usageAcctsOpened) so its fold folds only those.
 let usageOpen, usageAccts, usageByMore;
 const usageFolds = () => { usageOpen = new Set(kept("usageOpen", [])); usageAccts = kept("usageAccounts", {}); usageByMore = new Set(kept("usageAcctsOpened", [])); };
 usageFolds();
@@ -23619,11 +23633,8 @@ document.fonts?.addEventListener("loadingdone", fitTop);
 // ("Work / Library / MCP servers"). Narrower, and magpie web on a phone,
 // the pages go back into the header as tabs and each page shows its own
 // tabs again, as iPadOS's sidebar turns into a tab bar when it has no room.
-// It is the same #nav, its buttons and handlers, moved between the two.
-// (app.css's side-nav rules hold at the same width): narrower, the page
-// beside it would be narrower than Usage's requests with their columns left
-// out (768 points), and the sidebar gives way to the header's tabs, as a Mac
-// app's sidebar does in a narrow window
+// It is the same #nav, moved between the two. (app.css's side-nav rules
+// hold at the same width: narrower than Usage's requests, 768 points)
 var SIDE_AT = 1024;
 var sideQuery = matchMedia(`(min-width: ${SIDE_AT}px)`);
 function sideNav() { return document.body.classList.contains("side-nav"); }

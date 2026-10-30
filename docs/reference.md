@@ -1824,7 +1824,10 @@ shows the account it is signed in to; click it, and the *Switch accounts
 only* menu signs Claude Code in to another of them, with *Only switch
 Claude Code's sign-in* and *Manage accounts…* beside. The button says
 *Switched*, and a new Claude Code session uses the new account; one
-already open keeps its account until it is started again.
+already open keeps its account until it is started again. The tray panel
+has it too: set a key under Settings › General › Quick panel shortcut, press
+it from any app, open Claude Code's (or Codex's) row and click its
+*account* line.
 
 **How often an allowance is read.** Routing uses what was read last and
 never waits for a reading, except the first one after magpie starts (3
