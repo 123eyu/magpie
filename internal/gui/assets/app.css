@@ -2337,7 +2337,10 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .gw .gw-mark.on .led { fill: var(--green); }
 /* narrow, the fix button goes under the state rather than squeeze it */
 .gw .who { flex: 1 1 15em; min-width: 0; }
-.gw .name .state { margin-left: 8px; font-size: 11px; font-weight: 500; color: var(--green); }
+/* the state centred on the title's line, not sat on its baseline: a
+   smaller run of CJK on the baseline reads as dropped below it */
+.gw .name { display: flex; align-items: center; gap: 8px; }
+.gw .name .state { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; font-weight: 500; color: var(--green); }
 .gw .gw-mark:not(.on) ~ .who .state { color: var(--amber); }
 .gw .sub.old { white-space: normal; overflow: visible; text-overflow: clip; }
 .gw .sub.err { color: var(--red); overflow-wrap: anywhere; }
