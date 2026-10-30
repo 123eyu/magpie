@@ -465,6 +465,14 @@ brings `.rt-gsec` to the top of the view and focuses it; the page's layout is
 unchanged. `fitGo` gives it only the head's spare room: named, its arrow
 alone, or left out, so nothing else in the head moves or wraps for it
 (`routing-groups-jump.test.cjs`).
+Live, the Routing page's card (its head, story and context window) tells of
+one request, `cur`, chosen by `told()` in `plugins/routing/client.js`: it
+stays on the request it tells of until that one is done, then goes to the
+newest, except that a newer request routing hasn't picked for yet does not
+take it from one that was routed. Requests that come meanwhile still fly on
+the stage, without a caption of their own. With several
+conversations sending at once it used to follow the newest and jump between
+them (qiang2040 on Discord, `routing-concurrent-hold.test.cjs`).
 
 The Plugins page updates the npm search-results section when a search answers,
 leaving suggested plugin cards in place so a click begun before the answer still
