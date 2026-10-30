@@ -23591,6 +23591,9 @@ matchMedia("(max-width: 760px), (pointer: coarse) and (max-width: 1024px)").addE
 // further still when they don't fit (the 560px window at 150%).
 function fitTop() {
   const top = $(".top"), nav = $("#nav"), brand = $(".brand"), actions = $(".actions");
+  const st = $(".side-top");
+  st.classList.remove("tight");
+  st.classList.toggle("tight", st.scrollWidth > st.clientWidth);
   // a phone's browser: the tabs have a row of their own (app.css), at their size;
   // and beside the sidebar the header holds only where the reader is and the icons
   if (phoneWeb() || sideNav()) { top.classList.remove("tight", "cramped", "inrow", "crowded", "packed"); return; }
@@ -23599,8 +23602,7 @@ function fitTop() {
     // the buttons sit against the padding; under a page zoom (the text size)
     // their edge can measure a hair past it, which isn't running off (#457)
     if (a.right > top.getBoundingClientRect().right - parseFloat(getComputedStyle(top).paddingRight) + 0.5) return false;
-    // the sidebar's button, when shown, comes after the brand
-    const lead = $("#sideToggle")?.offsetParent ? $("#sideToggle") : brand;
+    const lead = brand.offsetParent ? brand : $("#sideToggle");
     const left = lead.offsetParent ? lead.getBoundingClientRect().right
       : top.getBoundingClientRect().left + parseFloat(getComputedStyle(top).paddingLeft);
     if (!nav?.offsetParent) return left + 8 <= a.left;
@@ -23659,17 +23661,17 @@ function layoutNav() {
     return;
   }
   layoutNav.done = true;
-  const side = $("#side"), nav = $("#nav"), brand = $(".brand"), prefs = $("#prefs");
+  const side = $("#side"), nav = $("#nav"), brand = $(".brand"), prefs = $("#prefs"), btn = $("#sideToggle");
   document.body.classList.toggle("side-nav", on);
   side.hidden = !on;
   $("#crumb").hidden = !on;
   if (on) {
-    side.querySelector(".side-top").append(brand);
+    side.querySelector(".side-top").append(btn, brand);
     side.querySelector(".side-scroll").append(nav);
     side.querySelector(".side-foot").prepend(prefs);
     nav.querySelector(":scope > .thumb")?.remove();
   } else {
-    $(".top").prepend(brand);
+    $(".top").prepend(btn, brand);
     $("#crumb").after(nav);
     $(".actions").insertBefore(prefs, $("#winclose"));
   }

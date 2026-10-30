@@ -364,13 +364,17 @@ body.side-nav { --side-w: 212px; padding-left: var(--side-w); }
 @media (pointer: coarse) { .side-edge { right: -12px; width: 24px; } }
 .side-edge:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
 body.side-drag, body.side-drag * { cursor: col-resize !important; user-select: none; }
-.side-top { flex: none; display: flex; align-items: center; height: 46px; padding: 0 18px; }
+/* its top is the title bar's left end: the sidebar's button (app.js
+   layoutNav), then the magpie, at the header's own height and left padding,
+   so the button is in the one place whether the sidebar shows or not, as
+   Finder's and Notes' is (ztf4080 on X) */
+.side-top { flex: none; display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 18px 0 14px; }
 .side-top .brand { font-size: 13.5px; }
+/* a sidebar too narrow for the name keeps the bird (app.js fitTop) */
+.side-top.tight .brand > span:not(.logo) { display: none; }
 /* the traffic lights are the sidebar's top left, as in a Mac app's sidebar;
-   the magpie beside them, level with them (see .top above) */
-body.window.mac .side-top { height: calc(50px / var(--zoom, 1)); padding: calc(2px / var(--zoom, 1)) 0 0 calc(90px / var(--zoom, 1)); }
-/* Windows' title bar above already shows the icon and the name */
-body.window:not(.mac):not(.linux):not(.web) .side-top { height: 10px; }
+   the button and the magpie beside them, level with them (see .top above) */
+body.window.mac .side-top { height: calc(50px / var(--zoom, 1)); padding: calc(2px / var(--zoom, 1)) 0 0 calc(96px / var(--zoom, 1)); }
 .side-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 10px 10px; }
 .side-foot { flex: none; max-height: 55%; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; padding: 8px 10px 10px; border-top: .5px solid var(--line-2); }
 /* a short window's sidebar keeps no bar beside its pages: a thin one is laid
