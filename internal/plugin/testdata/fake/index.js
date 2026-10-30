@@ -10,8 +10,11 @@ const ID = process.env.FAKE_ID || "fakeco"
 const born = Date.now()
 
 // fakeWho is who a team signs in as: team@fake, and a team named name/uid
-// is name@fake with that uid, as WorkBuddy's plugin keeps one
+// is name@fake with that uid, as WorkBuddy's plugin keeps one; a team
+// named =id is named by that id, its uid too, as the CodeArts plugin's
+// OfficeAce card names a new sign-in by the Huawei domain id (#4473)
 function fakeWho(team) {
+  if (team?.startsWith("=")) return { accountId: team.slice(1), uid: team.slice(1) }
   const [name, uid] = (team ?? "me").split("/")
   return uid ? { accountId: name + "@fake", uid } : { accountId: name + "@fake" }
 }

@@ -1068,10 +1068,23 @@ function uidOf(a) {
   return typeof a?.uid === "string" ? a.uid : ""
 }
 
+// renamedBy tells a sign-in to an account a plugin once named another way:
+// the same uid, and one of the two named by that uid, so the uid is the
+// account's own id (#4473: officeace-auth 0.1.14 named an account by its
+// masked phone, uid its Huawei domain id; the CodeArts plugin names it by
+// the domain id). A uid alone is not enough: Kiro keeps how an account was
+// signed in to as its uid, "google" for every Google sign-in.
+function renamedBy(now, was) {
+  const uid = uidOf(now)
+  return !!uid && uidOf(was) === uid && whoOf(now) !== whoOf(was) && (whoOf(now) === uid || whoOf(was) === uid)
+}
+
 // settle keeps a sign-in just saved at key once: one to an account already
-// signed in (the same account id and, where both have one, the same uid,
-// else the same secret) replaces that one's and goes. It gives where it is
-// kept.
+// signed in (the same account id and, where both have one, the same uid;
+// the same uid that one of them is named by; else the same secret)
+// replaces that one's and goes. It gives where it is kept. An account
+// named another way before keeps its account id, which the user's name
+// for it, its proxy and gateway keys are kept by.
 function settle(provider, key) {
   const k = changeAuth((all) => {
     const now = all[key]
@@ -1082,8 +1095,9 @@ function settle(provider, key) {
       if (k === key) continue
       const was = all[k]
       const other = uidOf(now) && uidOf(was) && uidOf(now) !== uidOf(was)
-      if ((who && whoOf(was) === who && !other) || (!who && !whoOf(was) && secret && secretOf(was) === secret)) {
-        all[k] = now
+      const renamed = renamedBy(now, was)
+      if ((who && whoOf(was) === who && !other) || renamed || (!who && !whoOf(was) && secret && secretOf(was) === secret)) {
+        all[k] = renamed && typeof was.accountId === "string" && was.accountId ? { ...now, accountId: was.accountId } : now
         delete all[key]
         return k
       }
