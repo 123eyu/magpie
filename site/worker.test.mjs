@@ -172,6 +172,18 @@ test("docs: the bare docs paths open each language's guide", async () => {
   }
 });
 
+test("docs: the MCP hub's old pages go to the MCP router's, keeping the query", async () => {
+  const env = { ASSETS: { fetch: async () => new Response("asset") } };
+  for (const [from, to] of [["/docs/mcp-hub", "/docs/mcp-router"], ["/docs/mcp-hub.html", "/docs/mcp-router"], ["/docs/zh/mcp-hub/", "/docs/zh/mcp-router"], ["/docs/ja/mcp-hub.html?x=1", "/docs/ja/mcp-router?x=1"]]) {
+    const res = await worker.fetch(new Request("https://usemagpie.ai" + from), env, ctx);
+    assert.equal(res.status, 301, from);
+    const got = new URL(res.headers.get("Location"));
+    assert.equal(got.pathname + got.search, to, from);
+  }
+  const res = await worker.fetch(new Request("https://usemagpie.ai/docs/mcp-router"), env, ctx);
+  assert.equal(await res.text(), "asset");
+});
+
 // #661: the update window showed no notes while GitHub's API limited the
 // worker, and the failure was kept for five minutes.
 const ask = (path, env = {}) => worker.fetch(new Request("https://usemagpie.ai" + path), env, ctx);

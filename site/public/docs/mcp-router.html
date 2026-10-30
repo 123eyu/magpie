@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MCP hub · magpie docs</title>
-<meta name="description" content="What magpie's MCP hub does: one magpie MCP server per agent in place of the Library's servers, command servers run once, and one address for other apps.">
+<title>MCP router · magpie docs</title>
+<meta name="description" content="What magpie's MCP router does: one magpie MCP server per agent in place of the Library's servers, command servers run once, and one address for other apps.">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fafafa">
 <script>
@@ -27,14 +27,14 @@
 <script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
 <link rel="icon" href="/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/img/icon-256.png">
-<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/mcp-hub">
-<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/mcp-hub">
-<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/mcp-hub">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/mcp-router">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/mcp-router">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/mcp-router">
 <link rel="stylesheet" href="/docs.css">
-<meta property="og:title" content="MCP hub">
+<meta property="og:title" content="MCP router">
 <meta property="og:description" content="Set up each MCP server once in magpie's Library and serve it to every agent and app through one address.">
 <meta property="og:image" content="https://usemagpie.ai/img/og.png">
-<meta property="og:url" content="https://usemagpie.ai/docs/mcp-hub">
+<meta property="og:url" content="https://usemagpie.ai/docs/mcp-router">
 <meta name="twitter:card" content="summary_large_image">
 </head>
 <body>
@@ -50,7 +50,7 @@
     <a class="toc-only" href="/docs/docker">Docker</a>
     <a class="toc-only" href="/docs/privacy">Privacy</a>
     <a class="toc-only" href="/docs/masking">Privacy masking</a>
-    <a class="toc-only" href="/docs/mcp-hub">MCP hub</a>
+    <a class="toc-only" href="/docs/mcp-router">MCP router</a>
     <a href="/docs/import">Add to magpie</a>
     <a href="/docs/integrate">Integrate</a>
     <a href="https://github.com/yetone/magpie-releases/releases">Releases</a>
@@ -58,9 +58,9 @@
   <div class="langs">
     <button class="icon-btn lang" type="button" aria-label="Language" title="Language" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
     <div class="lang-menu" id="langs" hidden>
-      <a href="/docs/mcp-hub" hreflang="en" lang="en">English</a>
-      <a href="/docs/zh/mcp-hub" hreflang="zh" lang="zh">中文</a>
-      <a href="/docs/ja/mcp-hub" hreflang="ja" lang="ja">日本語</a>
+      <a href="/docs/mcp-router" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/mcp-router" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/mcp-router" hreflang="ja" lang="ja">日本語</a>
     </div>
   </div>
   <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
@@ -71,7 +71,7 @@
 
 <main class="wrap doc">
   <aside class="toc">
-    <p>MCP hub</p>
+    <p>MCP router</p>
     <a href="#overview">Overview</a>
     <a href="#on">Turn it on</a>
     <a href="#apps">Other apps</a>
@@ -80,9 +80,9 @@
   </aside>
 
   <article>
-    <p class="eyebrow" id="overview">Docs · MCP hub</p>
-    <h1>MCP hub</h1>
-    <p class="lede">The MCP servers you add in magpie’s <span class="ui">Library</span> are normally written into each agent’s own config, one entry per server. With the <b>MCP hub</b> on, each agent is given a single server named <code>magpie</code> instead, and magpie passes each call on to the Library server behind it. It is <b>off by default</b>.</p>
+    <p class="eyebrow" id="overview">Docs · MCP router</p>
+    <h1>MCP router</h1>
+    <p class="lede">The MCP servers you add in magpie’s <span class="ui">Library</span> are normally written into each agent’s own config, one entry per server. With the <b>MCP router</b> on, each agent is given a single server named <code>magpie</code> instead, and magpie passes each call on to the Library server behind it. It is <b>off by default</b>.</p>
     <ul>
       <li><b>Set up once.</b> A server written once in the Library reaches every agent and app through one entry.</li>
       <li><b>Run once.</b> A command server (one started as a program, such as <code>npx …</code>) runs once in magpie, not once in each agent. A server with no calls for 10 minutes is stopped and starts again on the next call.</li>
@@ -93,21 +93,21 @@
     <h2 id="on"><a class="anchor" href="#on">Turn it on</a></h2>
     <ol class="steps">
       <li><b>Open the page</b>Go to <span class="ui">Library</span> → <span class="ui">MCP</span>.</li>
-      <li><b>Switch it on</b>Below the server list, turn on <span class="ui">MCP hub</span>. Each agent that has Library servers ticked and can reach a server over HTTP (Streamable HTTP) gets one <code>magpie</code> entry at <code>/mcp/magpie/hub/&lt;agent&gt;</code> on magpie’s gateway, and those servers’ own entries are taken out of its config.</li>
+      <li><b>Switch it on</b>Below the server list, turn on <span class="ui">MCP router</span>. Each agent that has Library servers ticked and can reach a server over HTTP (Streamable HTTP) gets one <code>magpie</code> entry at <code>/mcp/magpie/hub/&lt;agent&gt;</code> on magpie’s gateway, and those servers’ own entries are taken out of its config.</li>
       <li><b>Restart your agents</b>An agent reads the change when it starts again.</li>
     </ol>
-    <p>Turning it off writes each server’s own entry back, removes only the <code>magpie</code> entry magpie wrote, and stops every server the hub started. From the command line:</p>
+    <p>Turning it off writes each server’s own entry back, removes only the <code>magpie</code> entry magpie wrote, and stops every server the router started. From the command line:</p>
     <div class="code">
       <span class="lang">Terminal</span>
       <button class="copy" data-copy="ex-cli">Copy</button>
-      <pre id="ex-cli">magpie library mcp hub on
-magpie library mcp hub off</pre>
+      <pre id="ex-cli">magpie library mcp router on
+magpie library mcp router off</pre>
     </div>
-    <p><code>magpie library</code> lists which agents are given the hub and which keep their own entries, with why.</p>
+    <p><code>magpie library</code> lists which agents are given the router and which keep their own entries, with why.</p>
 
     <h2 id="apps"><a class="anchor" href="#apps">Other apps</a></h2>
-    <p>With the hub on, the <span class="ui">Other apps</span> row shows an address ending in <code>/mcp/magpie/hub</code>, which serves every server in the Library. <span class="ui">Connect…</span> opens a sheet with a ready entry to copy for Cursor, VS Code, Windsurf or any app that takes a JSON MCP config; in the app window, Cursor and VS Code also have <span class="ui">Add</span>, which opens the app to confirm. An app on another computer needs a gateway key, as every request from your network does (see <a href="/docs/remote">Remote magpie</a>).</p>
-    <div class="callout"><b>Command servers run on this computer.</b> Anyone holding a gateway key on your network can call them through the hub, with your rights here. Only share keys with people you trust.</div>
+    <p>With the router on, the <span class="ui">Other apps</span> row shows an address ending in <code>/mcp/magpie/hub</code>, which serves every server in the Library. <span class="ui">Connect…</span> opens a sheet with a ready entry to copy for Cursor, VS Code, Windsurf or any app that takes a JSON MCP config; in the app window, Cursor and VS Code also have <span class="ui">Add</span>, which opens the app to confirm. An app on another computer needs a gateway key, as every request from your network does (see <a href="/docs/remote">Remote magpie</a>).</p>
+    <div class="callout"><b>Command servers run on this computer.</b> Anyone holding a gateway key on your network can call them through the router, with your rights here. Only share keys with people you trust.</div>
 
     <h2 id="kept"><a class="anchor" href="#kept">Agents that keep their own entries</a></h2>
     <p>These agents keep each server’s own entry, and the Library page says which and why:</p>
@@ -136,7 +136,7 @@ magpie library mcp hub off</pre>
     <a href="/docs/docker">Docker</a>
     <a href="/docs/privacy">Privacy</a>
     <a href="/docs/masking">Privacy masking</a>
-    <a href="/docs/mcp-hub">MCP hub</a>
+    <a href="/docs/mcp-router">MCP router</a>
     <a href="/docs/import">Add to magpie</a>
     <a href="/docs/integrate">Integrate</a>
     <a href="https://github.com/yetone/magpie">GitHub</a>

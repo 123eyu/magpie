@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MCP ハブ · magpie ドキュメント</title>
-<meta name="description" content="magpie の MCP ハブの役割：ライブラリのサーバーの代わりにエージェントごとに magpie という MCP サーバーを一つ渡し、コマンドのサーバーは一度だけ動かし、ほかのアプリには一つのアドレスを。">
+<title>MCP ルーター · magpie ドキュメント</title>
+<meta name="description" content="magpie の MCP ルーターの役割：ライブラリのサーバーの代わりにエージェントごとに magpie という MCP サーバーを一つ渡し、コマンドのサーバーは一度だけ動かし、ほかのアプリには一つのアドレスを。">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fafafa">
 <script>
@@ -27,14 +27,14 @@
 <script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
 <link rel="icon" href="/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/img/icon-256.png">
-<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/mcp-hub">
-<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/mcp-hub">
-<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/mcp-hub">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/mcp-router">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/mcp-router">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/mcp-router">
 <link rel="stylesheet" href="/docs.css">
-<meta property="og:title" content="MCP ハブ">
+<meta property="og:title" content="MCP ルーター">
 <meta property="og:description" content="MCP サーバーを magpie のライブラリで一度設定し、一つのアドレスですべてのエージェントとアプリに。">
 <meta property="og:image" content="https://usemagpie.ai/img/og.png">
-<meta property="og:url" content="https://usemagpie.ai/docs/ja/mcp-hub">
+<meta property="og:url" content="https://usemagpie.ai/docs/ja/mcp-router">
 <meta name="twitter:card" content="summary_large_image">
 </head>
 <body>
@@ -50,7 +50,7 @@
     <a class="toc-only" href="/docs/ja/docker">Docker</a>
     <a class="toc-only" href="/docs/ja/privacy">プライバシー</a>
     <a class="toc-only" href="/docs/ja/masking">プライバシーマスキング</a>
-    <a class="toc-only" href="/docs/ja/mcp-hub">MCP ハブ</a>
+    <a class="toc-only" href="/docs/ja/mcp-router">MCP ルーター</a>
     <a href="/docs/ja/import">magpie に追加</a>
     <a href="/docs/integrate">アプリ連携</a>
     <a href="https://github.com/yetone/magpie-releases/releases">リリース</a>
@@ -58,9 +58,9 @@
   <div class="langs">
     <button class="icon-btn lang" type="button" aria-label="言語" title="言語" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
     <div class="lang-menu" id="langs" hidden>
-      <a href="/docs/mcp-hub" hreflang="en" lang="en">English</a>
-      <a href="/docs/zh/mcp-hub" hreflang="zh" lang="zh">中文</a>
-      <a href="/docs/ja/mcp-hub" hreflang="ja" lang="ja">日本語</a>
+      <a href="/docs/mcp-router" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/mcp-router" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/mcp-router" hreflang="ja" lang="ja">日本語</a>
     </div>
   </div>
   <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="Discord の magpie" title="Discord に参加"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
@@ -71,7 +71,7 @@
 
 <main class="wrap doc">
   <aside class="toc">
-    <p>MCP ハブ</p>
+    <p>MCP ルーター</p>
     <a href="#overview">概要</a>
     <a href="#on">オンにする</a>
     <a href="#apps">ほかのアプリ</a>
@@ -80,9 +80,9 @@
   </aside>
 
   <article>
-    <p class="eyebrow" id="overview">ドキュメント · MCP ハブ</p>
-    <h1>MCP ハブ</h1>
-    <p class="lede">magpie の <span class="ui">ライブラリ</span> に追加した MCP サーバーは、通常はサーバーごとに一つずつ、各エージェントの設定に書き込まれます。<b>MCP ハブ</b> をオンにすると、各エージェントには代わりに <code>magpie</code> という一つのサーバーだけが渡され、magpie が各呼び出しを裏のライブラリのサーバーに渡します。<b>既定ではオフ</b>です。</p>
+    <p class="eyebrow" id="overview">ドキュメント · MCP ルーター</p>
+    <h1>MCP ルーター</h1>
+    <p class="lede">magpie の <span class="ui">ライブラリ</span> に追加した MCP サーバーは、通常はサーバーごとに一つずつ、各エージェントの設定に書き込まれます。<b>MCP ルーター</b> をオンにすると、各エージェントには代わりに <code>magpie</code> という一つのサーバーだけが渡され、magpie が各呼び出しを裏のライブラリのサーバーに渡します。<b>既定ではオフ</b>です。</p>
     <ul>
       <li><b>設定は一度。</b>ライブラリで一度書いたサーバーが、一つのエントリですべてのエージェントとアプリに届きます。</li>
       <li><b>動かすのも一度。</b>コマンドのサーバー（<code>npx …</code> のようにプログラムとして起動するもの）は、エージェントごとではなく magpie の中で一つだけ動きます。10 分間呼び出しのないサーバーは止まり、次の呼び出しでまた起動します。</li>
@@ -93,21 +93,21 @@
     <h2 id="on"><a class="anchor" href="#on">オンにする</a></h2>
     <ol class="steps">
       <li><b>ページを開く</b><span class="ui">ライブラリ</span> → <span class="ui">MCP</span> を開きます。</li>
-      <li><b>スイッチを入れる</b>サーバー一覧の下の <span class="ui">MCP ハブ</span> をオンにします。ライブラリのサーバーにチェックが入っていて、HTTP（Streamable HTTP）でサーバーにつなげるエージェントには、magpie のゲートウェイの <code>/mcp/magpie/hub/&lt;agent&gt;</code> を指す <code>magpie</code> エントリが一つ渡され、それらのサーバーの個別のエントリは設定から外されます。</li>
+      <li><b>スイッチを入れる</b>サーバー一覧の下の <span class="ui">MCP ルーター</span> をオンにします。ライブラリのサーバーにチェックが入っていて、HTTP（Streamable HTTP）でサーバーにつなげるエージェントには、magpie のゲートウェイの <code>/mcp/magpie/hub/&lt;agent&gt;</code> を指す <code>magpie</code> エントリが一つ渡され、それらのサーバーの個別のエントリは設定から外されます。</li>
       <li><b>エージェントを再起動</b>エージェントは次に起動したときに変更を読みます。</li>
     </ol>
-    <p>オフにすると、各サーバーの個別のエントリが書き戻され、magpie が書いた <code>magpie</code> エントリだけが外れ、ハブが起動したサーバーはすべて止まります。コマンドラインでは：</p>
+    <p>オフにすると、各サーバーの個別のエントリが書き戻され、magpie が書いた <code>magpie</code> エントリだけが外れ、ルーターが起動したサーバーはすべて止まります。コマンドラインでは：</p>
     <div class="code">
       <span class="lang">ターミナル</span>
       <button class="copy" data-copy="ex-cli">コピー</button>
-      <pre id="ex-cli">magpie library mcp hub on
-magpie library mcp hub off</pre>
+      <pre id="ex-cli">magpie library mcp router on
+magpie library mcp router off</pre>
     </div>
-    <p><code>magpie library</code> で、ハブを渡されたエージェントと個別のエントリを残すエージェントが、理由とともに一覧できます。</p>
+    <p><code>magpie library</code> で、ルーターを渡されたエージェントと個別のエントリを残すエージェントが、理由とともに一覧できます。</p>
 
     <h2 id="apps"><a class="anchor" href="#apps">ほかのアプリ</a></h2>
-    <p>ハブがオンのとき、<span class="ui">ほかのアプリ</span> の行に <code>/mcp/magpie/hub</code> で終わるアドレスが出ます。ここではライブラリのすべてのサーバーを提供します。<span class="ui">接続…</span> を押すと、Cursor、VS Code、Windsurf、JSON の MCP 設定を受け付けるアプリ向けのエントリがコピーできるシートが開きます。アプリのウィンドウでは、Cursor と VS Code には <span class="ui">追加</span> もあり、そのアプリが開いて確認を求めます。別のコンピュータのアプリには、ネットワークからのほかのリクエストと同じくゲートウェイのキーが必要です（<a href="/docs/ja/remote">リモート magpie</a> を参照）。</p>
-    <div class="callout"><b>コマンドのサーバーはこのコンピュータで動きます。</b>ネットワーク上でゲートウェイのキーを持つ人は、ハブを通してあなたの権限でそれを呼び出せます。キーは信頼できる人にだけ渡してください。</div>
+    <p>ルーターがオンのとき、<span class="ui">ほかのアプリ</span> の行に <code>/mcp/magpie/hub</code> で終わるアドレスが出ます。ここではライブラリのすべてのサーバーを提供します。<span class="ui">接続…</span> を押すと、Cursor、VS Code、Windsurf、JSON の MCP 設定を受け付けるアプリ向けのエントリがコピーできるシートが開きます。アプリのウィンドウでは、Cursor と VS Code には <span class="ui">追加</span> もあり、そのアプリが開いて確認を求めます。別のコンピュータのアプリには、ネットワークからのほかのリクエストと同じくゲートウェイのキーが必要です（<a href="/docs/ja/remote">リモート magpie</a> を参照）。</p>
+    <div class="callout"><b>コマンドのサーバーはこのコンピュータで動きます。</b>ネットワーク上でゲートウェイのキーを持つ人は、ルーターを通してあなたの権限でそれを呼び出せます。キーは信頼できる人にだけ渡してください。</div>
 
     <h2 id="kept"><a class="anchor" href="#kept">自分のエントリを残すエージェント</a></h2>
     <p>次のエージェントは各サーバーの個別のエントリを残し、ライブラリのページにどれがなぜかが表示されます：</p>
@@ -136,7 +136,7 @@ magpie library mcp hub off</pre>
     <a href="/docs/ja/docker">Docker</a>
     <a href="/docs/ja/privacy">プライバシー</a>
     <a href="/docs/ja/masking">プライバシーマスキング</a>
-    <a href="/docs/ja/mcp-hub">MCP ハブ</a>
+    <a href="/docs/ja/mcp-router">MCP ルーター</a>
     <a href="/docs/ja/import">magpie に追加</a>
     <a href="/docs/integrate">アプリ連携</a>
     <a href="https://github.com/yetone/magpie">GitHub</a>

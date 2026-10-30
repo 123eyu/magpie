@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MCP 聚合 · magpie 文档</title>
-<meta name="description" content="magpie 的 MCP 聚合是做什么的：每个 Agent 只配一个 magpie MCP 服务器来代替资源库里的服务器，命令型服务器只运行一份，其他应用用一个地址接入。">
+<title>MCP 路由 · magpie 文档</title>
+<meta name="description" content="magpie 的 MCP 路由是做什么的：每个 Agent 只配一个 magpie MCP 服务器来代替资源库里的服务器，命令型服务器只运行一份，其他应用用一个地址接入。">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fafafa">
 <script>
@@ -27,14 +27,14 @@
 <script>try{if(/Linux/.test(navigator.userAgent)&&!/Android/.test(navigator.userAgent)||localStorage.getItem("omarchy")||/[?&]omarchy=/.test(location.search))document.write('<script src="/omarchy.js"><\/script>')}catch(e){}</script>
 <link rel="icon" href="/favicon.png" type="image/png">
 <link rel="apple-touch-icon" href="/img/icon-256.png">
-<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/mcp-hub">
-<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/mcp-hub">
-<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/mcp-hub">
+<link rel="alternate" hreflang="en" href="https://usemagpie.ai/docs/mcp-router">
+<link rel="alternate" hreflang="zh" href="https://usemagpie.ai/docs/zh/mcp-router">
+<link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/mcp-router">
 <link rel="stylesheet" href="/docs.css">
-<meta property="og:title" content="MCP 聚合">
+<meta property="og:title" content="MCP 路由">
 <meta property="og:description" content="MCP 服务器在 magpie 资源库里配一次，通过一个地址给所有 Agent 和应用使用。">
 <meta property="og:image" content="https://usemagpie.ai/img/og.png">
-<meta property="og:url" content="https://usemagpie.ai/docs/zh/mcp-hub">
+<meta property="og:url" content="https://usemagpie.ai/docs/zh/mcp-router">
 <meta name="twitter:card" content="summary_large_image">
 </head>
 <body>
@@ -50,7 +50,7 @@
     <a class="toc-only" href="/docs/zh/docker">Docker</a>
     <a class="toc-only" href="/docs/zh/privacy">隐私</a>
     <a class="toc-only" href="/docs/zh/masking">本地脱敏</a>
-    <a class="toc-only" href="/docs/zh/mcp-hub">MCP 聚合</a>
+    <a class="toc-only" href="/docs/zh/mcp-router">MCP 路由</a>
     <a href="/docs/zh/import">Add to magpie</a>
     <a href="/docs/zh/integrate">接入应用</a>
     <a href="https://github.com/yetone/magpie-releases/releases">版本发布</a>
@@ -58,9 +58,9 @@
   <div class="langs">
     <button class="icon-btn lang" type="button" aria-label="语言" title="语言" aria-haspopup="true" aria-expanded="false" aria-controls="langs"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.83 2.55 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.45 5.58 5.45 8S6.3 12.5 8 14.25"/></svg></button>
     <div class="lang-menu" id="langs" hidden>
-      <a href="/docs/mcp-hub" hreflang="en" lang="en">English</a>
-      <a href="/docs/zh/mcp-hub" hreflang="zh" lang="zh">中文</a>
-      <a href="/docs/ja/mcp-hub" hreflang="ja" lang="ja">日本語</a>
+      <a href="/docs/mcp-router" hreflang="en" lang="en">English</a>
+      <a href="/docs/zh/mcp-router" hreflang="zh" lang="zh">中文</a>
+      <a href="/docs/ja/mcp-router" hreflang="ja" lang="ja">日本語</a>
     </div>
   </div>
   <a class="icon-btn" href="https://discord.gg/vGSnD3ZKQF" aria-label="magpie on Discord" title="Join us on Discord"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg></a>
@@ -71,7 +71,7 @@
 
 <main class="wrap doc">
   <aside class="toc">
-    <p>MCP 聚合</p>
+    <p>MCP 路由</p>
     <a href="#overview">概述</a>
     <a href="#on">打开</a>
     <a href="#apps">其他应用</a>
@@ -80,9 +80,9 @@
   </aside>
 
   <article>
-    <p class="eyebrow" id="overview">文档 · MCP 聚合</p>
-    <h1>MCP 聚合</h1>
-    <p class="lede">你在 magpie <span class="ui">资源库</span> 里添加的 MCP 服务器，平时会写进每个 Agent 自己的配置，一个服务器一条。打开 <b>MCP 聚合</b> 后，每个 Agent 只拿到一个名为 <code>magpie</code> 的服务器，magpie 再把每次调用转给后面对应的资源库服务器。<b>默认关闭</b>。</p>
+    <p class="eyebrow" id="overview">文档 · MCP 路由</p>
+    <h1>MCP 路由</h1>
+    <p class="lede">你在 magpie <span class="ui">资源库</span> 里添加的 MCP 服务器，平时会写进每个 Agent 自己的配置，一个服务器一条。打开 <b>MCP 路由</b> 后，每个 Agent 只拿到一个名为 <code>magpie</code> 的服务器，magpie 再把每次调用转给后面对应的资源库服务器。<b>默认关闭</b>。</p>
     <ul>
       <li><b>配一次。</b>资源库里写好一次的服务器，通过一个条目给所有 Agent 和应用使用。</li>
       <li><b>只运行一份。</b>命令型服务器（以程序启动的，比如 <code>npx …</code>）在 magpie 里只运行一份，而不是每个 Agent 各起一份。10 分钟没有调用的服务器会被停掉，下次调用时再启动。</li>
@@ -93,21 +93,21 @@
     <h2 id="on"><a class="anchor" href="#on">打开</a></h2>
     <ol class="steps">
       <li><b>打开页面</b>进入 <span class="ui">资源库</span> → <span class="ui">MCP</span>。</li>
-      <li><b>打开开关</b>在服务器列表下方打开 <span class="ui">MCP 聚合</span>。每个勾选了资源库服务器、且能通过 HTTP（Streamable HTTP）连接服务器的 Agent，会得到一个 <code>magpie</code> 条目，地址是 magpie 网关上的 <code>/mcp/magpie/hub/&lt;agent&gt;</code>，那些服务器原来的条目会从它的配置里移除。</li>
+      <li><b>打开开关</b>在服务器列表下方打开 <span class="ui">MCP 路由</span>。每个勾选了资源库服务器、且能通过 HTTP（Streamable HTTP）连接服务器的 Agent，会得到一个 <code>magpie</code> 条目，地址是 magpie 网关上的 <code>/mcp/magpie/hub/&lt;agent&gt;</code>，那些服务器原来的条目会从它的配置里移除。</li>
       <li><b>重启 Agent</b>Agent 重新启动后才会读到改动。</li>
     </ol>
-    <p>关闭后，每个服务器自己的条目会写回去，只移除 magpie 写入的那个 <code>magpie</code> 条目，聚合启动的服务器也会全部停掉。命令行：</p>
+    <p>关闭后，每个服务器自己的条目会写回去，只移除 magpie 写入的那个 <code>magpie</code> 条目，MCP 路由启动的服务器也会全部停掉。命令行：</p>
     <div class="code">
       <span class="lang">终端</span>
       <button class="copy" data-copy="ex-cli">复制</button>
-      <pre id="ex-cli">magpie library mcp hub on
-magpie library mcp hub off</pre>
+      <pre id="ex-cli">magpie library mcp router on
+magpie library mcp router off</pre>
     </div>
-    <p><code>magpie library</code> 会列出哪些 Agent 用上了聚合、哪些保留各自的条目，以及原因。</p>
+    <p><code>magpie library</code> 会列出哪些 Agent 用上了 MCP 路由、哪些保留各自的条目，以及原因。</p>
 
     <h2 id="apps"><a class="anchor" href="#apps">其他应用</a></h2>
-    <p>聚合打开后，<span class="ui">其他应用</span> 一行显示一个以 <code>/mcp/magpie/hub</code> 结尾的地址，它提供资源库里的所有服务器。<span class="ui">连接…</span> 会打开一个面板，里面有给 Cursor、VS Code、Windsurf 或任何接受 JSON MCP 配置的应用准备好的条目，可直接复制；在应用窗口里，Cursor 和 VS Code 还有 <span class="ui">添加</span>，会打开对应应用让你确认。另一台电脑上的应用需要网关密钥，和局域网里的其他请求一样（见 <a href="/docs/zh/remote">远程 magpie</a>）。</p>
-    <div class="callout"><b>命令型服务器运行在这台电脑上。</b>局域网里持有网关密钥的人都能通过聚合调用它们，权限就是你在这台电脑上的权限。密钥只给信任的人。</div>
+    <p>MCP 路由打开后，<span class="ui">其他应用</span> 一行显示一个以 <code>/mcp/magpie/hub</code> 结尾的地址，它提供资源库里的所有服务器。<span class="ui">连接…</span> 会打开一个面板，里面有给 Cursor、VS Code、Windsurf 或任何接受 JSON MCP 配置的应用准备好的条目，可直接复制；在应用窗口里，Cursor 和 VS Code 还有 <span class="ui">添加</span>，会打开对应应用让你确认。另一台电脑上的应用需要网关密钥，和局域网里的其他请求一样（见 <a href="/docs/zh/remote">远程 magpie</a>）。</p>
+    <div class="callout"><b>命令型服务器运行在这台电脑上。</b>局域网里持有网关密钥的人都能通过 MCP 路由调用它们，权限就是你在这台电脑上的权限。密钥只给信任的人。</div>
 
     <h2 id="kept"><a class="anchor" href="#kept">保留各自条目的 Agent</a></h2>
     <p>以下 Agent 会保留每个服务器自己的条目，资源库页面会写明是哪些、为什么：</p>
@@ -136,7 +136,7 @@ magpie library mcp hub off</pre>
     <a href="/docs/zh/docker">Docker</a>
     <a href="/docs/zh/privacy">隐私</a>
     <a href="/docs/zh/masking">本地脱敏</a>
-    <a href="/docs/zh/mcp-hub">MCP 聚合</a>
+    <a href="/docs/zh/mcp-router">MCP 路由</a>
     <a href="/docs/zh/import">Add to magpie</a>
     <a href="/docs/zh/integrate">接入应用</a>
     <a href="https://github.com/yetone/magpie">GitHub</a>

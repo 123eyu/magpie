@@ -60,6 +60,9 @@ const SHORT = {
 
 // The bare docs paths open the getting-started guide.
 const DOCS = { "/docs": "/docs/start", "/docs/zh": "/docs/zh/start", "/docs/ja": "/docs/ja/start" };
+// pages that moved, from the old path (no .html) to the new one: the MCP
+// hub was renamed the MCP router
+const MOVED = { "/docs/mcp-hub": "/docs/mcp-router", "/docs/zh/mcp-hub": "/docs/zh/mcp-router", "/docs/ja/mcp-hub": "/docs/ja/mcp-router" };
 // the languages the docs are written in besides English
 const DOC_LANGS = ["zh", "ja"];
 
@@ -131,6 +134,8 @@ export default {
     }
     const guide = DOCS[url.pathname.replace(/\/+$/, "")];
     if (guide) return Response.redirect(new URL(guide, url).toString(), 302);
+    const moved = MOVED[url.pathname.replace(/(\.html)?\/*$/, "")];
+    if (moved) return Response.redirect(new URL(moved + url.search, url).toString(), 301);
     // an English docs page, to a browser whose language has its own: as /
     // does, until a language is picked
     const doc = url.pathname.match(/^\/docs\/([a-z-]+)(\.html)?$/);
