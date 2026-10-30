@@ -573,6 +573,10 @@ func appendUsage(r *http.Request, rec usage.Record) {
 	if r.Context().Value(observedKey{}) != nil {
 		rec.Watched = true
 	}
+	if !rec.IsProbe() {
+		// a request an MCP tool call made: its row names the model (mcpUse)
+		mcpUseOf(r.Context()).used(rec.Provider, rec.Model)
+	}
 	budget.Append(rec)
 }
 

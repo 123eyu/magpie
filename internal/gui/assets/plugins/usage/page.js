@@ -2274,6 +2274,8 @@ function renderLedger() {
     // one that tested the provider (the editor's Test, Detect APIs, a model
     // list) is counted nowhere, and says so (neiko on Discord)
     const probe = r.source === "probe";
+    // an agent's call to a tool of magpie's MCP servers (ferock on Discord)
+    const mcp = r.source === "mcp";
     if (r.agent === "magpie") {
       const own = ownBadge();
       if (probe) own.title = probeWhy();
@@ -2289,7 +2291,9 @@ function renderLedger() {
     // resolved to a provider's name, which would promote an unknown request
     // to an official provider — and the row keeps saying it is a local
     // session. A row whose file names none says only that.
-    const where = local ? (r.session_account || r.session_provider || t("Local session")) : t(r.providerName) + (r.host ? " · " + r.host : "");
+    const where = local ? (r.session_account || r.session_provider || t("Local session"))
+      : mcp ? [r.providerName && t(r.providerName), r.host].filter(Boolean).join(" · ") || "—"
+      : t(r.providerName) + (r.host ? " · " + r.host : "");
     const wc = td(el("div", "where-name", where), "where", where);
     const badges = el("div", "source-badges");
     if (local && r.session_account && r.session_official_login) {
@@ -2325,6 +2329,11 @@ function renderLedger() {
     if (probe) {
       const k = el("span", "src probe", window.kindName ? window.kindName(r.kind) : r.kind);
       k.title = probeWhy();
+      badges.append(k);
+    }
+    if (mcp) {
+      const k = el("span", "src mcp", "MCP");
+      k.title = t("{agent} called the tool {tool} of magpie's MCP server {server}. Its arguments are not kept, and it is not counted in any total: the model requests it made are rows of their own.", { agent: name, tool: r.req || "—", server: r.host || "magpie" });
       badges.append(k);
     }
     if (badges.childElementCount) wc.append(badges);
@@ -2374,7 +2383,7 @@ function renderLedger() {
     const st = el("span", "st");
     // a status when the gateway logged the call; a session file has none,
     // and says only whether it went well
-    let word = r.status ? String(r.status) : r.source === "log" ? (bad ? r.err_type || t("Failed") : t("Succeeded")) : "—";
+    let word = r.status ? String(r.status) : r.source === "log" || mcp ? (bad ? r.err_type || t("Failed") : t("Succeeded")) : "—";
     if (r.status && bad && r.err_type) word += " · " + r.err_type;
     if (r.handed_on) word += " · " + t("handed on");
     else if (r.tries > 1) word += " · " + t("{n} tries", { n: r.tries });

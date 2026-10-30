@@ -653,6 +653,51 @@ however old, so a client's history can be backfilled.
 concurrent posts beside the gateway's own writes, and a backfill of a full
 5000-record batch landing on the right 7d/30d/all days.
 
+### Calls to magpie's own MCP tools
+
+An agent's call to a tool of one of magpie's own MCP servers is a row of
+`usage.jsonl` too (ferock on Discord): the image server's
+`generate_image`, `generate_video` and `generation_result`, vision, web
+search, plugin tools and the hub's. The row has `source: "mcp"`,
+`kind: "mcp"`, operation `execute_tool`, the tool's name as `req`, the
+server's name as `host` (`magpie-image`, `magpie-vision`,
+`magpie-web-search`, `magpie-tools`, or the Library server a hub tool is
+of), the agent, the provider and model of the last gateway request the
+call made, its duration, its endpoint (the server's path, `stdio` for the
+Magpie Image server an agent runs) and, when it failed, the JSON-RPC
+error or the `isError` result's first text, clipped by `keepMsg`. Its
+arguments are never kept, not even masked.
+
+- **Written by:** `serveMCP` for every `tools/call` (`callMCPTool` in
+  [`mcp_calls.go`](../../internal/gateway/mcp_calls.go)). The call's
+  context carries an `mcpUse`, which `appendUsage` fills with each model
+  row's provider and model; the image server's jobs keep it, so a
+  `generation_result` names the model of the job it waited on. A drawing
+  still running when its call answers leaves that call's row without a
+  model. The stdio Magpie Image server calls the gateway's `/v1/images`
+  and `/v1/videos` itself, so it reports each call it answered to the
+  gateway's image MCP server with the JSON-RPC method `magpie/toolCalled`
+  (`gateway.MCPCalledMethod`, params `MCPCalled`: tool, ms, model,
+  error); a tool not Magpie Image's is -32602. An older gateway that
+  doesn't know the method just leaves the call unlisted.
+- **Counted nowhere:** `Record.IsProbe` is true for these rows, so they
+  ride the probe lane above: listed (`probeChunk`, kept as they are),
+  never in a total, chart, budget (`budget.counts`) or `Load`. The model
+  requests a call made are rows of their own and count as any. The
+  index's provider hosts skip them (`sawHost`), as their host is a
+  server's name.
+- **On the page:** the Requests row has an `MCP` badge (`.src.mcp`,
+  muted, no stripe) whose tooltip names the agent, tool and server and
+  says the arguments are not kept; the Where cell is the provider and the
+  server, the Requested cell the tool, and the status Succeeded or
+  Failed. The Purpose filter names `kind:mcp` "MCP tool"
+  (`purposeKinds`, `purposes.js`).
+
+`TestMCPToolCallIsARequestRow`, `TestMCPHubCallIsARequestRow`,
+`TestMCPCalledFromStdioIsARow` and the others in `mcp_calls_test.go`,
+`TestToolCallsAreReported` (imagemcp), `TestMCPCallRowsListedNotCounted`
+(usage) and `usage-ledger-mcp.test.cjs` cover it.
+
 ### Requests magpie sends on its own
 
 The provider editor's Test, Detect APIs and per-model detection, and a
