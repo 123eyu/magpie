@@ -418,6 +418,34 @@ func IsAgent(id string) bool {
 	return slices.ContainsFunc(knownAgents(), func(k Known) bool { return k.ID == id || slices.Contains(k.Names, id) })
 }
 
+// libraries are the product names of HTTP libraries, runtimes and API
+// SDKs as AgentOf names a client by its User-Agent, lower-cased. A
+// request that says only one of these is from a script, or from a tool
+// built on the library, and says nothing of which: it is no agent of its
+// own (theforeveriris on X: Bun, curl and python-httpx each had an
+// agent's scorecard on the Context tab).
+var libraries = map[string]bool{
+	// command lines and API tools
+	"curl": true, "wget": true, "httpie": true, "postmanruntime": true, "insomnia": true,
+	// JavaScript
+	"bun": true, "node": true, "deno": true, "node-fetch": true, "undici": true, "axios": true, "got": true, "ky": true,
+	// Python
+	"python": true, "python-httpx": true, "httpx": true, "python-requests": true, "requests": true,
+	"python-urllib": true, "urllib3": true, "aiohttp": true,
+	// Go, JVM, Ruby, PHP, Dart, Rust
+	"go-http-client": true, "go-resty": true, "resty": true, "okhttp": true, "java": true, "java-http-client": true,
+	"apache-httpclient": true, "reactor-netty": true, "ruby": true, "faraday": true, "rest-client": true,
+	"guzzlehttp": true, "dart": true, "reqwest": true, "libcurl": true,
+	// the vendors' SDKs, which an app or a script calls a model with
+	"openai": true, "asyncopenai": true, "anthropic": true, "asyncanthropic": true, "ai-sdk": true, "google-genai-sdk": true,
+}
+
+// IsLibrary says whether a client, by the name AgentOf gives it (a
+// record's Agent, old records' too), is an HTTP library, a runtime or an
+// API SDK rather than an agent: curl, Bun, python-httpx, Go-http-client,
+// OpenAI/Python.
+func IsLibrary(id string) bool { return libraries[strings.ToLower(strings.TrimSpace(id))] }
+
 // AgentOf names the agent behind a client User-Agent. Known agents map to
 // their magpie id; anything else keeps its product name.
 func AgentOf(ua string) string {
