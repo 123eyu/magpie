@@ -4284,6 +4284,14 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	}
 	if relay {
 		call.To = from
+		// a web search magpie ran for the model, replayed to a provider
+		// that runs none: left out, as a translation leaves it, since the
+		// provider's own chat form answers it with nothing (withoutSearchCalls).
+		// A relay Codex's turns go to as sent, and a native compaction,
+		// keep what Codex sent.
+		if from == provider.Responses && !keep && !searchesModel(p, from, model) && !codexAsSent(p, r.Header) {
+			body = withoutSearchCalls(body)
+		}
 		status, msg, done := s.passthrough(w, r, p, from, model, body, &call.Usage)
 		if done {
 			return status, msg
