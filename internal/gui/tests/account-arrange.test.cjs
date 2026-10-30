@@ -104,6 +104,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const context = await browser.newContext({ viewport: { width: 1000, height: 850 }, reducedMotion: "reduce", hasTouch: true });
     const page = await context.newPage(), f = fixture(), errors = [];
     page.setDefaultTimeout(5000);
+    page.setDefaultNavigationTimeout(60000);
     page.on("pageerror", e => errors.push(e.message));
     await page.route("**/*", f.route);
     for (const id of ["antigravity", "relay"]) {

@@ -69,6 +69,7 @@ async function newPage(browser, width, route) {
   const context = await browser.newContext({ viewport: { width, height: 800 }, reducedMotion: "reduce" });
   const page = await context.newPage();
   page.setDefaultTimeout(5000);
+  page.setDefaultNavigationTimeout(60000);
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   // a tab the page opens is counted, not opened

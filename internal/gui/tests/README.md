@@ -2602,3 +2602,17 @@ that scrolls a box vertically is built from its selector, filled and pointed
 at, and has to hold the wheel; one that doesn't is named by file and
 selector. With the engine made to lack overscroll-behavior (Safari 15),
 compat.js still keeps Requests' list's wheel. Chromium and WebKit.
+
+## A page's first load has a minute
+
+`nav-timeout.test.cjs` reads every GUI test file, with no browser: a page
+given a default timeout under a minute (most files give 5s, a click's bar)
+is given `setDefaultNavigationTimeout` of at least a minute too, as
+Playwright otherwise holds `page.goto` and `reload` to the click's bar and
+a busy machine's first load of app.js, i18n.js and the plugins takes
+longer (claude-switch-only, #4470). It names each file and page that
+hasn't.
+
+```sh
+node --test internal/gui/tests/nav-timeout.test.cjs
+```
