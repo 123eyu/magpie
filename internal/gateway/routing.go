@@ -156,9 +156,13 @@ func unforbid(f forbidden) {
 // a provider rest or after a model-specific rest.
 func clearRest(key string) {
 	restingUntil.Lock()
+	kept := ladderRest(restingUntil.note[key])
 	delete(restingUntil.m, key)
 	delete(restingUntil.note, key)
 	restingUntil.Unlock()
+	if kept {
+		saveRests() // its rung starts over after a restart too
+	}
 }
 
 // How long a candidate sits out, by why it failed.
@@ -759,10 +763,14 @@ func RestOf(key string) (Rest, bool) { return restOf(key) }
 func (s *Server) Unrest(key string) bool {
 	restingUntil.Lock()
 	_, ok := restingUntil.m[key]
+	kept := ladderRest(restingUntil.note[key])
 	delete(restingUntil.m, key)
 	delete(restingUntil.note, key)
 	liftedLocked(key, time.Now())
 	restingUntil.Unlock()
+	if kept {
+		saveRests()
+	}
 	unsink(key)
 	s.trace.lifted()
 	return ok
@@ -773,9 +781,10 @@ func (s *Server) Unrest(key string) bool {
 // asked again for all of them. It returns how many it lifted.
 func (s *Server) UnrestAll(key string) int {
 	restingUntil.Lock()
-	n, now := 0, time.Now()
+	n, now, kept := 0, time.Now(), false
 	for k := range restingUntil.m {
 		if k == key || strings.HasPrefix(k, key+"/") {
+			kept = kept || ladderRest(restingUntil.note[k])
 			delete(restingUntil.m, k)
 			delete(restingUntil.note, k)
 			liftedLocked(k, now)
@@ -784,6 +793,9 @@ func (s *Server) UnrestAll(key string) int {
 	}
 	liftedLocked(key, now)
 	restingUntil.Unlock()
+	if kept {
+		saveRests()
+	}
 	unsinkAll(key)
 	s.trace.lifted()
 	return n
@@ -1404,9 +1416,13 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 			r.askAt = now.Add(fallbackCooldown)
 		}
 	}
+	kept := ladderRest(r) || ladderRest(restingUntil.note[id])
 	restingUntil.m[id] = r.Until
 	restingUntil.note[id] = r
 	restingUntil.Unlock()
+	if kept {
+		saveRests() // a magpie started again rests it out, and climbs on
+	}
 	if r.Probed {
 		s.probeLater(c.p, r, now)
 	}
@@ -1485,15 +1501,20 @@ func restSlow(c candidate, now time.Time) (Rest, bool) {
 		r.agent, r.user = a.UsageAgent(), a.User
 	}
 	restingUntil.Lock()
-	defer restingUntil.Unlock()
 	if until, ok := restingUntil.m[id]; ok && until.After(r.Until) {
 		// resting longer already, for what another failure said
 		kept := restingUntil.note[id]
 		kept.Until = until
+		restingUntil.Unlock()
 		return kept, true
 	}
+	ladder := ladderRest(restingUntil.note[id])
 	restingUntil.m[id] = r.Until
 	restingUntil.note[id] = r
+	restingUntil.Unlock()
+	if ladder {
+		saveRests() // its ended ladder rest is a slow one's now
+	}
 	return r, true
 }
 
