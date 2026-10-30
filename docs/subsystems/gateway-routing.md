@@ -782,8 +782,13 @@ answers as that API does (#1580). Empty is the vendor's own
 takes only an `http://` or `https://` URL with a host and no `?query` or
 `#fragment`, since `askSearchAPI` puts the vendor's path after it
 (`/search`, `/res/v1/web/search`, `/v2/search`, `/v1/tools/search`,
-`/search_api/web_search`) with the slash at its end
-trimmed. The request goes through the gateway's client, so it follows
+`/search_api/web_search`; `SearchVendor.Paths`) with the slash at its end
+trimmed. A URL given ending in that path (`…/search` for Tavily, any
+case) is its base: `SetSearchAPI` saves it without the path, and
+`SearchAPI.Base` drops it from one saved with it before, so it is asked
+once, never `/search/search` (plugins#509,
+`TestSearchAPIBaseURLWithItsPath`). A base of the user's own that
+itself ends in that path can't be set. The request goes through the gateway's client, so it follows
 magpie's proxy settings as the vendor's own address does
 (`TestSearchFollowsTheSearchersProxy`).
 
