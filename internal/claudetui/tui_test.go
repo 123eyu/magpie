@@ -1,5 +1,3 @@
-//go:build darwin || linux
-
 package claudetui
 
 import (
@@ -16,8 +14,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"golang.org/x/sys/unix"
 )
 
 // The test binary is also the shim (MAGPIE_TUI_TEST=shim) and a fake
@@ -104,11 +100,7 @@ func fakeClaude(args []string) {
 	_ = os.MkdirAll(dir, 0o700)
 	// raw, as Claude Code's terminal is: a paste is taken whole, and Enter
 	// outside one sends it
-	if tio, err := unix.IoctlGetTermios(0, ioctlGetTermios); err == nil {
-		tio.Lflag &^= unix.ECHO | unix.ICANON
-		tio.Iflag &^= unix.ICRNL
-		_ = unix.IoctlSetTermios(0, ioctlSetTermios, tio)
-	}
+	fakeRaw()
 	r := bufio.NewReader(os.Stdin)
 	if os.Getenv("FAKE_TRUST") == "1" {
 		fakeTrust(r)
@@ -197,7 +189,10 @@ func runShim(t *testing.T, env []string, pargs []string, lines []string, want in
 	home := t.TempDir()
 	cfg := filepath.Join(home, "claude")
 	cmd := exec.Command(exe, pargs...)
-	cmd.Env = append(os.Environ(), "MAGPIE_TUI_TEST=shim", "HOME="+home, "XDG_CACHE_HOME="+filepath.Join(home, "cache"), "CLAUDE_CONFIG_DIR="+cfg)
+	tmp := filepath.Join(home, "tmp")
+	_ = os.Mkdir(tmp, 0o700)
+	cmd.Env = append(os.Environ(), "MAGPIE_TUI_TEST=shim", "HOME="+home, "XDG_CACHE_HOME="+filepath.Join(home, "cache"), "LOCALAPPDATA="+filepath.Join(home, "cache"),
+		"TMPDIR="+tmp, "TMP="+tmp, "TEMP="+tmp, "CLAUDE_CONFIG_DIR="+cfg)
 	cmd.Env = append(cmd.Env, env...)
 	stdin, _ := cmd.StdinPipe()
 	stdout, _ := cmd.StdoutPipe()
@@ -246,8 +241,8 @@ func fakePath(t *testing.T) string {
 	exe, _ := os.Executable()
 	// the fake is the test binary, told so by its environment: a script
 	// beside it starts it so
-	p := filepath.Join(t.TempDir(), "claude")
-	if err := os.WriteFile(p, []byte("#!/bin/sh\nMAGPIE_TUI_TEST=claude exec '"+exe+"' \"$@\"\n"), 0o700); err != nil {
+	p, script := fakeScript(t.TempDir(), exe)
+	if err := os.WriteFile(p, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	return p
@@ -320,6 +315,39 @@ func TestShimPastesImages(t *testing.T) {
 	}
 	if !failed {
 		t.Fatalf("an image by its URL wasn't an error: %v", out)
+	}
+	// Claude Code has them once their message is in the transcript: the
+	// files are gone while the helper goes on
+	left, _ := filepath.Glob(filepath.Join(filepath.Dir(os.Getenv("MAGPIE_TUI_TEST_CFG")), "tmp", imagesPrefix+"*"))
+	if len(left) > 0 {
+		t.Fatalf("the images are left after their message: %v", left)
+	}
+}
+
+// A folder of images a killed helper left is removed by a later one after
+// imagesLeft, and one in use isn't.
+func TestDropLeftImages(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	t.Setenv("TMP", tmp)
+	t.Setenv("TEMP", tmp)
+	old, now := filepath.Join(tmp, imagesPrefix+"1-a"), filepath.Join(tmp, imagesPrefix+"2-b")
+	for _, d := range []string{old, now} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		_ = os.WriteFile(filepath.Join(d, "image-1.png"), []byte("x"), 0o600)
+	}
+	then := time.Now().Add(-imagesLeft - time.Minute)
+	if err := os.Chtimes(old, then, then); err != nil {
+		t.Fatal(err)
+	}
+	dropLeftImages()
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Errorf("the folder left %s ago is still there (%v)", imagesLeft, err)
+	}
+	if _, err := os.Stat(now); err != nil {
+		t.Errorf("the folder in use was removed: %v", err)
 	}
 }
 

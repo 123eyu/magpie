@@ -87,9 +87,9 @@ started a new Claude Code told the whole conversation (#1546).
 
 ## Claude Code's interactive mode (`claudePrintMode`)
 
-By default a run on macOS and Linux is Claude Code's interactive mode, not
-`claude -p`. Anthropic counts a request by its entrypoint, and a `-p`
-run's `sdk-cli` costs about twice the plan's allowance of the interactive
+By default a run on macOS, Linux and Windows is Claude Code's
+interactive mode, not `claude -p`. Anthropic counts a request by its
+entrypoint, and a `-p` run's `sdk-cli` costs about twice the plan's allowance of the interactive
 mode's `cli` (anthropics/claude-code#97074). The run is the real
 interactive Claude Code: nothing sets `CLAUDE_CODE_ENTRYPOINT`.
 
@@ -105,8 +105,19 @@ talks to it as it talks to `-p`: stream-json in and out. The helper:
   --no-chrome` come. Permissions are not skipped: only magpie's MCP tools
   (and the web search `-p` was given) are allowed, and nothing else is
   offered (`--tools ""`). A new session is given `--session-id`;
-- starts Claude Code in a pseudo-terminal of its own (200x50, its own
-  session), no tmux, and answers what it asks of the terminal;
+- starts Claude Code in a pseudo-terminal of its own (200x50), no tmux,
+  and answers what it asks of the terminal. On macOS and Linux it is a
+  pty in a session of its own (`child_unix.go`). On Windows it is a
+  pseudo console (ConPTY, `child_windows.go`): `CreatePseudoConsole` on
+  two pipes, and `CreateProcess` with the console as an attribute and
+  `STARTF_USESTDHANDLES` with no handles, since without it a child
+  took the helper's own standard handles (the bridge's pipes) and drew
+  into them rather than the console (tried on Windows 11 26200). An npm
+  install's `claude.cmd` is run by cmd.exe with its arguments quoted as
+  the `-p` run's (`proc.Command`). Ending, the helper closes the console
+  (Claude Code is told as a closed window tells it) and kills it after
+  3s. Its `-p` fallback runs Claude Code as a child, since Windows has no
+  exec;
 - pastes each user message into the prompt (bracketed paste) and presses
   Enter. A message opening with `/`, `!`, `#` or `&` is pasted after a
   line break, so it is words, not a command (`pasteable`);
@@ -119,10 +130,13 @@ talks to it as it talks to `-p`: stream-json in and out. The helper:
   before pasting the next piece; without that wait the second of two
   images was lost. The transcript holds real image blocks, and Claude Code
   notes each one's path to the model (`[Image: source: …]`). The folder
-  is removed when the helper ends, on SIGINT, SIGTERM and SIGHUP too:
+  is removed once its message is sent (Claude Code has read the files
+  by then), and when the helper ends, on SIGINT, SIGTERM and SIGHUP too:
   magpie's own handler (`endProbesOnSignal`) let go of the signals for
   this command (`leaveSignals`), since it re-raised SIGTERM and killed the
-  helper before it could end Claude Code and remove its files;
+  helper before it could end Claude Code and remove its files. Windows
+  ends a run by killing its job, which no handler hears, so a helper
+  starting removes such folders over an hour old (`dropLeftImages`);
 - tails `<CLAUDE_CONFIG_DIR>/projects/*/<session>.jsonl` and tells each
   row as `-p` would (`translator`): assistant messages whole (no partial
   stream), a tool's result, a `<synthetic>` API error as the turn's error
@@ -159,7 +173,7 @@ A run is `-p`, as before, when (`claudeTUI`):
 
 - Settings › Models › Replies › Claude Code's interactive mode is Off
   (`claudePrintMode`);
-- it is Windows, or Claude Code in WSL;
+- it is Claude Code in WSL;
 - the request has safeguards, client cache marks, a JSON schema, an image
   known only by its URL (`urlImages`: the helper pastes files, and has no
   bytes of it), or words over 400KB (`tuiPromptMost`, images not counted),

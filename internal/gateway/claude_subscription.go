@@ -955,7 +955,7 @@ const tuiPromptMost = 400 << 10
 // person runs it (claudetui), rather than -p: the plan counts a -p
 // request, its entrypoint sdk-cli, at about twice the interactive mode's
 // (anthropics/claude-code#97074). On unless the user turned it off
-// (ClaudePrintMode), on macOS and Linux, for a run whose Claude Code is
+// (ClaudePrintMode), on macOS, Linux and Windows, for a run whose Claude Code is
 // this machine's; not for what only -p takes: safeguards and a client's
 // cache marks (control requests and an extra body), a JSON schema, and
 // images. prompt is the run's first message.
@@ -981,7 +981,7 @@ func claudePrintWhy(req *Request, binary claudeCLI, prompt []map[string]any) str
 		why string
 	}{
 		{!claudeTUIRuns, "no shim"},
-		{runtime.GOOS != "darwin" && runtime.GOOS != "linux", runtime.GOOS},
+		{runtime.GOOS != "darwin" && runtime.GOOS != "linux" && runtime.GOOS != "windows", runtime.GOOS},
 		{binary.wsl != nil, "Claude Code in WSL"},
 		{binary.path == "", "no Claude Code path"},
 		{len(req.Safeguards) > 0, "safeguards"},

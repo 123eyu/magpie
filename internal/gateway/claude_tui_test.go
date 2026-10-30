@@ -12,9 +12,9 @@ import (
 	"github.com/yetone/magpie/internal/wslrun"
 )
 
-// A Claude run is Claude Code's interactive mode on macOS and Linux, for
-// this machine's Claude Code, unless the user turned it off or the run
-// needs what only -p takes.
+// A Claude run is Claude Code's interactive mode on macOS, Linux and
+// Windows, for this machine's Claude Code, unless the user turned it off
+// or the run needs what only -p takes.
 func TestClaudeTUIChosen(t *testing.T) {
 	was := settings.Load()
 	t.Cleanup(func() { _ = settings.Save(was) })
@@ -25,7 +25,7 @@ func TestClaudeTUIChosen(t *testing.T) {
 		return []Message{{Role: "user", Parts: []Part{{Kind: Text, Text: s}}}}
 	}
 	prompt := []map[string]any{{"type": "text", "text": "hi"}}
-	on := runtime.GOOS == "darwin" || runtime.GOOS == "linux"
+	on := runtime.GOOS == "darwin" || runtime.GOOS == "linux" || runtime.GOOS == "windows"
 	cases := []struct {
 		name   string
 		req    *Request
@@ -33,7 +33,7 @@ func TestClaudeTUIChosen(t *testing.T) {
 		prompt []map[string]any
 		print  bool
 		want   bool
-		why    string // what is logged, on macOS and Linux
+		why    string // what is logged, on macOS, Linux and Windows
 	}{
 		{"a plain turn", &Request{Messages: text("hi")}, here, prompt, false, on, ""},
 		{"turned off", &Request{Messages: text("hi")}, here, prompt, true, false, "the interactive mode is turned off"},

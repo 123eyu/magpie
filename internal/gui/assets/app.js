@@ -21759,7 +21759,7 @@ function renderReplies(s, keep) {
   u.id = "claudeTuiRow";
   const uwho = el("div", "who");
   uwho.append(el("div", "name", t("Claude Code's interactive mode")),
-    el("div", "sub wraps", t("A Claude subscription runs Claude Code as a person does, in its interactive mode, where the plan counts a request at about half of what -p uses. Off runs it as claude -p, as Windows always does")));
+    el("div", "sub wraps", t("A Claude subscription runs Claude Code as a person does, in its interactive mode, where the plan counts a request at about half of what -p uses. Off runs it as claude -p")));
   const uval = el("div", "val");
   uval.append(segs([["off", t("Off")], ["on", t("On")]], s.claudePrintMode ? "off" : "on",
     (v) => savePrefs({ ...keep, claudePrintMode: v === "off" })));

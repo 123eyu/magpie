@@ -1,5 +1,3 @@
-//go:build darwin || linux
-
 // Package claudetui runs Claude Code's interactive mode for magpie's Claude
 // subscription bridge, as `magpie claude-tui-helper`: the bridge talks to
 // it as it talks to `claude -p --input-format stream-json --output-format
@@ -27,17 +25,13 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
-
-	"golang.org/x/sys/unix"
 )
 
 // how long Claude Code may take to show its prompt, a pasted message to
@@ -55,8 +49,10 @@ type shim struct {
 	outMu sync.Mutex
 	out   io.Writer
 
-	pty *os.File
-	cmd *exec.Cmd
+	// pty is Claude Code's terminal: what it draws is read from it, and
+	// what is typed written to it
+	pty io.ReadWriter
+	child
 	sid string
 	// projects is Claude Code's projects folder, where it keeps the
 	// session's transcript (<projects>/<folder>/<sid>.jsonl)
@@ -127,8 +123,9 @@ func Run(args []string) error {
 	}
 	defer s.stop()
 	defer s.dropImages()
+	go dropLeftImages()
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+	signal.Notify(sigs, endSignals...)
 	go func() {
 		<-sigs
 		s.stop()
@@ -178,58 +175,6 @@ func childEnv() []string {
 	return append(env, "TERM=xterm-256color")
 }
 
-func (s *shim) start(path string, args []string) error {
-	m, name, err := openPTY()
-	if err != nil {
-		return err
-	}
-	tty, err := os.OpenFile(name, os.O_RDWR|syscall.O_NOCTTY, 0)
-	if err != nil {
-		m.Close()
-		return err
-	}
-	// wide, so a line of Claude Code's screen is a line
-	_ = unix.IoctlSetWinsize(int(tty.Fd()), unix.TIOCSWINSZ, &unix.Winsize{Row: 50, Col: 200})
-	cmd := exec.Command(path, args...)
-	cmd.Env = childEnv()
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = tty, tty, tty
-	// its own session, the terminal its controlling one: the shim ending
-	// closes the terminal, and Claude Code is hung up on with it
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true}
-	if err := cmd.Start(); err != nil {
-		m.Close()
-		tty.Close()
-		return err
-	}
-	tty.Close()
-	s.pty, s.cmd = m, cmd
-	go func() {
-		err := cmd.Wait()
-		s.exit = err
-		close(s.exited)
-	}()
-	go s.read()
-	return nil
-}
-
-// stop ends Claude Code: asked, then made to.
-func (s *shim) stop() {
-	if s.cmd == nil || s.cmd.Process == nil {
-		return
-	}
-	select {
-	case <-s.exited:
-		return
-	default:
-	}
-	_ = s.cmd.Process.Signal(syscall.SIGTERM)
-	select {
-	case <-s.exited:
-	case <-time.After(3 * time.Second):
-		_ = syscall.Kill(-s.cmd.Process.Pid, syscall.SIGKILL)
-	}
-}
-
 // read keeps the tail of what Claude Code draws, and answers what it asks
 // of the terminal: where the cursor is, and what terminal it is.
 func (s *shim) read() {
@@ -239,10 +184,10 @@ func (s *shim) read() {
 		if n > 0 {
 			d := buf[:n]
 			if bytes.Contains(d, []byte("\x1b[6n")) {
-				_, _ = s.pty.Write([]byte("\x1b[1;1R"))
+				_, _ = io.WriteString(s.pty, "\x1b[1;1R")
 			}
 			if bytes.Contains(d, []byte("\x1b[c")) || bytes.Contains(d, []byte("\x1b[0c")) {
-				_, _ = s.pty.Write([]byte("\x1b[?62;c"))
+				_, _ = io.WriteString(s.pty, "\x1b[?62;c")
 			}
 			s.screenMu.Lock()
 			s.screen = append(s.screen, d...)
@@ -333,22 +278,22 @@ func (s *shim) ready() error {
 				answered++
 				yesAt = time.Time{}
 				s.clearScreen()
-				_, _ = s.pty.WriteString("\r")
+				_, _ = io.WriteString(s.pty, "\r")
 			case no >= 0:
 				yesAt = time.Time{}
 				if time.Since(downAt) >= time.Second {
 					downAt = time.Now()
-					_, _ = s.pty.WriteString("\x1b[B")
+					_, _ = io.WriteString(s.pty, "\x1b[B")
 				}
 			}
 		case strings.Contains(p, "keep browser tools off"):
 			// Claude in Chrome found: kept off, as the bridge runs it
 			// --no-chrome
 			s.clearScreen()
-			_, _ = s.pty.WriteString("\x1b")
+			_, _ = io.WriteString(s.pty, "\x1b")
 		case strings.Contains(p, "Choose the text style"):
 			s.clearScreen()
-			_, _ = s.pty.WriteString("\r")
+			_, _ = io.WriteString(s.pty, "\r")
 		case strings.Contains(p, "❯ "):
 			// drawn: a moment for its input to be listened to
 			time.Sleep(300 * time.Millisecond)
@@ -407,7 +352,9 @@ func (s *shim) input(r io.Reader) error {
 					"result": "this message can't be pasted into Claude Code's interactive mode: " + err.Error()})
 				continue
 			}
-			if err := s.send(pieces); err != nil {
+			err = s.send(pieces)
+			s.dropImages()
+			if err != nil {
 				return err
 			}
 			if m.UUID != "" {
@@ -497,7 +444,7 @@ func (s *shim) writeImage(source, mediaType, data string) (string, error) {
 		return "", fmt.Errorf("a %s image", mediaType)
 	}
 	if s.images == "" {
-		if s.images, err = os.MkdirTemp("", "magpie-claude-images-"); err != nil {
+		if s.images, err = os.MkdirTemp("", imagesPrefix+strconv.Itoa(os.Getpid())+"-"); err != nil {
 			return "", err
 		}
 	}
@@ -506,10 +453,32 @@ func (s *shim) writeImage(source, mediaType, data string) (string, error) {
 	return path, os.WriteFile(path, b, 0o600)
 }
 
-// dropImages removes the images pasted, once Claude Code has ended.
+// dropImages removes the images pasted: once their message is in the
+// transcript, Claude Code has them, and when the helper ends.
 func (s *shim) dropImages() {
 	if s.images != "" {
 		_ = os.RemoveAll(s.images)
+		s.images = ""
+	}
+}
+
+// imagesPrefix names the folders images are written to, the helper's pid
+// after it.
+const imagesPrefix = "magpie-claude-images-"
+
+// imagesLeft is how long an image folder is left before another helper
+// removes it: one killed with its images still in the prompt, as Windows
+// ends a run, can't remove its own.
+const imagesLeft = time.Hour
+
+// dropLeftImages removes the image folders helpers left, untouched for
+// imagesLeft.
+func dropLeftImages() {
+	m, _ := filepath.Glob(filepath.Join(os.TempDir(), imagesPrefix+"*"))
+	for _, d := range m {
+		if fi, err := os.Stat(d); err == nil && fi.IsDir() && time.Since(fi.ModTime()) > imagesLeft {
+			_ = os.RemoveAll(d)
+		}
 	}
 }
 
@@ -579,7 +548,7 @@ func (s *shim) send(pieces []piece) error {
 			p.text = "."
 		}
 		s.clearScreen()
-		if _, err := s.pty.WriteString("\x1b[200~" + p.text + "\x1b[201~"); err != nil {
+		if _, err := io.WriteString(s.pty, "\x1b[200~"+p.text+"\x1b[201~"); err != nil {
 			return err
 		}
 		text = p.text
@@ -589,7 +558,7 @@ func (s *shim) send(pieces []piece) error {
 	}
 	time.Sleep(150 * time.Millisecond)
 	for try := 0; try < 4; try++ {
-		if _, err := s.pty.WriteString("\r"); err != nil {
+		if _, err := io.WriteString(s.pty, "\r"); err != nil {
 			return err
 		}
 		by := time.After(sentWait)
@@ -620,7 +589,7 @@ var imageShown = regexp.MustCompile(`\[Image #(\d+)\]`)
 // before it. It returns the number shown.
 func (s *shim) pasteImage(path string, after int) (int, error) {
 	s.clearScreen()
-	if _, err := s.pty.WriteString("\x1b[200~" + path + "\x1b[201~"); err != nil {
+	if _, err := io.WriteString(s.pty, "\x1b[200~"+path+"\x1b[201~"); err != nil {
 		return 0, err
 	}
 	by := time.After(pasteWait)
@@ -789,13 +758,6 @@ func interactiveArgs(pargs []string) []string {
 		out = append(out, a)
 	}
 	return append(out, "--permission-mode", "default", "--allowedTools", strings.Join(allowed, ","), "--no-chrome")
-}
-
-// printMode becomes Claude Code at path, run with the -p arguments pargs:
-// the same process, so the bridge's input, output and process tree go on
-// as they were.
-func printMode(path string, pargs []string) error {
-	return unix.Exec(path, append([]string{path}, pargs...), os.Environ())
 }
 
 // broken is where a failed start is kept: for brokenFor after it, runs go
