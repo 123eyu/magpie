@@ -324,7 +324,7 @@ func (b *blockPricer) priceBlock(packed *rowChunk) (*rowChunk, *[]packedRow) {
 		p.Cost = 0
 		if got.price != nil && p.Tokens[0]+p.Tokens[1] > 0 {
 			p.Flags |= 1
-			p.Cost = got.price.CostSplit(int(p.Tokens[0]), int(p.Tokens[1]), int(p.Tokens[2]), int(p.Tokens[3]), int(p.Tokens[5]))
+			p.Cost = got.price.In(p.Time).CostSplit(int(p.Tokens[0]), int(p.Tokens[1]), int(p.Tokens[2]), int(p.Tokens[3]), int(p.Tokens[5]))
 		}
 	}
 	return &c, pooled

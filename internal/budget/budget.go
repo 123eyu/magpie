@@ -443,7 +443,8 @@ func priceOf(model string) (float64, bool) {
 	if !ok {
 		return 0, false
 	}
-	return pr.Input / 1e6, true
+	// the call is made now, at this hour's price (Price.In)
+	return pr.In(time.Now()).Input / 1e6, true
 }
 
 // ModelOf is the model a JSON request body names, "" for none.

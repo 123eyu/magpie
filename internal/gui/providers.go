@@ -792,6 +792,12 @@ func providerInfoWith(p provider.Provider, agents []agentUse, desktop map[string
 			j.List, j.RemoteList = &pr, p.RemotePriced(m.ID)
 		} else if pr, ok := provider.MakerPrice(m.ID); ok {
 			j.List = &pr
+		}
+		if j.List != nil {
+			// an off-peak price, doubled at peak hours: the editor says so
+			if k := p.PeakOf(m.ID); k != "" {
+				j.List.Peak = k
+			}
 		} else if pr, ok := provider.SamePriceIn(held, p.ID, m.ID); ok {
 			j.List = &pr // the model it is the same as, beside it (#2344)
 		}

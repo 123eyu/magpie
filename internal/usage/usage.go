@@ -459,13 +459,14 @@ const (
 var Periods = []Period{Today, Week, Month, All}
 
 // CostAt is what the call costs at a price: at the tier its input reaches,
-// its 1-hour cache writes at theirs. A reported call that said what it
-// cost costs that, at any price.
+// its 1-hour cache writes at theirs, and at the hour it was made (an
+// off-peak price doubles at peak, Price.In). A reported call that said
+// what it cost costs that, at any price.
 func (r Record) CostAt(p catalog.Price) float64 {
 	if r.OwnCost != nil {
 		return *r.OwnCost // a reported call's own cost (#1874)
 	}
-	return p.CostSplit(r.Input, r.Output, r.CacheRead, r.CacheWrite, r.CacheWrite1h)
+	return p.In(r.Time).CostSplit(r.Input, r.Output, r.CacheRead, r.CacheWrite, r.CacheWrite1h)
 }
 
 // Totals is a sum of calls.

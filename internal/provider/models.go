@@ -2269,6 +2269,9 @@ func priceOf(s settings.Settings, p Provider, known bool, model string) (catalog
 			return catalog.Price{}, true
 		}
 		if pr, ok := MakerPrice(model); ok {
+			if k := p.PeakOf(model); k != "" {
+				pr.Peak = k
+			}
 			return pr, true
 		}
 		return SamePriceIn(s, id, model)
@@ -2279,6 +2282,10 @@ func priceOf(s settings.Settings, p Provider, known bool, model string) (catalog
 	}
 	if !ok {
 		pr, ok = SamePriceIn(s, id, model)
+	} else if k := p.PeakOf(model); k != "" {
+		// billed by the hour it is made at (PeakOf), never a price the
+		// user set above, nor the one of the model they said it is
+		pr.Peak = k
 	}
 	// what the provider bills against it (#819)
 	if ok && p.PriceRate > 0 {
