@@ -324,6 +324,10 @@ func run(args []string) error {
 		case "claude-mcp-helper": // internal: stdio MCP subprocess spawned by Claude Code
 			return claudebridge.RunMCP(args[1:])
 		case claudetui.Command: // internal: Claude Code's interactive mode for the bridge
+			// it ends its Claude Code and removes its files on SIGINT,
+			// SIGTERM and SIGHUP itself: magpie dying of the signal first
+			// left them behind
+			leaveSignals()
 			return claudetui.Run(args[1:])
 		case "statusline":
 			return statuslineCmd(args)
