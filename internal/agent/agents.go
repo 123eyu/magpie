@@ -52,6 +52,10 @@ func init() {
 	// and when Codex is connected or disconnected, or its route otherwise
 	// changes, so a running app sends where its config now says
 	provider.CodexAppRoute = codexAppRoute
+	// and when none starts in place of the one ended, the app is
+	// reopened on Windows, where its stdout was held open
+	provider.CodexAppOpen = codexAppOpen
+	provider.CodexAppReopen = codexAppReopen
 	// and what the Codex app holds is read while Codex takes magpie's
 	// models beside its sign-in, Codex switched off in magpie or not
 	provider.CodexHoldMatters = func() bool {

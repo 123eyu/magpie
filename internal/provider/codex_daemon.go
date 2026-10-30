@@ -238,9 +238,24 @@ func recheckLeft() {
 	if findCodexDaemon(ps, codexHome()) != codexDaemonLeft.pid {
 		codexDaemonLeft = leftDaemon{}
 	}
-	if findCodexApp(ps) != codexAppLeft.pid {
+	// one that went with none in its place left an app still on nothing
+	// new while it runs (codexAppGotNone): the app read no sign-in
+	// afresh, so it is still said
+	if p := findCodexApp(ps); p != codexAppLeft.pid && (p != 0 || !codexAppStillOpen()) {
 		codexAppLeft = leftDaemon{}
 	}
+}
+
+// codexAppStillOpen is whether the Codex desktop app is known to run
+// (CodexAppOpen), for an app-server gone with none in its place.
+func codexAppStillOpen() bool {
+	if CodexAppOpen == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	open, known := CodexAppOpen(ctx)
+	return open && known
 }
 
 // DismissCodexDaemon stops saying the app-server is on another account.

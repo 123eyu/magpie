@@ -340,6 +340,9 @@ func SwitchWhenSpent(ctx context.Context, agent string) (string, error) {
 		setLoginReturn(agent, r)
 		share, _ := loginSwitching(agent)
 		log.Printf("%s: %s has used %g%% or more of its allowance; signed it in to %s", agent, from, share, to)
+		if agent == "codex" {
+			codexAppSpentSwitch()
+		}
 	}
 	if agent == "codex" {
 		if was := CodexAppStale(); was != "" {
