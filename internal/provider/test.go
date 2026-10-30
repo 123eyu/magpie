@@ -71,10 +71,10 @@ func (p Provider) Test(ctx context.Context) []Result {
 	}
 	var out []Result
 	for _, proto := range p.Speaks() {
-		if p.IsVertex() && proto == Chat {
-			// a partner model answers only once the project has turned it
-			// on in Model Garden: the provider is tested on Gemini, and a
-			// partner model by its own test (TestModel)
+		if p.IsVertex() && (proto == Chat || proto == Anthropic) {
+			// a partner model, and Claude, answer only once the project
+			// has turned them on in Model Garden: the provider is tested
+			// on Gemini, and such a model by its own test (TestModel)
 			continue
 		}
 		q, ok := p.keyFor(proto)
@@ -207,6 +207,12 @@ func tinyBody(q Provider, proto Protocol, model string) (url, body string) {
 	case Responses:
 		return q.mantleBase(q.Responses, model) + "/responses", fmt.Sprintf(`{"model":%q,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}],"max_output_tokens":16}`, model)
 	case Anthropic:
+		if q.IsVertex() {
+			// Claude at the project, as Anthropic's Vertex SDK asks it
+			// (VertexClaudeRequest)
+			at, b, _ := VertexClaudeRequest("/v1/messages", fmt.Appendf(nil, `{"model":%q,"max_tokens":16,"messages":[{"role":"user","content":"hi"}]}`, model))
+			return q.Base(Anthropic) + at, string(b)
+		}
 		return q.Anthropic + "/v1/messages", fmt.Sprintf(`{"model":%q,"max_tokens":16,"messages":[{"role":"user","content":"hi"}]}`, model)
 	case Gemini:
 		if q.IsVertex() {

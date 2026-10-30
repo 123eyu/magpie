@@ -923,7 +923,7 @@ so magpie gives each location the models it answered with on 2026-10-06
 
 | Location | Models |
 | --- | --- |
-| `global` | `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemini-4-argon`, `gemini-3.1-pro-preview`, `gemini-3.1-pro-preview-customtools`, `gemini-3.1-flash-lite`, `gemini-3-flash-preview`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `deepseek-ai/deepseek-v4.1-flash-maas`, `zai-org/glm-5.2-maas`, `openai/gpt-oss-120b-maas` |
+| `global` | `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemini-4-argon`, `gemini-3.1-pro-preview`, `gemini-3.1-pro-preview-customtools`, `gemini-3.1-flash-lite`, `gemini-3-flash-preview`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `deepseek-ai/deepseek-v4.1-flash-maas`, `zai-org/glm-5.2-maas`, `openai/gpt-oss-120b-maas`, `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`, `claude-fable-5-1` |
 | `us`, `eu` | `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite` |
 | A region | `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` |
 
@@ -955,8 +955,19 @@ magpie provider models google-vertex gemini-3.8-flash deepseek-ai/deepseek-v4.1-
 Turn each partner model on for the project in Model Garden first: until then
 Google refuses it. `magpie provider test google-vertex` tests Gemini, and a
 partner model is tested on its own (right-click it in the app, or
-`magpie provider test google-vertex <model>`). Claude on Vertex AI isn't
-served: it takes a request of its own (`rawPredict`), not chat completions.
+`magpie provider test google-vertex <model>`).
+
+Anthropic's Claude is served too, with nothing more to set: a model whose id
+starts with `claude-` is asked on Anthropic's Messages API in your project
+(`…/locations/<location>/publishers/anthropic/models/<model>:streamRawPredict`,
+`:rawPredict` for one answer whole, `count-tokens:rawPredict` for Claude
+Code's token counts), as Claude Code asks it with `CLAUDE_CODE_USE_VERTEX`.
+Every agent can use it, whatever API it speaks. `global` lists the current
+models under the ids Claude Code gives them for Vertex AI; an older one goes
+under Vertex's id with its date, such as `claude-sonnet-4-5@20250929`, typed
+in as any model is. At another location (`us-east5`, `europe-west1`), type in
+the Claude models it serves. Turn each Claude model on in Model Garden first,
+as a partner model is, and test it on its own.
 
 Google's [Priority PayGo](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/priority-paygo)
 and [Flex PayGo](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/flex-paygo)

@@ -1511,8 +1511,9 @@ func (s *Server) countOn(w http.ResponseWriter, r *http.Request, p provider.Prov
 		// fallback model: it may use a different tokenizer.
 		p.Fallback = nil
 		for _, c := range s.candidates(p, model, provider.Anthropic) {
-			// A relay's OpenAI-only key can't count Anthropic tokens.
-			if c.p.Anthropic != "" && slices.Contains(s.usable(c.p, model), provider.Anthropic) {
+			// A relay's OpenAI-only key can't count Anthropic tokens;
+			// Vertex AI counts Claude's at the project (Base)
+			if c.p.Base(provider.Anthropic) != "" && slices.Contains(s.usable(c.p, model), provider.Anthropic) {
 				counts = append(counts, c)
 			}
 		}
@@ -4511,6 +4512,17 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		// the tier it goes at, the user's own fields in it (#1784)
 		noteWireTier(ctx, to, body)
 	}
+	if to == provider.Anthropic && p.IsVertex() {
+		// Claude at the project, as Anthropic's Vertex SDK asks it: the
+		// model and whether it streams in the path, anthropic_version in
+		// the body; last, as the body goes out, and every route to it
+		// alike (relayed, built, counted)
+		at, b, ok := provider.VertexClaudeRequest(path, body)
+		if !ok {
+			return nil, errors.New("a request to Claude on Vertex AI names no model")
+		}
+		path, body = at, b
+	}
 	base := p.Base(to)
 	if p.IsOpenCode() && p.OpenCodeFree(gjson.GetBytes(body, "model").String()) {
 		// Zen's free tier answers at the inference API's URL alone (zenfree.go)
@@ -5720,9 +5732,10 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r.Effort, req = e, &r
 		}
 	}
-	if p.IsVertex() && !provider.VertexPartner(model) {
-		// Gemini's levels; a partner model on chat completions is sent
-		// its effort as any OpenAI-compatible vendor is
+	if p.IsVertex() && !provider.VertexPartner(model) && !provider.VertexClaude(model) {
+		// Gemini's levels; a partner model on chat completions, and
+		// Claude on Anthropic's Messages API, are sent their effort as
+		// at any vendor of that API
 		req = vertexEffort(req, p.Efforts(model))
 	}
 	// the names in force, read once however many endpoints the request is

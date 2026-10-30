@@ -1592,6 +1592,11 @@ func (p Provider) Base(proto Protocol) string {
 	case Responses:
 		return p.Responses
 	case Anthropic:
+		// Vertex AI's Claude models, on Anthropic's Messages API at the
+		// project, each at a path of its own (VertexClaudeRequest)
+		if p.IsVertex() {
+			return p.vertexBase()
+		}
 		return p.Anthropic
 	case CodeAssist:
 		if p.Account != nil {
@@ -1631,8 +1636,9 @@ func (p Provider) Speaks() []Protocol {
 	// list stays on the other three (factoryAPIs); this is not one of them.
 	// A custom provider's Gemini API comes after the others it has.
 	// Vertex AI's Gemini models, on generateContent at its project, after
-	// the chat completions its partner models are served on (ListedAPIs
-	// gives each model its one).
+	// the chat completions its partner models are served on and the
+	// Messages API its Claude models are (ListedAPIs gives each model its
+	// one).
 	if p.IsVertex() {
 		if p.vertexBase() != "" {
 			out = append(out, Gemini)
