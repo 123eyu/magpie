@@ -67,9 +67,21 @@ function fixture() {
 const rows = page => page.locator(".accts [data-account-id]");
 const ids = page => rows(page).evaluateAll(rs => rs.map(r => r.dataset.accountId));
 const settled = page => page.waitForFunction(() => !accountArranging && !accountSaving);
+// drawn: the editor's rows as they stay. A signed-in provider's editor is
+// drawn at once and again when its accounts' allowances come in
+// (loginUsageOf), which replaces every row; a row held from the first draw
+// had no box by then (#4468, WebKit on a busy machine). It follows a
+// load, so its first draw has a load's room, not a click's (#4470).
+async function drawn(page) {
+  await rows(page).first().waitFor({ timeout: 60000 });
+  await page.waitForFunction(() => {
+    const agent = providers?.providers.find(p => p.id === editing)?.account?.agent;
+    return !agent || (loginUsage[agent]?.at && !loginUsage[agent].loading);
+  });
+}
 async function open(page, id) {
   await page.goto(`http://magpie.test/?view=providers&edit=${id}`);
-  await rows(page).first().waitFor();
+  await drawn(page);
 }
 async function point(row) {
   await row.scrollIntoViewIfNeeded();
@@ -124,7 +136,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(await ids(page), [before[1], before[0], ...before.slice(2)]);
         assert.equal(f.posted.filter(p => p.action === "/api/provider/arrange").length, count + 1);
         await checkFirst(page, f, id);
-        await page.reload(); await rows(page).first().waitFor();
+        await page.reload(); await drawn(page);
         await checkFirst(page, f, id);
         const wanted = (await ids(page))[1];
         await rows(page).nth(1).getByRole("button", { name: "Make first", exact: true }).click();

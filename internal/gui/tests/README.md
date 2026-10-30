@@ -2119,8 +2119,10 @@ carried over. Every language at 1100, 520 and 360px, in Chromium and WebKit.
 keys by their rows (no handle) in every routing mode, and by Alt+↑/↓: the
 first row, its First mark and the order saved for routing agree, one save
 goes out per drop, Escape and a failed save put the rows back, a disabled
-account is not made first, and account text stays selectable. It runs in
-Chromium and WebKit with an isolated API fixture:
+account is not made first, and account text stays selectable. Each editor
+is acted on once its accounts' allowances are in and drawn, as that answer
+draws every row again (#4468). It runs in Chromium and WebKit with an
+isolated API fixture:
 
 ```sh
 node --test internal/gui/tests/account-arrange.test.cjs
