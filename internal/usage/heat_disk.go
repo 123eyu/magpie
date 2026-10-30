@@ -23,6 +23,15 @@ import (
 // the cut, the threads' identities, the filter and the days, the code that
 // counts them and what prices and names a call.
 
+// settledCountVersion names how the settled days, a page's cells before
+// the cut (page-v1.json) and Codex's effort (effort-v1.json) are counted.
+// They were keyed by this package's source, as requests-v1.bin is: 14 of
+// 39 releases changed it, and each such upgrade paired every user's whole
+// history again on its first start, the cold start's peak (#2278). Raise
+// it with any change to what a row counts as; TestSettledCountedAsVersioned
+// fails until it is raised.
+const settledCountVersion = "1"
+
 func heatDiskPath() string {
 	return filepath.Join(filepath.Dir(sessions.CachePath()), "heat-v1.json")
 }
@@ -72,10 +81,10 @@ func heatDiskWrite(key string, days []Day) error {
 }
 
 // heatSettledKey names what the days before cut were counted of. A
-// session file's chunk is named as requests-v1.bin names it, by its path,
-// size and mtime under the same code, root and meta; any other chunk by
-// its rows. False: the chunks can't be named so (a probe's chunk made
-// again for each query).
+// session file's chunk is named by its path, size and mtime under the
+// same root and meta, any other chunk by its rows, and the counting by
+// the call shards' version and settledCountVersion. False: the chunks
+// can't be named so (a probe's chunk made again for each query).
 func heatSettledKey(d heatDiskRef, cut, since time.Time, f Filter, identities map[string]sessions.CodexIdentity, settled [3][]*rowChunk, before heatSum) (string, bool) {
 	if d.root == "" {
 		return "", false
@@ -89,7 +98,7 @@ func heatSettledKey(d heatDiskRef, cut, since time.Time, f Filter, identities ma
 	f.Zone = nil
 	h := sha256.New()
 	fmt.Fprintf(h, "heat-v1\x00%s\x00%s\x00%s\x00%d\x00%d\x00%s\x00%#v\x00%s\x00%d:%d:%d\x00",
-		requestDiskBinary(), d.root, d.meta, cut.UnixNano(), since.UnixNano(), cut.Location(), f, zone, before.n, before.at, before.tokens)
+		sessions.CallCacheVersion+"\x00"+settledCountVersion, d.root, d.meta, cut.UnixNano(), since.UnixNano(), cut.Location(), f, zone, before.n, before.at, before.tokens)
 	hashCodexIdentities(h, identities)
 	var b []byte
 	rows := lentRows()
