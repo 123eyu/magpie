@@ -244,9 +244,9 @@ type subscriptionRun struct {
 	told     string
 	toldRuns []heardRun
 
-	// An agent whose stream does not carry its tool calls in full (Cursor)
-	// learns of them here, as the MCP helper hands each one over, and opens
-	// each answer with a message start of its own.
+	// A run whose output may not carry a call before it is made (Claude
+	// Code's interactive mode, readOutput) learns of it here, as the MCP
+	// helper hands each one over. Set and read under mu.
 	onCall func(id, name string, args json.RawMessage)
 
 	// search answers magpie's web search tool, searchName, which the
@@ -2269,6 +2269,7 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 	// what the messages before cost, as each message's usage counts only
 	// itself and the client keeps the last it is told
 	var before, this Usage
+	var lateUsage cliUsage    // a message left out as told by its call (onCall)
 	var reqID, errKind string // the last request's id, and how it failed
 	usage := func(u cliUsage) Usage {
 		v := u.gateway()
@@ -2383,12 +2384,65 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			r.emit(Event{Kind: KUsage, Usage: usage(u)})
 			return
 		}
-		before, this = Usage{}, Usage{}
+		before, this = lateUsage.gateway(), Usage{}
+		lateUsage = cliUsage{}
 		calls, retold = textCalls{}, false
 		r.mu.Lock()
 		r.asked = nil
 		r.mu.Unlock()
 		r.emit(Event{Kind: KStart, MsgID: id, Model: model, Usage: usage(u)})
+	}
+	// A run in Claude Code's interactive mode tells its messages from the
+	// session's transcript (claudetui), where a message is written whole
+	// once it ends, and not always before its call of a client's tool is
+	// answered: Claude Code may hold the message back until the result is
+	// in, which only the client gives. The call, as the MCP helper hands it
+	// over, then tells the client: not in the transcript within callFirst,
+	// it is the reply, a message calling that one tool (Claude Code makes
+	// its MCP calls one at a time), and the message written later is left
+	// out, its usage told with the next reply's. That message is the first
+	// written after such a call: Claude Code writes no other before it.
+	told := map[string]bool{}    // the client's calls it was shown
+	awaited := map[string]bool{} // calls told by themselves, their message not written yet
+	written := map[string]bool{} // calls in a message left out, not made yet
+	lateID := ""                 // the message left out
+	over := false                // the output has ended
+	if r.tui {
+		r.mu.Lock()
+		r.onCall = func(id, name string, args json.RawMessage) {
+			time.AfterFunc(callFirst, func() {
+				pmu.Lock()
+				defer pmu.Unlock()
+				if over || told[id] {
+					return
+				}
+				settle()
+				r.mu.Lock()
+				waits := r.segment != nil && r.pending[id] != nil
+				r.mu.Unlock()
+				if !waits {
+					return
+				}
+				begin("msg_"+strings.ReplaceAll(newUUID(), "-", ""), r.model, cliUsage{})
+				name, _ = toolStart(0, "mcp__magpie__"+name)
+				told[id] = true
+				if written[id] {
+					delete(written, id)
+				} else {
+					awaited[id] = true
+				}
+				log.Printf("claude: Claude Code called %s before writing its message; the call is the reply", name)
+				r.emit(Event{Kind: KToolStart, ID: id, Name: name})
+				if len(args) > 0 {
+					r.emit(Event{Kind: KToolArgs, Text: string(args)})
+				}
+				end("tool_use")
+				if !inside {
+					r.endSegment()
+				}
+			})
+		}
+		r.mu.Unlock()
 	}
 	// failed ends the reply with an error where it was cut short with
 	// nothing to go on in
@@ -2579,6 +2633,30 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			if !next {
 				return
 			}
+			if whole.ID != lateID && whole.ID != unstreamed {
+				if lateID != "" && len(awaited) > 0 {
+					log.Printf("claude: %d calls told by themselves were not in the message written after them", len(awaited))
+					clear(awaited)
+				}
+				lateID = ""
+				if len(awaited) > 0 {
+					lateID = whole.ID
+				}
+			}
+			if whole.ID == lateID {
+				lateUsage = whole.Usage
+				for _, c := range whole.Content {
+					if c.Type != "tool_use" {
+						continue
+					}
+					if awaited[c.ID] {
+						delete(awaited, c.ID)
+					} else if !told[c.ID] {
+						written[c.ID] = true // told when it is made
+					}
+				}
+				return
+			}
 			// asked again without a stream, after attempts cut short:
 			// the answer is told here only
 			if whole.ID != unstreamed {
@@ -2616,6 +2694,7 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 					if !theirs {
 						continue
 					}
+					told[c.ID] = true
 					r.emit(Event{Kind: KToolStart, ID: c.ID, Name: name})
 					if len(c.Input) > 0 {
 						r.emit(Event{Kind: KToolArgs, Text: string(c.Input)})
@@ -2720,6 +2799,7 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 	}
 	pmu.Lock()
 	defer pmu.Unlock()
+	over = true
 	settle()
 	if err := s.Err(); err != nil && !errors.Is(err, os.ErrClosed) {
 		r.emit(Event{Kind: KError, Text: err.Error()})
@@ -2732,6 +2812,11 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 // as whole once none of its blocks come: Claude Code writes them all at
 // once.
 var unstreamedQuiet = 300 * time.Millisecond
+
+// callFirst is how long a call of a client's tool in Claude Code's
+// interactive mode waits for its message in the transcript before the call
+// tells the client itself (readOutput).
+var callFirst = time.Second
 
 type cliUsage struct {
 	Input         int             `json:"input_tokens"`
@@ -3896,12 +3981,13 @@ func (b *subscriptionBridge) mcpCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	run.pending[call.ToolCallID] = waiter
+	onCall := run.onCall
 	run.mu.Unlock()
 	b.mu.Lock()
 	b.calls[call.ToolCallID] = run
 	b.mu.Unlock()
-	if run.onCall != nil {
-		run.onCall(call.ToolCallID, call.Name, call.Arguments)
+	if onCall != nil {
+		onCall(call.ToolCallID, call.Name, call.Arguments)
 	}
 	var expire <-chan time.Time
 	if run.patience > 0 {

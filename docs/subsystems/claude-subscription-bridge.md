@@ -115,6 +115,20 @@ talks to it as it talks to `-p`: stream-json in and out. The helper:
   stream), a tool's result, a `<synthetic>` API error as the turn's error
   result with its `rate_limit_info`, and `turn_duration` as the result.
 
+The transcript has a message only once it ends, and Claude Code doesn't
+always write the message calling a client's tool before that call is
+answered: on a real account, 4 runs of 8 wrote it after its MCP call
+returned. The call can only be answered by the client, which hasn't been
+told of it. So in an interactive run, `mcpCall` hands each call to the
+reader (`run.onCall`). Not shown from the transcript within `callFirst`
+(1s), the call is a reply of its own: a message with that one `tool_use`
+(Claude Code makes its MCP calls one at a time, a message's parallel
+calls too). The first message written after such a call is the one that
+made it. Its rows are left out (`lateID`), and its usage is told with the
+next reply. A call in that message that wasn't made yet becomes its own
+reply when it is made (`written`). A reply told this way has no words or
+thinking: the model's text before its call is lost to the client.
+
 The user's own `~/.claude.json` and `~/.claude` are never written. Claude
 Code asks whether to trust a folder it has not run in; the helper answers
 yes only when the bridge sets `MAGPIE_CLAUDE_TUI_TRUST=1`, which it does
