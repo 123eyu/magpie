@@ -9627,7 +9627,8 @@ function drawEditor(p, presetID) {
     e.preventDefault();
     const took = [], notes = [];
     if (curlBase && c.api) { curlBase(c.api, c.base); took.push(t("Base URL") + " (" + t(API_NAMES[c.api]) + ")"); }
-    if (c.key) { key.value = draft.key = c.key; countKeys(); took.push(t("API key")); }
+    // no key box when keys are Accounts: none taken unseen
+    if (c.key && key.isConnected) { key.value = draft.key = c.key; countKeys(); took.push(t("API key")); }
     if (curlModel && c.model) { curlModel(c.model); took.push(t("model {model}", { model: c.model })); }
     if (took.length) notes.push(t("Filled in from the curl command: {what}.", { what: took.join(" · ") }));
     if (curlBase && !c.api) notes.push(t("Its URL isn't an address ending in /chat/completions, /messages or /responses: type the base URL."));
@@ -9707,7 +9708,8 @@ function drawEditor(p, presetID) {
   if (p?.keyList?.length) ed.append(...field(t("Accounts"), renderKeyAccounts(p), p.routing ? t("Tick every key to use; Routing says how requests spread over them.") : t("Tick every key to use. Requests go to the first; when it runs out of quota or hits a rate limit, the next ticked key takes over.")));
   if (p?.keyList?.filter((k) => k.on).length > 1) ed.append(...renderRouting(p));
   else if (vertex) ed.append(...vertexFields());
-  else ed.append(...field(t("API key"), keyWrap, isNew ? t("Kept in ~/.config/magpie/providers.json, readable by you alone. Nothing is read from your shell.") : ""));
+  // keys are replaced in Accounts; the box is for no key yet (Kylin_Cloud on X)
+  else if (!p?.keyList?.length) ed.append(...field(t("API key"), keyWrap, isNew ? t("Kept in ~/.config/magpie/providers.json, readable by you alone. Nothing is read from your shell.") : ""));
 
   // A user-defined provider can have its own picture; presets keep theirs.
   if (custom) ed.append(...field(t("Icon"), iconPicker(ed), ""));
