@@ -15,6 +15,7 @@ const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
 const { strings } = require("./strings.cjs");
+const { watchSettingsReads, settingsDrawn } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const { I18N } = strings();
@@ -103,7 +104,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             const errors = [];
             page.on("pageerror", (e) => errors.push(e.message));
             await page.route("**/*", server(lang, st));
+            await watchSettingsReads(page);
             await page.goto("http://magpie.test/?view=settings&tab=network");
+            // the network tab is drawn again by load()'s read of the settings:
+            // the row is pressed and held once that is in (#4469)
+            await settingsDrawn(page);
             const button = page.locator("#proxySegs button.proxy-test");
             const line = page.locator("#proxyCheck");
             assert.equal((await button.textContent()).trim(), w("Test"));
@@ -138,7 +143,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           page.setDefaultTimeout(5000);
           page.setDefaultNavigationTimeout(60000);
           await page.route("**/*", server(lang, st));
+          await watchSettingsReads(page);
           await page.goto("http://magpie.test/?view=settings&tab=network");
+          await settingsDrawn(page);
           await page.locator("#proxySegs button.proxy-test").click();
           await page.locator("#proxyCheck").waitFor({ state: "visible" });
           assert.equal(await page.locator("#proxyCheck").textContent(), w("The test couldn't run: {error}", { error: w("boom") }));
