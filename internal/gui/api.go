@@ -1498,10 +1498,11 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		// the cards the menu bar shows, any of them (TrayUsage is only the first),
 		// how often, with their logos or not, beside the bird or not, and
-		// with their Pace numbers or not, with magpie's totals' cost or not
+		// with their Pace numbers or not, with magpie's totals' cost or not, and
+		// which of each subscription's windows
 		if (!slices.Equal(settings.Load().TrayUsages, cur.TrayUsages) || in.TrayUsageEvery != cur.TrayUsageEvery ||
 			in.TrayNoLogos != cur.TrayNoLogos || in.TrayNoBird != cur.TrayNoBird || in.TrayPace != cur.TrayPace ||
-			in.TrayNoCost != cur.TrayNoCost) && onTrayUsage != nil {
+			in.TrayNoCost != cur.TrayNoCost || !maps.EqualFunc(in.TrayWindows, cur.TrayWindows, slices.Equal)) && onTrayUsage != nil {
 			onTrayUsage()
 		}
 		// an alert turned on or moved is looked at now, the Mac asked for its

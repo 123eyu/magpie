@@ -477,6 +477,14 @@ type Settings struct {
 	// no cards say the tokens alone (BussanQ on Discord); off by default,
 	// the cost shown.
 	TrayNoCost bool `json:"trayNoCost,omitempty"`
+	// TrayWindows are, by subscription or plan (a provider's id, every
+	// account of it alike), the windows its menu bar card shows, each by
+	// how long it runs ("5h", "7d", "month": gui.trayWindowKind), so a
+	// vendor reordering or renaming them changes nothing (StrikingRaw on
+	// X: Claude's 5h alone, not two small numbers). A provider not named
+	// shows every window, as before; one whose named windows are all gone
+	// shows every window too, never an empty card.
+	TrayWindows map[string][]string `json:"trayWindows,omitempty"`
 	// Lightweight lets the webview of a window closed — the tray panel or
 	// the main window — go once it has stayed closed a while, and makes it
 	// again when it is opened (#580): less memory, a moment's wait. This
@@ -1200,6 +1208,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.WindowMaximised, s.KeepAwake, s.KeepAwakeDisplay = cur.WindowMaximised, cur.KeepAwake, cur.KeepAwakeDisplay
 	s.WindowAt = cur.WindowAt
 	s.TrayUsages, s.TrayUsage, s.TrayUsageEvery, s.TrayNoLogos, s.TrayNoBird, s.TrayPace, s.TrayNoCost = cur.TrayUsages, cur.TrayUsage, cur.TrayUsageEvery, cur.TrayNoLogos, cur.TrayNoBird, cur.TrayPace, cur.TrayNoCost
+	s.TrayWindows = cur.TrayWindows
 	s.GatewayMode = cur.GatewayMode
 	s.NoWSLAgents = cur.NoWSLAgents
 	s.QuotaReads = cur.QuotaReads
@@ -1829,6 +1838,7 @@ func saveOwn(s Settings, recording, reads bool) error {
 	s.ClientAgents = clientAgents(s.ClientAgents)
 	s.UsageCleared = usageCleared(s.UsageCleared)
 	s.TrayUsages = ids(s.TrayUsages)
+	s.TrayWindows = trayWindows(s.TrayWindows)
 	for i, u := range s.CodexAutoReset {
 		s.CodexAutoReset[i] = strings.ToLower(u)
 	}
@@ -2028,6 +2038,21 @@ func ids(in []string) []string {
 		if x = strings.TrimSpace(x); x != "" && !slices.Contains(out, x) {
 			out = append(out, x)
 		}
+	}
+	return out
+}
+
+// trayWindows is TrayWindows as kept: each provider's kinds trimmed, once
+// each, and a provider with none left out, as it shows every window.
+func trayWindows(m map[string][]string) map[string][]string {
+	out := map[string][]string{}
+	for p, kinds := range m {
+		if p, kinds = strings.TrimSpace(p), ids(kinds); p != "" && len(kinds) > 0 {
+			out[p] = kinds
+		}
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }
