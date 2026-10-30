@@ -2133,7 +2133,13 @@ body.window .profiles.detailed > #save { margin-top: 4px; }
 
 /* ---- footer --------------------------------------------------------------- */
 .foot { display: flex; align-items: center; gap: 2px; padding: 0 8px 6px 14px; min-height: 28px; flex: none; }
-body.window .foot { padding-left: 18px; }
+/* the window's footer holds only the status line (Quit, Profiles and the
+   Usage tab's age are the panel's), so it takes no room of its own: a page
+   runs to the window's foot instead of stopping above an empty bar
+   (yogurt36 on Discord). A line said there floats as the pill does, over
+   the page's foot, and goes with it. The panel's footer is as it was. */
+body.window footer.foot { position: fixed; left: 0; bottom: 0; width: 0; height: 0; min-height: 0; padding: 0; overflow: visible; z-index: 21; }
+body.window .foot .status:not(:empty):not(.lift) { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); max-width: calc(100vw - 32px); font-size: 12.5px; line-height: 16px; font-weight: 500; padding: 3px 10px; border-radius: 11px; background: color-mix(in srgb, currentColor 16%, var(--card)); box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 30%, transparent), 0 6px 20px rgba(0, 0, 0, .28); animation: fade-in .2s var(--ease); }
 .status { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .3s; }
 .status.ok { color: var(--green); }
 .status.err { color: var(--red); }
@@ -3895,9 +3901,8 @@ body.panel .modal { padding: 16px 12px; }
   body.web .view {
     --view-left: max(12px, env(safe-area-inset-left));
     --view-right: max(12px, env(safe-area-inset-right));
-    padding: 2px max(0px, calc(var(--view-right) - var(--bar, 0px))) 12px var(--view-left);
+    padding: 2px max(0px, calc(var(--view-right) - var(--bar, 0px))) max(12px, env(safe-area-inset-bottom)) var(--view-left);
   }
-  body.web .foot { padding-bottom: max(8px, env(safe-area-inset-bottom)); min-width: 0; }
   body.web .foot .status { min-width: 0; overflow-wrap: anywhere; }
   body.web .row-head { height: auto; min-height: 40px; flex-wrap: wrap; gap: 4px; }
   body.web .text, body.web .field, body.web .segs .opt, body.web .copy { min-height: 44px; }
