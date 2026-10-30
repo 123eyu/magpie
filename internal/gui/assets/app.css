@@ -433,6 +433,22 @@ body.side-nav #nav button.has-dot::after { top: 50%; right: 10px; margin-top: -3
    before the selection slides there */
 .nav-s:hover:not(.cur) { color: var(--fg); }
 .nav-s.cur { color: var(--fg); font-weight: 500; }
+/* the row under the pointer is lit as by a torch (navlamp.js): --lx is the
+   pointer's place in the word, --si how lit the row is. Its heart is a step
+   past the text's ink (--fg taken to white in dark, black in light), the
+   rest of the row 15% of the way to it, and the plain hover above stands
+   down. Where color-mix is missing (Safari 15) the plain hover stays. */
+@supports (color: color-mix(in oklab, red, blue)) {
+  .navlamp .nav-s:hover:not(.cur) { color: var(--ctl-fg); }
+  .nav-s > span.lit {
+    --hi: var(--fg);
+    --hot: color-mix(in oklab, var(--hi) calc(var(--si) * 100%), var(--ctl-fg));
+    --far: color-mix(in oklab, var(--fg) calc(var(--si) * 15%), var(--ctl-fg));
+    background: radial-gradient(36px 400px at var(--lx) 50%, var(--hot) 0%, var(--hot) 12%, color-mix(in oklab, var(--hot) 45%, var(--far)) 45%, var(--far) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+}
+@supports (color: oklch(from red round(l) c h)) { .nav-s > span.lit { --hi: oklch(from var(--fg) round(l) 0 h); } }
 /* a row pressed darkens, as a Mac sidebar's does: it never shrinks the way a
    button does (.seg button:active, .icon:active below) */
 body.side-nav #side button:active { transform: none; }
