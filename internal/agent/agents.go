@@ -150,6 +150,11 @@ var others = []*Agent{
 	// ("pi-desktop/0.1.0"), it is told apart from Pi by that name, which
 	// Pi's "pi-" would take otherwise (#1966, dgmico)
 	{ID: "pi-desktop", Name: "PI-Desktop", Icon: "pi", UA: []string{"pi-desktop"}},
+	// Kimi Code Desktop runs Kimi Code's engine on ~/.kimi-code, so it
+	// reaches magpie through Kimi Code's config, under a client name of
+	// its own ("kimi-code-desktop/…", jiabubu on Discord). Its icon is the
+	// app's own, from KimiCode-1.2.1-win-x64.exe's build/icon.ico.
+	{ID: "kimi-code-desktop", Name: "Kimi Code Desktop", Icon: "kimi-code-desktop", UA: []string{"kimi-code-desktop"}},
 	// Raft (slock's raft-computer) runs Pi in each of its agents' folders;
 	// Sessions lists those as Raft's (internal/sessions/raft.go), while
 	// their requests say "pi (…)" and are Pi's

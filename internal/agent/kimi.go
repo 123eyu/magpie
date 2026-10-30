@@ -295,7 +295,9 @@ func kimiIn(at place) *Agent {
 	}
 	return atomic(&Agent{
 		ID: "kimi", Name: "Kimi Code", Icon: "kimi", Aliases: []string{"kimi-code", "kimi-cli"}, Spelled: prefixed,
-		UA:  []string{"kimicli"},
+		// kimi-cli (Python) says KimiCLI/…; Kimi Code 2.x, kimi-code-cli/…
+		// (jiabubu on Discord: its requests showed the raw name)
+		UA:  []string{"kimicli", "kimi-code-cli"},
 		Bin: "kimi", Dir: dir, Path: path,
 		ListOnly: true,
 		Sync: func() error {

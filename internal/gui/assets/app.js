@@ -327,11 +327,10 @@ function maskSpan(src, failed) {
   if (failed) load.then((ok) => ok || failed());
   return m;
 }
-const pngIcons = new Set(["crush", "zcode", "alma", "hanako", "cindy", "lody", "typesafe", "atomcode", "snow", "mlx-serve", "mothx", "zoo-code"]);
+const pngIcons = new Set(["crush", "zcode", "alma", "hanako", "cindy", "lody", "typesafe", "atomcode", "snow", "mlx-serve", "mothx", "zoo-code", "kimi-code-desktop"]);
 
 // lazy: a picture in a long list (Plugins' rows) is asked for near the
-// screen. Each SVG an <img> draws is a webview document, ~0.6 MB, kept
-// while the page is open (#909)
+// screen: each SVG an <img> draws is a ~0.6 MB webview document, kept (#909)
 function icon(name, lazy) {
   const kept = keptIcons?.get(name || "")?.shift();
   if (kept) { kept.removeAttribute("title"); return kept; }
