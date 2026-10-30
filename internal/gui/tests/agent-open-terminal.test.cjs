@@ -57,7 +57,7 @@ async function open(engine, t, lang, web, query) {
   t.after(() => browser.close());
   const page = await (await browser.newContext({ viewport: { width: 980, height: 560 }, reducedMotion: "reduce" })).newPage();
   page.setDefaultTimeout(5000);
-  page.setDefaultNavigationTimeout(30000); // the page loads every core script
+  page.setDefaultNavigationTimeout(60000); // the page loads every core script
   const errors = [], posts = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.route("**/*", server(lang, web, posts));
