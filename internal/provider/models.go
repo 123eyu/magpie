@@ -1741,8 +1741,12 @@ func (p Provider) PaidBesideFree(model string) bool {
 //
 // A model neither listed free nor priced is not free: nothing says it costs
 // nothing, and the routes that go by this put it with the paid ones, so a
-// pool without free models behaves as In order.
+// pool without free models behaves as In order. The user's word is
+// something: every model of a provider they count free is (CountFree).
 func (p Provider) FreeModel(model string) bool {
+	if p.CountFree {
+		return true
+	}
 	for _, m := range p.Available() {
 		if strings.EqualFold(m.ID, model) {
 			if m.Free {

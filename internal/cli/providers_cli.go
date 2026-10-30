@@ -138,6 +138,9 @@ const providerUsage = `usage:
                                    (Settings' redaction leaves its requests as written, at any address: your call,
                                     so mind a relay that passes them on to a vendor; a subscription or a plugin's
                                     provider too, whose vendor gets them so; never another magpie)
+       magpie provider set modelscope free=yes
+                                   (every model of it counts as free, so a Free first routing spends it before
+                                    paid ones, as a free daily quota; prices and Usage's costs stay as listed)
        magpie provider add "My Relay" url=https://relay.example.com/v1 key=sk-… balance=https://relay.example.com/api/usage/token balance.path='$data.total_available / 500000'
        magpie provider set my-relay balance.path='(1 - credits.monthlyCredits / 70) %'
        magpie provider set my-relay balance.method=POST
@@ -847,6 +850,9 @@ func showProvider(p provider.Provider) error {
 		}
 		kv("unmasked", "yes"+muted.Render(why))
 	}
+	if p.CountFree {
+		kv("free", "yes"+muted.Render("  counted free by Free first and Cheapest routing; prices and Usage's costs stay as listed"))
+	}
 	if p.NativeCompaction {
 		kv("compaction", "native"+muted.Render("  Codex's own, sealed by the key or account that answers it"))
 	}
@@ -1191,6 +1197,19 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 				return fmt.Errorf("unmasked=yes|no, not %q", v)
 			}
 			p.Unredacted = v == "yes"
+		case "free":
+			// yes: every model of it counts as free for Free first and
+			// Cheapest routing, by the user's word (jiabubu on Discord:
+			// ModelScope's free daily quota); prices and Usage's costs
+			// stay as listed (provider.CountFree)
+			switch strings.ToLower(v) {
+			case "yes", "on":
+				p.CountFree = true
+			case "no", "off":
+				p.CountFree = false
+			default:
+				return fmt.Errorf("free=yes|no, not %q", v)
+			}
 		case "context":
 			if err := setContext(p, "*", v); err != nil {
 				return err

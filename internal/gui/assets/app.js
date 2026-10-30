@@ -7838,11 +7838,8 @@ function modelPrefsOfDraft() {
   return x && Object.keys(x).length ? x : undefined;
 }
 
-// proxyPicker: the proxy one provider's requests go through (#237) — the
-// one in Settings, none, or its own — so Codex can go through a proxy
-// while a vendor at home goes direct. The draft keeps the choice as
-// proxyMode ("" global, "direct", "custom") and the address as proxyURL;
-// proxyOfDraft is what is saved.
+// proxyPicker: one provider's proxy (#237): Settings', none or its own,
+// as proxyMode ("" global, "direct", "custom") and proxyURL
 const PROXY_HINT = {
   "": "Follows the proxy in Settings",
   direct: "Requests to it go direct, whatever the proxy in Settings",
@@ -7870,12 +7867,8 @@ function proxyPicker() {
   return box;
 }
 
-// concurrencyField: how many requests each of the provider's keys or
-// accounts may have out at the vendor at once (Discord, Lemon: a Codex
-// account is risk-controlled past five or six); more wait their turn and
-// go in order. The draft keeps what is typed as concurrency, "" for none
-// set — a plugin's provider then takes what its plugin says, shown as the
-// placeholder — and concurrencyOfDraft is what is saved.
+// concurrencyField: requests each key or account has out at once (Lemon:
+// Codex risk control past five); "" takes the plugin's, as its placeholder
 function concurrencyField(p) {
   const plugin = p?.pluginConcurrency || 0;
   const box = input(draft.concurrency ?? "", plugin ? t("{n}, as its plugin says", { n: plugin }) : t("No limit"), "number");
@@ -7910,10 +7903,8 @@ function concurrencyField(p) {
     ...field(t("Queue wait"), wait, t("Seconds a request waits for a free slot before it is turned away. 0 or empty waits as long as it takes")),
   ];
 }
-// priceRateField: what the provider charges against the official price
-// (ITea312, #819), as a relay bills 0.8× or 1.5× of it: the Usage page's
-// costs are its list price, else its maker's, times this. Empty is the
-// price as listed; steps of 0.001.
+// priceRateField: a relay's rate on the official price (#819), which
+// Usage's costs are multiplied by; empty is the price as listed
 function priceRateField() {
   const box = input(draft.priceRate ?? "", t("1, the official price"));
   box.classList.add("price-rate");
@@ -7921,18 +7912,21 @@ function priceRateField() {
   box.oninput = () => { draft.priceRate = box.value; };
   return field(t("Price rate"), box, t("Costs are counted at the official price times this, as a relay bills, like 0.8 or 1.5; a price you set for a model stays as set"));
 }
+// countFreeField: provider.CountFree (jiabubu: a free daily quota)
+function countFreeField() {
+  const [l, c] = tick(t("Count its models as free"), !!draft.countFree);
+  l.classList.add("count-free");
+  c.onchange = () => { draft.countFree = c.checked; };
+  return field(t("Free for me"), l, t("For a free quota, like a daily allowance: Free first uses its models before paid ones, and Cheapest first counts them as costing nothing. Prices and the costs Usage counts stay as listed."));
+}
 // a provider's hours at its own rate (#2463), drawn by ratewindows.js
 function rateWindowsField() {
   const box = el("div", "stack rate-windows"), d = draft;
   import("./ratewindows.js").then(() => rateWindowsPaint(box, d), statusErr);
   return field(t("Rate windows"), box);
 }
-// pluginOptionsField: the switches a plugin declares for its provider
-// (auth.options, #2038, Vocllum), each an Off/On beside the plugin's own
-// words for it, put in as text. One the plugin asks to confirm is asked
-// before it is turned on. A change is kept in the draft as
-// pluginOptions[key] and saved with the provider; nothing runs when it is,
-// the plugin reads the value when it next wants it.
+// pluginOptionsField: a plugin's declared switches (auth.options, #2038),
+// confirmed first where it asks, kept as draft.pluginOptions[key]
 function pluginOptionsField(sub) {
   const opts = sub?.plugin?.options || [];
   if (!opts.length) return [];
@@ -8059,7 +8053,7 @@ function advancedSet(d, p) {
     !!d.proxyMode || Object.values(d.accountProxies || {}).some((x) => x?.mode) ||
     [d.concurrency, d.queueLimit, d.queueWait, d.maxRPM, d.priceRate, d.contexts, d.outputs, d.compacts].some((v) => String(v ?? "").trim()) ||
     !!d.rateWindows?.length ||
-    !!(d.searches || d.authHeader || d.passUserAgent || d.unredacted || d.pinUpstream || d.nativeCompaction || d.balanceToken || d.limitRestOff) ||
+    !!(d.searches || d.authHeader || d.passUserAgent || d.unredacted || d.countFree || d.pinUpstream || d.nativeCompaction || d.balanceToken || d.limitRestOff) ||
     !!d.fallback?.length || !!p?.balanceToken?.set;
 }
 function priceRateError(ed) {
@@ -9217,7 +9211,7 @@ function baseAPIOf(p) {
 
 // draftOf is a saved provider as its editor's form holds it.
 function draftOf(p) {
-  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, best: !!p.bestInFamily, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), replyHeaders: (p.replyHeaders || []).join(", "), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, hiddenDrawers: [...(p.hiddenDrawers || [])], searches: !!p.searches, unredacted: !!p.unredacted, insecureTLS: !!p.insecureTLS, limitRestOff: !!p.limitRestOff, nativeCompaction: !!p.nativeCompaction, passUserAgent: !!p.passUserAgent, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", balanceMethod: p.balanceMethod || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p), rateWindows: (p.rateWindows || []).map((w) => ({ ...w })) };
+  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, best: !!p.bestInFamily, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), replyHeaders: (p.replyHeaders || []).join(", "), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, hiddenDrawers: [...(p.hiddenDrawers || [])], searches: !!p.searches, unredacted: !!p.unredacted, countFree: !!p.countFree, insecureTLS: !!p.insecureTLS, limitRestOff: !!p.limitRestOff, nativeCompaction: !!p.nativeCompaction, passUserAgent: !!p.passUserAgent, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", balanceMethod: p.balanceMethod || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p), rateWindows: (p.rateWindows || []).map((w) => ({ ...w })) };
 }
 
 // duplicateProvider opens the Add form on a copy of p (#268): its URLs,
@@ -9537,7 +9531,7 @@ function drawEditor(p, presetID) {
     if (perAccount) proxies.append(perAccount);
     advIn.append(...field(t("Proxy"), proxies));
     advIn.append(...concurrencyField(p));
-    advIn.append(...priceRateField(), ...rateWindowsField());
+    advIn.append(...priceRateField(), ...countFreeField(), ...rateWindowsField());
     if (p.cline) advIn.append(...upstreamField());
     advIn.append(...unmaskRow(""));
     ed.append(...pluginOptionsField(subOf(a.agent)));
@@ -9581,7 +9575,7 @@ function drawEditor(p, presetID) {
       if (priceTypedError(ed)) return;
       const picked = accountModelsDraft(p);
       if (picked === false) return pickError();
-      const body = { id: p.id, models: chosenIds(), noModels: noneChosen(), bestInFamily: bestChosen(), unlisted: draft.unlisted, hiddenDrawers: draft.hiddenDrawers, fallback: draft.fallback, contexts: cx.map, outputs: ox.map, compacts: cpx.map, proxy, accountProxies: own.map, maxConcurrency, ...queue, priceRate, rateWindows, modelPrefs: modelPrefsOfDraft(), pinUpstream: !!draft.pinUpstream, unredacted: !!draft.unredacted, ...(p.carriesCompaction ? { nativeCompaction: !!draft.nativeCompaction } : {}), ...routingOfDraft(p) };
+      const body = { id: p.id, models: chosenIds(), noModels: noneChosen(), bestInFamily: bestChosen(), unlisted: draft.unlisted, hiddenDrawers: draft.hiddenDrawers, fallback: draft.fallback, contexts: cx.map, outputs: ox.map, compacts: cpx.map, proxy, accountProxies: own.map, maxConcurrency, ...queue, priceRate, rateWindows, modelPrefs: modelPrefsOfDraft(), pinUpstream: !!draft.pinUpstream, unredacted: !!draft.unredacted, countFree: !!draft.countFree, ...(p.carriesCompaction ? { nativeCompaction: !!draft.nativeCompaction } : {}), ...routingOfDraft(p) };
       saving(saveBtn, t("Saving…"));
       saveAccountModelsDraft(picked).then(() => savePluginOptions(subOf(a.agent))).then(() => providerAction("save", body, t("{name} saved", { name: p.name })), (e) => { doneSaving(saveBtn); editorError(e.message || String(e)); }); };
     bar.append(cancel, saveBtn);
@@ -9764,7 +9758,7 @@ function drawEditor(p, presetID) {
   if (perKey) proxies.append(perKey);
   advIn.append(...field(t("Proxy"), proxies));
   advIn.append(...concurrencyField(p));
-  advIn.append(...priceRateField(), ...rateWindowsField());
+  advIn.append(...priceRateField(), ...countFreeField(), ...rateWindowsField());
 
   if (p?.cline || (isNew && pr?.id === "clinepass")) advIn.append(...upstreamField());
 
@@ -10182,6 +10176,7 @@ function drawEditor(p, presetID) {
     body.pinUpstream = !!draft.pinUpstream;
     if (twoKeyHeaders()) body.authHeader = draft.authHeader || "";
     body.unredacted = !!draft.unredacted && unmaskable();
+    body.countFree = !!draft.countFree;
     if (tlsTakes()) body.insecureTLS = !!draft.insecureTLS && onHTTPS();
     if (custom) body.limitRestOff = !!draft.limitRestOff;
     if (!decideOnly(p || pr)) body.nativeCompaction = !!draft.nativeCompaction && carriesCompaction();

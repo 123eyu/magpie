@@ -164,7 +164,7 @@ A 401 marks the account's sign-in by default (`notePluginSignIn` in [`plugins.go
 
 ## A model's free and rate
 
-magpie never reads `free` from `rate`: `rate` 0 is none given (`plugin.Model.Rate` in [`providers.go`](../../internal/plugin/providers.go)), and a model is free only by its own `free: true` or a $0 list price (`FreeModel` in [`models.go`](../../internal/provider/models.go)). A plugin sets `free` from the vendor's word; the guide says so ([magpie-community/plugins#468](https://github.com/magpie-community/plugins/issues/468)).
+magpie never reads `free` from `rate`: `rate` 0 is none given (`plugin.Model.Rate` in [`providers.go`](../../internal/plugin/providers.go)), and a model is free only by its own `free: true`, a $0 list price or the user counting its whole provider free (`Provider.CountFree`) (`FreeModel` in [`models.go`](../../internal/provider/models.go)). A plugin sets `free` from the vendor's word; the guide says so ([magpie-community/plugins#468](https://github.com/magpie-community/plugins/issues/468)).
 
 ## A model that gives no text
 

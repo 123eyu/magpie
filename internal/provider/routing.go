@@ -100,6 +100,18 @@ func SetCapCareful(id string, on bool) error {
 	return Save(*p)
 }
 
+// SetCountFree has every model of a provider count as free for the
+// routings that weigh it, or go by its vendor's word again
+// (Provider.CountFree).
+func SetCountFree(id string, on bool) error {
+	p, err := Find(id)
+	if err != nil {
+		return err
+	}
+	p.CountFree = on
+	return Save(*p)
+}
+
 // SetKeepLogin keeps Codex or Claude Code signed in to the account the
 // user made first (Provider.KeepLogin), or lets magpie move it on again.
 // Either way it is no longer kept on one of the user's choosing
