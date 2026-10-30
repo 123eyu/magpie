@@ -189,10 +189,7 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			rw.WriteHeader(http.StatusOK)
 			return
 		}
-		tag := writeJSONSame(rw, r, struct {
-			sessions.Stats
-			Agents map[string]string `json:"agents"`
-		}{st, agents})
+		tag := writeSame(rw, r, func(b *bytes.Buffer) error { return statsAnswer(b, st, agents) })
 		if tag != "" {
 			statsTags.Lock()
 			if statsTags.m == nil || len(statsTags.m) >= statsMemoMost {
@@ -787,5 +784,55 @@ func viaOf(x usage.ViaIndex, s sessions.Session) []usage.Via {
 			return v
 		}
 	}
+	return nil
+}
+
+// statsAnswer writes the stats answer into b as an Encoder of
+// struct{ sessions.Stats; Agents } does, its days one at a time: encoded
+// whole, the Encoder's own buffer grew to the ~6 MB answer from nothing
+// after each collection, ~200 MB of 90 s of polls while an agent worked
+// (#2278).
+func statsAnswer(b *bytes.Buffer, st sessions.Stats, agents map[string]string) error {
+	enc := json.NewEncoder(b)
+	// v as Marshal writes it: Encode ends it with a newline
+	put := func(v any) error {
+		if err := enc.Encode(v); err != nil {
+			return err
+		}
+		b.Truncate(b.Len() - 1)
+		return nil
+	}
+	b.WriteString(`{"from":`)
+	if err := put(st.From); err != nil {
+		return err
+	}
+	b.WriteString(`,"to":`)
+	if err := put(st.To); err != nil {
+		return err
+	}
+	b.WriteString(`,"days":`)
+	if st.Days == nil {
+		b.WriteString("null")
+	} else {
+		b.WriteByte('[')
+		for i := range st.Days {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			if err := put(&st.Days[i]); err != nil {
+				return err
+			}
+		}
+		b.WriteByte(']')
+	}
+	b.WriteString(`,"keys":`)
+	if err := put(st.Keys); err != nil {
+		return err
+	}
+	b.WriteString(`,"agents":`)
+	if err := put(agents); err != nil {
+		return err
+	}
+	b.WriteString("}\n")
 	return nil
 }
