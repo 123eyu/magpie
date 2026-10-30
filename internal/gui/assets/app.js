@@ -14602,7 +14602,7 @@ function renderKeyAccounts(p) {
     // a line of its own under the key's, so the row's controls stay in reach
     let restLine = null;
     if (k.rest && new Date(k.rest.until) > Date.now()) {
-      const r = el("span", "key-rest", t("Resting · {why} · back at {time}", { why: (k.rest.status ? k.rest.status + " " : "") + t(KEY_FAIL[k.rest.why] || "failed"), time: hhmm(k.rest.until) }) + (k.rest.probed ? " · " + t("checked in the background, back as soon as it answers") : ""));
+      const r = el("span", "key-rest", t("Resting · {why} · back at {time}", { why: (k.rest.status ? k.rest.status + " " : "") + t(KEY_FAIL[k.rest.why] || "failed"), time: restBack(k.rest.until) }) + (k.rest.probed ? " · " + t("checked in the background, back as soon as it answers") : ""));
       r.title = t("The gateway passes this key over until then, and tries the next one");
       // lifted by hand (#1869): the next request asks it again, and a
       // refusal then rests it again as before
@@ -20284,6 +20284,13 @@ function refreshAfterSync() {
 
 // hhmm: a time's hours and minutes, in the user's language
 const hhmm = (d) => new Date(d).toLocaleTimeString(intlLang(), { hour: "2-digit", minute: "2-digit" });
+// restBack: when a key's rest ends, its date too when that isn't today: a
+// key out of credit rests days at a time, and "back at 04:10 PM" read as
+// this afternoon (PaulT on Discord)
+const restBack = (d) => {
+  const at = new Date(d);
+  return at.toDateString() === new Date().toDateString() ? hhmm(at) : at.toLocaleDateString(intlLang(), { month: "short", day: "numeric" }) + " " + hhmm(at);
+};
 
 function syncWhen(iso) {
   const d = new Date(iso);
