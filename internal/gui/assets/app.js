@@ -1614,7 +1614,7 @@ function switchEntry(a) {
     setTimeout(() => b.classList.remove("done"), 5000 - ago);
   }
   b.append(svg(CHEV, 10, 1.6));
-  const opts = ls.map((l) => ({ v: "u:" + l.user, name: l.user, literalName: true, note: l.lapsed ? "Sign-in required" : accountPlan({ agent: a.id, plan: l.plan }) }));
+  const opts = ls.filter((l) => !l.token).map((l) => ({ v: "u:" + l.user, name: l.user, literalName: true, note: l.lapsed ? "Sign-in required" : accountPlan({ agent: a.id, plan: l.plan }) }));
   const on = cx ? t("magpie only switches {agent}'s sign-in; its requests go straight to OpenAI", ag) : t("magpie serves no requests on these accounts");
   // the Only switch setting, where the accounts page offers it
   if (!cx || ls.filter((l) => !l.lapsed && (l.active || l.on)).length > 1) opts.push({ v: "only", name: t("Only switch {agent}'s sign-in", ag), literalName: true, ticked: !!p.switchOnly, note: on });
@@ -12444,6 +12444,7 @@ async function signedIn(st) {
   if (!p) status(t("{user} signed in, but magpie can't list it — please report this", { user: who }), "err");
   // an account listed already is said to be, not added (#413)
   else if (st.again) status(t("{user} is already listed — its sign-in was renewed", { user: who }), "ok");
+  else if (st.token) status(t("{user} added; requests through magpie use it beside your other accounts", { user: who }), "ok");
   else status(st.using ? t("Signed in as {user}", { user: who }) : t("{user} added — switch to it any time", { user: who }), "ok");
   state = await api("state");
   renderAgents();
@@ -12819,6 +12820,57 @@ function renderCopilotGHE(sub) {
   return box;
 }
 
+// a Claude account from a setup-token (claude_setup_token.go)
+function startClaudeToken() {
+  stopSignIn();
+  signing = { agent: "claude", state: "token", token: "" };
+  renderProviders();
+}
+
+function renderClaudeToken(sub) {
+  const box = el("div", "signing claude-token");
+  const tt = el("span", "tt");
+  box.append(tt);
+  const flow = signing;
+  const label = t("Add a Claude account by setup-token");
+  tt.append(el("span", "n", label),
+    el("span", "s", t("Paste the token {cmd} printed. magpie gives it to Claude Code for this account's requests only; Claude Code itself stays signed in as it is.", { cmd: "claude setup-token" })),
+    el("span", "s", t("A setup-token can't tell its email or allowance: the account is named by the token, and its allowance shows once a reply tells it.")));
+  const form = el("form", "callback-form");
+  const inp = input(flow.token || "", "sk-ant-oat01-…", "password");
+  inp.setAttribute("aria-label", label);
+  const go = el("button", "text primary", t("Add"));
+  go.type = "submit";
+  go.disabled = !inp.value.trim() || !!flow.busy;
+  const why = el("span", "s why", flow.error || "");
+  inp.oninput = () => { flow.token = inp.value; go.disabled = !inp.value.trim(); why.textContent = ""; };
+  const submit = async (e) => {
+    e.preventDefault();
+    if (signing !== flow || flow.busy || !inp.value.trim()) return;
+    flow.busy = true;
+    go.disabled = true;
+    try {
+      const r = await api("signin/claude-token", { token: inp.value });
+      if (signing !== flow) return;
+      await signedIn({ agent: "claude", user: r.user, token: true });
+    } catch (err) {
+      if (signing !== flow) return;
+      flow.busy = false;
+      flow.error = err.message;
+      renderProviders();
+    }
+  };
+  form.onsubmit = submit;
+  go.onclick = submit;
+  form.append(inp, go);
+  tt.append(form, why);
+  const close = el("button", "text", t("Cancel"));
+  close.onclick = cancelSignIn;
+  box.append(close);
+  setTimeout(() => { if (inp.isConnected) inp.focus({ preventScroll: true }); });
+  return box;
+}
+
 // dropSigningIn: the editor of provider id closing (Cancel, Save, Remove)
 // leaves no sign-in of its account waiting behind it, to come back with the
 // editor (#526: 无论我点击底部的移除、取消、保存都没办法); an import being
@@ -12894,6 +12946,7 @@ function renderSigning(sub) {
     return box;
   }
   if (signing.state === "ghe") return renderCopilotGHE(sub);
+  if (signing.state === "token") return renderClaudeToken(sub);
   if (signing.state === "import" || signing.state === "importing" || signing.state === "imported") return renderLoginImport(sub);
   if (signing.state === "method" || signing.state === "prompt" || signing.state === "key") return renderPluginAsk(sub);
   if (signing.state === "failed") {
@@ -13066,6 +13119,12 @@ function renderSigning(sub) {
     imp.onclick = () => startImport(sub.agent);
     const acts = tt.querySelector(".acts") || tt.appendChild(el("span", "acts"));
     acts.append(imp);
+  }
+  if (sub.agent === "claude") {
+    const tok = el("button", "link", t("Use a setup-token instead…"));
+    tok.onclick = () => startClaudeToken();
+    const acts = tt.querySelector(".acts") || tt.appendChild(el("span", "acts"));
+    acts.append(tok);
   }
   // the one way to put it away (#526): a Close beside Open again did what
   // this does, two buttons for one thing
@@ -13273,7 +13332,7 @@ function renderAccounts(a, p) {
       row.classList.add("signed-out");
       line.append(el("span", "using", t("Sign-in required")));
       const again = el("button", "text", t("Sign in again"));
-      again.onclick = () => startSignIn(a.agent, false, undefined, { user: l.user });
+      again.onclick = () => l.token ? startClaudeToken() : startSignIn(a.agent, false, undefined, { user: l.user });
       line.append(again);
       // the one Claude Code is signed in to can't be forgotten (ForgetLogin)
       if (!l.active) {
@@ -13322,6 +13381,10 @@ function renderAccounts(a, p) {
         line.append(forget);
         if (l.user === firstUser) line.append(el("span", "using", t("First")));
         else if (on) line.append(makeFirst(l));
+      } else if (l.token) {
+        const only = el("span", "using", t("magpie only"));
+        only.title = t("Added by a setup-token: requests through magpie use it; Claude Code itself can't be signed in to it");
+        line.append(forget, only);
       } else {
         const use = el("button", "text", on ? t("Make first") : t("Use"));
         use.title = sub?.own ? t("The gateway uses this account first") : t("Sign {agent} in to this account", { agent: a.agentName });
@@ -13426,6 +13489,7 @@ function renderAccounts(a, p) {
       imp.title = importSay(a.agent).from;
       list.append(imp);
     }
+    if (a.agent === "claude") list.append(addRow(t("Add an account by setup-token…"), startClaudeToken));
   }
   arrangeAccountRows(list, p);
   return list;
