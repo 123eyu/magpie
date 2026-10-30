@@ -2804,6 +2804,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		// a middleware's onProvider changes what this provider is sent
 		attemptBody = triedOn(r.Context(), c.p, c.model, attemptBody)
+		// a value masking swapped for a placeholder: the model is told to
+		// use it as written (treeMan on Discord). A conversation's values
+		// are masked again on every turn, so once one is, every later
+		// turn is told the same, and its cached prefix holds
+		if maskedHits.n > 0 && notesPlaceholders(c.p, from, attemptBody) {
+			attemptBody = withPlaceholderNote(from, attemptBody)
+		}
 		if hint := s.antigravityForeseen(c.p, from, attemptBody); !last && hint != "" {
 			// Antigravity would only turn it away, as it did lately, and
 			// someone after it may answer: it isn't asked, and nothing is

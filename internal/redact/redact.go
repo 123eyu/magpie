@@ -281,6 +281,12 @@ const (
 // placeholderRe is a placeholder as Mask writes it.
 var placeholderRe = regexp.MustCompile(`\{\{[A-Z][A-Z0-9_]*_[a-z2-7]{8}\}\}`)
 
+// HasPlaceholder says whether s holds text written as Mask writes a
+// placeholder, in JSON or not.
+func HasPlaceholder(s string) bool {
+	return strings.Contains(s, "{{") && placeholderRe.MatchString(s)
+}
+
 // notAVariable turns away what stands in for a value: ${PASS}, <password>, ****.
 func notAVariable(v string) bool {
 	if strings.ContainsAny(v[:1], "$%{<[*") {
