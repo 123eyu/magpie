@@ -51,17 +51,8 @@ func pageSplit(p Period, f Filter, now time.Time, take int, pass *cellPass, gate
 	if cache.disk.root == "" || !cut.After(since) || !until.IsZero() && !until.After(cut) {
 		return nil, nil, nil, false
 	}
-	edge := cut.Add(-heatReach)
-	var recent, settled [3][]*rowChunk
-	for k, set := range [3][]*rowChunk{gateways, chunks, others} {
-		for _, c := range set {
-			if c.Latest.IsZero() || !c.Latest.Before(edge) {
-				recent[k] = append(recent[k], c)
-			} else {
-				settled[k] = append(settled[k], c)
-			}
-		}
-	}
+	sets := [3][]*rowChunk{gateways, chunks, others}
+	recent, settled := splitAt(cut, sets)
 	serials, named := pairSerials(settled[0], settled[1], settled[2])
 	if !named {
 		return nil, nil, nil, false
@@ -78,7 +69,7 @@ func pageSplit(p Period, f Filter, now time.Time, take int, pass *cellPass, gate
 		if !named {
 			return nil, nil, nil, false
 		}
-		key = fmt.Sprintf("%x", sha256.Sum256(fmt.Appendf(nil, "page-v1\x00%d\x00%t\x00%t\x00%s", until.UnixNano(), pass.names, pass.hours, k)))
+		key = pageKeyOf(until, pass, k)
 		switch {
 		case same(old) && old.key == key:
 			fresh := *old
@@ -88,8 +79,10 @@ func pageSplit(p Period, f Filter, now time.Time, take int, pass *cellPass, gate
 			if c, at, found := pageDiskRead(key); found {
 				if at >= pageDiskPages/2 {
 					// read again near the end: kept from being the next dropped
-					_ = pageDiskWrite(key, c)
+					_ = pageDiskWrite(key, cut, since, c)
 				}
+				old, kept = &pageOld{cut: cut, since: since, settled: serials, before: before, at: time.Now(), key: key, cells: c}, true
+			} else if c, found := pageAdvance(cache.disk, cut, since, until, f, pass, identities, sets, key); found {
 				old, kept = &pageOld{cut: cut, since: since, settled: serials, before: before, at: time.Now(), key: key, cells: c}, true
 			}
 		}
@@ -103,11 +96,11 @@ func pageSplit(p Period, f Filter, now time.Time, take int, pass *cellPass, gate
 		next := &pageOld{cut: cut, since: since, settled: serials, before: before, at: time.Now(), key: key, cells: ps.cellsBefore(pass, cut)}
 		cache.pageOldNext = next
 		// not written, the cells are counted again on the next start
-		_ = pageDiskWrite(key, next.cells)
+		_ = pageDiskWrite(key, cut, since, next.cells)
 		return parts, ps, parts, true
 	}
 	if pageSplitting != nil {
-		pageSplitting(len(recent[0]) + len(recent[1]) + len(recent[2]))
+		pageSplitting(chunksIn(recent))
 	}
 	next := *old
 	next.parts = map[uint64]*chunkPart{}
@@ -134,6 +127,78 @@ func pageSplit(p Period, f Filter, now time.Time, take int, pass *cellPass, gate
 		}
 	}
 	return append([]*chunkPart{old.cells}, newest...), ps, newest, true
+}
+
+// pageKeyOf is the key of a page's cells until, read through pass, of
+// the settled chunks heatSettledKey names k.
+func pageKeyOf(until time.Time, pass *cellPass, k string) string {
+	return fmt.Sprintf("%x", sha256.Sum256(fmt.Appendf(nil, "page-v1\x00%d\x00%t\x00%t\x00%s", until.UnixNano(), pass.names, pass.hours, k)))
+}
+
+// pageAdvance is a page's cells before cut, from a page of the file's
+// cells before an earlier cut counted under the same key there and the
+// cells of a pairing of the chunks of the days between, written under
+// key; or false.
+func pageAdvance(d heatDiskRef, cut, since, until time.Time, f Filter, pass *cellPass, identities map[string]sessions.CodexIdentity, sets [3][]*rowChunk, key string) (*chunkPart, bool) {
+	keys := map[int64]string{}
+	for _, e := range pageDiskEntries() {
+		if e.Cut.IsZero() || !e.Cut.Before(cut) || !e.Since.Equal(since) {
+			continue
+		}
+		at := e.Cut.In(cut.Location())
+		k, seen := keys[at.UnixNano()]
+		var recent [3][]*rowChunk
+		if !seen {
+			var named bool
+			if recent, k, named = settledAt(d, at, since, f, identities, sets); named {
+				k = pageKeyOf(until, pass, k)
+			}
+			keys[at.UnixNano()] = k
+		}
+		if k == "" || k != e.Key {
+			continue
+		}
+		if seen {
+			recent, _ = splitAt(at, sets)
+		}
+		if pageSplitting != nil {
+			pageSplitting(chunksIn(recent))
+		}
+		between := pairRowsIn(at, until, recent[0], recent[1], recent[2], identities).cellsBefore(pass, cut)
+		cells := addCells(pageDiskPart(e), between)
+		_ = pageDiskWrite(key, cut, since, cells)
+		return cells, true
+	}
+	return nil, false
+}
+
+// addCells is the cells of a and of b, the later, as one part: a cell of
+// the same names, bits and bucket added up, in the order of their last.
+func addCells(a, b *chunkPart) *chunkPart {
+	out := &chunkPart{kept: a.kept + b.kept, first: a.first}
+	if !b.first.IsZero() && (out.first.IsZero() || b.first.Before(out.first)) {
+		out.first = b.first
+	}
+	key := func(c pageCell) pageCell {
+		c.n, c.d = 0, Totals{}
+		return c
+	}
+	later := make(map[pageCell]int, len(b.cells))
+	for i, c := range b.cells {
+		later[key(c)] = i
+	}
+	cells := slices.Clone(b.cells)
+	out.cells = make([]pageCell, 0, len(a.cells)+len(b.cells))
+	for _, c := range a.cells {
+		if i, ok := later[key(c)]; ok {
+			cells[i].n += c.n
+			cells[i].d.plus(&c.d)
+			continue
+		}
+		out.cells = append(out.cells, c)
+	}
+	out.cells = append(out.cells, cells...)
+	return out
 }
 
 // cellsBefore is the cells of ps's rows before cut as one part: each
@@ -209,6 +274,8 @@ type pageDiskCell struct {
 // under.
 type pageDiskEntry struct {
 	Key   string         `json:"key"`
+	Cut   time.Time      `json:"cut,omitzero"`
+	Since time.Time      `json:"since,omitzero"`
 	At    time.Time      `json:"at"`
 	Kept  int            `json:"kept"`
 	First time.Time      `json:"first"`
@@ -237,29 +304,33 @@ func pageDiskEntries() []pageDiskEntry {
 // they are, or false.
 func pageDiskRead(key string) (*chunkPart, int, bool) {
 	for at, e := range pageDiskEntries() {
-		if e.Key != key {
-			continue
+		if e.Key == key {
+			return pageDiskPart(e), at, true
 		}
-		part := &chunkPart{kept: e.Kept, cells: make([]pageCell, len(e.Cells))}
-		if !e.First.IsZero() {
-			part.first = e.First.In(time.Local)
-		}
-		for i, c := range e.Cells {
-			part.cells[i] = pageCell{
-				provider: unique.Make(c.Provider), agent: unique.Make(c.Agent), model: unique.Make(c.Model), kind: unique.Make(c.Kind),
-				callerID: unique.Make(c.CallerID), callerName: unique.Make(c.CallerName), account: unique.Make(c.Account), computer: unique.Make(c.Computer),
-				source: c.Source, bits: c.Bits, bucket: c.Bucket, n: c.N, d: c.D,
-			}
-		}
-		return part, at, true
 	}
 	return nil, 0, false
 }
 
-// pageDiskWrite keeps part under key with the pages written last, through
-// a file renamed over the last.
-func pageDiskWrite(key string, part *chunkPart) error {
-	e := pageDiskEntry{Key: key, At: time.Now(), Kept: part.kept, First: part.first, Cells: make([]pageDiskCell, len(part.cells))}
+// pageDiskPart is e's cells as one part.
+func pageDiskPart(e pageDiskEntry) *chunkPart {
+	part := &chunkPart{kept: e.Kept, cells: make([]pageCell, len(e.Cells))}
+	if !e.First.IsZero() {
+		part.first = e.First.In(time.Local)
+	}
+	for i, c := range e.Cells {
+		part.cells[i] = pageCell{
+			provider: unique.Make(c.Provider), agent: unique.Make(c.Agent), model: unique.Make(c.Model), kind: unique.Make(c.Kind),
+			callerID: unique.Make(c.CallerID), callerName: unique.Make(c.CallerName), account: unique.Make(c.Account), computer: unique.Make(c.Computer),
+			source: c.Source, bits: c.Bits, bucket: c.Bucket, n: c.N, d: c.D,
+		}
+	}
+	return part
+}
+
+// pageDiskWrite keeps part, a page's cells before cut from since, under
+// key with the pages written last, through a file renamed over the last.
+func pageDiskWrite(key string, cut, since time.Time, part *chunkPart) error {
+	e := pageDiskEntry{Key: key, Cut: cut, Since: since, At: time.Now(), Kept: part.kept, First: part.first, Cells: make([]pageDiskCell, len(part.cells))}
 	for i := range part.cells {
 		c := &part.cells[i]
 		e.Cells[i] = pageDiskCell{

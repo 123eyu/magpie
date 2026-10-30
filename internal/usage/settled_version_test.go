@@ -74,8 +74,9 @@ func TestSettledCountedAsVersioned(t *testing.T) {
 	read(pageDiskPath(), &pages)
 	read(heatDiskPath(), &heat)
 	read(effortDiskPath(), &effort)
+	// when and under what they were counted, not how
 	for i := range pages {
-		pages[i].Key, pages[i].At = "", time.Time{}
+		pages[i].Key, pages[i].At, pages[i].Cut, pages[i].Since = "", time.Time{}, time.Time{}, time.Time{}
 	}
 	if len(pages) == 0 || len(heat.Days) == 0 || len(effort.Sums) == 0 {
 		t.Fatalf("kept %d pages, %d days, %d threads' effort", len(pages), len(heat.Days), len(effort.Sums))

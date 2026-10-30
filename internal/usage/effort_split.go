@@ -44,24 +44,34 @@ func effortDiskPath() string {
 }
 
 type effortDiskEntry struct {
-	Key  string                            `json:"key"`
-	Sums map[string][]sessions.ModelEffort `json:"sums"`
+	Key   string                            `json:"key"`
+	Cut   time.Time                         `json:"cut,omitzero"`
+	Since time.Time                         `json:"since,omitzero"`
+	Sums  map[string][]sessions.ModelEffort `json:"sums"`
+}
+
+func effortDiskEntryRead() (effortDiskEntry, bool) {
+	b, err := os.ReadFile(effortDiskPath())
+	if err != nil {
+		return effortDiskEntry{}, false
+	}
+	var e effortDiskEntry
+	if json.Unmarshal(b, &e) != nil || e.Sums == nil {
+		return effortDiskEntry{}, false
+	}
+	return e, true
 }
 
 func effortDiskRead(key string) (map[string][]sessions.ModelEffort, bool) {
-	b, err := os.ReadFile(effortDiskPath())
-	if err != nil {
-		return nil, false
-	}
-	var e effortDiskEntry
-	if json.Unmarshal(b, &e) != nil || e.Key != key || e.Sums == nil {
+	e, ok := effortDiskEntryRead()
+	if !ok || e.Key != key {
 		return nil, false
 	}
 	return e.Sums, true
 }
 
-func effortDiskWrite(key string, sums map[string][]sessions.ModelEffort) error {
-	b, err := json.Marshal(effortDiskEntry{Key: key, Sums: sums})
+func effortDiskWrite(key string, cut, since time.Time, sums map[string][]sessions.ModelEffort) error {
+	b, err := json.Marshal(effortDiskEntry{Key: key, Cut: cut, Since: since, Sums: sums})
 	if err != nil {
 		return err
 	}
@@ -95,17 +105,8 @@ func effortSplit(sums effortSums, p Period, now time.Time, gateways, chunks, oth
 	if !cut.After(since) || disk.root == "" {
 		return false
 	}
-	edge := cut.Add(-heatReach)
-	var recent, settled [3][]*rowChunk
-	for k, set := range [3][]*rowChunk{gateways, chunks, others} {
-		for _, c := range set {
-			if c.Latest.IsZero() || !c.Latest.Before(edge) {
-				recent[k] = append(recent[k], c)
-			} else {
-				settled[k] = append(settled[k], c)
-			}
-		}
-	}
+	sets := [3][]*rowChunk{gateways, chunks, others}
+	recent, settled := splitAt(cut, sets)
 	serials, ok := pairSerials(settled[0], settled[1], settled[2])
 	if !ok {
 		return false
@@ -130,6 +131,8 @@ func effortSplit(sums effortSums, p Period, now time.Time, gateways, chunks, oth
 		default:
 			if s, found := effortDiskRead(key); found {
 				old, kept = &effortOld{root: disk.root, cut: cut, since: since, settled: serials, before: before, at: time.Now(), key: key, sums: s}, true
+			} else if s, found := effortAdvance(disk, cut, since, until, identities, sets, key); found {
+				old, kept = &effortOld{root: disk.root, cut: cut, since: since, settled: serials, before: before, at: time.Now(), key: key, sums: s}, true
 			}
 		}
 		if !kept {
@@ -146,7 +149,7 @@ func effortSplit(sums effortSums, p Period, now time.Time, gateways, chunks, oth
 			next := &effortOld{root: disk.root, cut: cut, since: since, settled: serials, before: before, at: time.Now(), key: key, sums: part.values()}
 			effortOlds[p] = next
 			// not written, the effort is counted again on the next start
-			_ = effortDiskWrite(key, next.sums)
+			_ = effortDiskWrite(key, cut, since, next.sums)
 			return true
 		}
 	}
@@ -157,8 +160,40 @@ func effortSplit(sums effortSums, p Period, now time.Time, gateways, chunks, oth
 		}
 	}
 	if effortPairing != nil {
-		effortPairing(len(recent[0]) + len(recent[1]) + len(recent[2]))
+		effortPairing(chunksIn(recent))
 	}
 	pairRowsIn(cut, until, recent[0], recent[1], recent[2], identities).visitActors(func(r *Row) { sums.add(r) })
 	return true
+}
+
+// effortAdvance is the effort before cut, from the file's effort before
+// an earlier cut counted under the same key there and a pairing of the
+// chunks of the days between, written under key; or false.
+func effortAdvance(d heatDiskRef, cut, since, until time.Time, identities map[string]sessions.CodexIdentity, sets [3][]*rowChunk, key string) (map[string][]sessions.ModelEffort, bool) {
+	e, ok := effortDiskEntryRead()
+	if !ok || e.Cut.IsZero() || !e.Cut.Before(cut) || !e.Since.Equal(since) {
+		return nil, false
+	}
+	at := e.Cut.In(cut.Location())
+	recent, k, ok := settledAt(d, at, since, Filter{}, identities, sets)
+	if !ok || fmt.Sprintf("%x", sha256.Sum256([]byte("effort-v1\x00"+k))) != e.Key {
+		return nil, false
+	}
+	if effortPairing != nil {
+		effortPairing(chunksIn(recent))
+	}
+	part := effortSums{}
+	for actor, values := range e.Sums {
+		for _, v := range values {
+			part.addValue(actor, v)
+		}
+	}
+	pairRowsIn(at, until, recent[0], recent[1], recent[2], identities).visitActors(func(r *Row) {
+		if r.Time.Before(cut) {
+			part.add(r)
+		}
+	})
+	sums := part.values()
+	_ = effortDiskWrite(key, cut, since, sums)
+	return sums, true
 }
