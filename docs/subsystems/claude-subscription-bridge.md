@@ -150,6 +150,10 @@ A run is `-p`, as before, when (`claudeTUI`):
   or a prompt over 400KB (`tuiPromptMost`), which a paste can't carry as
   `-p` does.
 
+The gateway's log says which (`claude: this run is -p: …`,
+`claudePrintWhy`), and the helper's own line when it becomes `-p` (below)
+is logged from the run's stderr (`lockedWriter`).
+
 A turn the interactive mode can't take ends the run, and the next starts
 anew: a turn with images, one that takes earlier turns back, an effort
 change. A run given up on (`letGo`) is not taken back, since the

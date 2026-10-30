@@ -959,13 +959,36 @@ const tuiPromptMost = 400 << 10
 // cache marks (control requests and an extra body), a JSON schema, and
 // images. prompt is the run's first message.
 func claudeTUI(req *Request, binary claudeCLI, prompt []map[string]any) bool {
-	if !claudeTUIRuns || runtime.GOOS != "darwin" && runtime.GOOS != "linux" || binary.wsl != nil || binary.path == "" ||
-		len(req.Safeguards) > 0 || req.clientCache != nil || len(req.Format.schema()) > 0 ||
-		countImages(req.Messages) > 0 || settings.Load().ClaudePrintMode {
-		return false
+	why := claudePrintWhy(req, binary, prompt)
+	if why != "" && claudeTUIRuns {
+		log.Printf("claude: this run is -p: %s", why)
 	}
+	return why == ""
+}
+
+// claudePrintWhy is why a run is -p, "" when it is the interactive mode.
+func claudePrintWhy(req *Request, binary claudeCLI, prompt []map[string]any) string {
 	b, _ := json.Marshal(prompt)
-	return len(b) <= tuiPromptMost
+	for _, c := range []struct {
+		is  bool
+		why string
+	}{
+		{!claudeTUIRuns, "no shim"},
+		{runtime.GOOS != "darwin" && runtime.GOOS != "linux", runtime.GOOS},
+		{binary.wsl != nil, "Claude Code in WSL"},
+		{binary.path == "", "no Claude Code path"},
+		{len(req.Safeguards) > 0, "safeguards"},
+		{req.clientCache != nil, "the client's cache marks"},
+		{len(req.Format.schema()) > 0, "a JSON schema"},
+		{countImages(req.Messages) > 0, "images"},
+		{settings.Load().ClaudePrintMode, "the interactive mode is turned off"},
+		{len(b) > tuiPromptMost, "a first message over 400KB"},
+	} {
+		if c.is {
+			return c.why
+		}
+	}
+	return ""
 }
 
 // safeguardBody is the safety-only form of the run's extra body.
@@ -2182,6 +2205,15 @@ func cleanClaudeEnv(env []string) []string {
 type lockedWriter struct{ run *subscriptionRun }
 
 func (w *lockedWriter) Write(p []byte) (int, error) {
+	// the interactive mode's helper says on its own line why it became -p
+	// (claudetui.Run), which no error carries
+	if bytes.Contains(p, []byte("claude-tui: ")) {
+		for _, l := range strings.Split(string(p), "\n") {
+			if why, ok := strings.CutPrefix(l, "claude-tui: "); ok {
+				log.Printf("claude: %s", why)
+			}
+		}
+	}
 	w.run.mu.Lock()
 	defer w.run.mu.Unlock()
 	if w.run.stderr.Len() < 1<<20 {
