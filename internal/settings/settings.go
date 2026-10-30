@@ -848,6 +848,14 @@ type Settings struct {
 	// when it last settled, so it opens maximised again; Window is still the
 	// size it is restored to.
 	WindowMaximised bool `json:"windowMaximised,omitempty"`
+	// WindowAt is where the main window was last left, its top left corner
+	// x and y in the system's coordinates across every screen (points on
+	// the Mac, DIPs on Windows, X11's pixels on Linux), so it opens there
+	// again after a restart rather than in the middle (jorbenzhu on
+	// Discord). Kept only while it isn't maximised, full screen or
+	// minimised; not at all under Wayland, where a window can't place
+	// itself. gui's openAt moves it onto a screen there now.
+	WindowAt []int `json:"windowAt,omitempty"`
 }
 
 // ModelPrice is the price of one model as the user states it. Each part is a
@@ -1172,8 +1180,8 @@ func (s Settings) Compact() int {
 }
 
 // KeepOwn puts back cur's settings that are this computer's own, which a
-// sync or a restored backup never brings from another: the window's size
-// and whether it was maximised, the proxy, the gateway's port, whether it
+// sync or a restored backup never brings from another: the window's size,
+// place and whether it was maximised, the proxy, the gateway's port, whether it
 // is shared on the local network and the addresses let in to it, the
 // Dock, gateway mode, whether WSL is looked in, whether agents' sign-ins
 // are read, when allowances are read, the terminal app a session resumes
@@ -1190,6 +1198,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.DockNever, s.DockSettled = cur.DockNever, cur.DockSettled
 	s.ProxyCustom = cur.ProxyCustom
 	s.WindowMaximised, s.KeepAwake, s.KeepAwakeDisplay = cur.WindowMaximised, cur.KeepAwake, cur.KeepAwakeDisplay
+	s.WindowAt = cur.WindowAt
 	s.TrayUsages, s.TrayUsage, s.TrayUsageEvery, s.TrayNoLogos, s.TrayNoBird, s.TrayPace, s.TrayNoCost = cur.TrayUsages, cur.TrayUsage, cur.TrayUsageEvery, cur.TrayNoLogos, cur.TrayNoBird, cur.TrayPace, cur.TrayNoCost
 	s.GatewayMode = cur.GatewayMode
 	s.NoWSLAgents = cur.NoWSLAgents

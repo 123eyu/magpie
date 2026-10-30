@@ -176,6 +176,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		UpdateMirror:         "https://mirror.example/",
 		Window:               []int{900, 700},
 		WindowMaximised:      true,
+		WindowAt:             []int{-1440, 120},
 		FullContext:          true,
 		DesktopLongest:       true,
 		GuideHidden:          true,
