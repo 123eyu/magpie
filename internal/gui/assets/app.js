@@ -23471,8 +23471,7 @@ document.fonts?.addEventListener("loadingdone", fitTop);
 // ("Work / Library / MCP servers"). Narrower, and magpie web on a phone,
 // the pages go back into the header as tabs and each page shows its own
 // tabs again, as iPadOS's sidebar turns into a tab bar when it has no room.
-// It is the same #nav, moved between the two. (app.css's side-nav rules
-// hold at the same width: narrower than Usage's requests, 768 points)
+// It is the same #nav, moved between the two.
 var SIDE_AT = 1024;
 var sideQuery = matchMedia(`(min-width: ${SIDE_AT}px)`);
 function sideNav() { return document.body.classList.contains("side-nav"); }
@@ -23500,6 +23499,7 @@ function layoutNav() {
   side.hidden = !on;
   $("#crumb").hidden = !on;
   if (on) {
+    side.addEventListener("pointerover", () => import("./navlamp.js").catch(() => {}), { once: true });
     side.querySelector(".side-top").append(btn, brand);
     side.querySelector(".side-scroll").append(nav);
     side.querySelector(".side-foot").prepend(prefs);
@@ -23717,7 +23717,6 @@ function navSubs() {
     const fresh = !box;
     if (fresh) {
       box = el("div", "nav-sub");
-      import("./navlamp.js").catch(() => {});
       box.setAttribute("role", "tablist");
       box.dataset.view = view;
       box.append(el("i", "nav-hl"));
