@@ -860,14 +860,15 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	// Claude Code's interactive mode, where a run allows it (claudeTUI):
 	// the shim (claudetui) is handed the -p arguments, and becomes that -p
 	// run when the interactive one doesn't start
-	tui := claudeTUI(req, binary, prompt)
+	tui, code := claudeTUI(req, binary, prompt)
 	if tui && binary.wsl != nil {
 		// the helper would wait for a transcript it can't see
 		if dir := binary.tuiWSLUnread(configDir); dir != "" {
 			log.Printf("claude: this run is -p: Windows can't read %s, where Claude Code in WSL writes its transcripts", dir)
-			tui = false
+			tui, code = false, "wslread"
 		}
 	}
+	noteClaudeRun(code)
 	var cmd *exec.Cmd
 	if tui {
 		helper := exe
@@ -1069,17 +1070,24 @@ const tuiPromptMost = 400 << 10
 // (ClaudePrintMode), on macOS, Linux and Windows, Claude Code in WSL too (its home
 // known, so its transcripts are found); not for what only -p takes: safeguards and a client's
 // cache marks (control requests and an extra body), a JSON schema, and
-// images. prompt is the run's first message.
-func claudeTUI(req *Request, binary claudeCLI, prompt []map[string]any) bool {
-	why := claudePrintWhy(req, binary, prompt)
+// images. prompt is the run's first message. The code is claudePrint's,
+// for the provider editor's last run (ClaudeMode.Last).
+func claudeTUI(req *Request, binary claudeCLI, prompt []map[string]any) (bool, string) {
+	code, why := claudePrint(req, binary, prompt)
 	if why != "" && claudeTUIRuns {
 		log.Printf("claude: this run is -p: %s", why)
 	}
-	return why == ""
+	return why == "", code
 }
 
 // claudePrintWhy is why a run is -p, "" when it is the interactive mode.
 func claudePrintWhy(req *Request, binary claudeCLI, prompt []map[string]any) string {
+	_, why := claudePrint(req, binary, prompt)
+	return why
+}
+
+// claudePrint is claudePrintWhy with a code the GUI names it by.
+func claudePrint(req *Request, binary claudeCLI, prompt []map[string]any) (code, why string) {
 	var words []map[string]any
 	for _, bl := range prompt {
 		if bl["type"] != "image" {
@@ -1087,24 +1095,24 @@ func claudePrintWhy(req *Request, binary claudeCLI, prompt []map[string]any) str
 		}
 	}
 	b, _ := json.Marshal(words)
-	if _, why := claudeMachineWhy(binary); why != "" {
-		return why
+	if code, why := claudeMachineWhy(binary); why != "" {
+		return code, why
 	}
 	for _, c := range []struct {
-		is  bool
-		why string
+		is        bool
+		code, why string
 	}{
-		{len(req.Safeguards) > 0, "safeguards"},
-		{req.clientCache != nil, "the client's cache marks"},
-		{len(req.Format.schema()) > 0, "a JSON schema"},
-		{urlImages(req.Messages) > 0, "an image known by its URL"},
-		{len(b) > tuiPromptMost, "a first message over 400KB"},
+		{len(req.Safeguards) > 0, "safeguards", "safeguards"},
+		{req.clientCache != nil, "cache", "the client's cache marks"},
+		{len(req.Format.schema()) > 0, "schema", "a JSON schema"},
+		{urlImages(req.Messages) > 0, "image", "an image known by its URL"},
+		{len(b) > tuiPromptMost, "big", "a first message over 400KB"},
 	} {
 		if c.is {
-			return c.why
+			return c.code, c.why
 		}
 	}
-	return ""
+	return "", ""
 }
 
 // claudeMachineWhy is why every run on this machine is -p, whatever it
@@ -1139,19 +1147,49 @@ type ClaudeMode struct {
 	Why    string    `json:"why,omitempty"`
 	Broken time.Time `json:"broken,omitzero"` // since when, for "broken"
 	WSL    bool      `json:"wsl,omitempty"`   // Claude Code in WSL
+	// how the last run since magpie started went (noteClaudeRun)
+	Last *ClaudeLastRun `json:"last,omitempty"`
+}
+
+// ClaudeLastRun is how one run went: Why is claudePrint's code when it was
+// -p, wslread when Windows couldn't read Claude Code in WSL's transcripts,
+// start when the interactive mode didn't start and the helper became -p.
+type ClaudeLastRun struct {
+	TUI bool      `json:"tui"`
+	Why string    `json:"why,omitempty"`
+	At  time.Time `json:"at"`
+}
+
+// claudeLast is the last run's, since magpie started
+var claudeLast struct {
+	sync.Mutex
+	run ClaudeLastRun
+}
+
+// noteClaudeRun records a run's mode: "" is the interactive mode, else
+// why it is -p.
+func noteClaudeRun(why string) {
+	claudeLast.Lock()
+	claudeLast.run = ClaudeLastRun{TUI: why == "", Why: why, At: time.Now()}
+	claudeLast.Unlock()
 }
 
 // ClaudeModeNow is ClaudeMode as of now.
 func ClaudeModeNow() ClaudeMode {
-	binary, err := claudeBinary()
-	if err != nil {
-		return ClaudeMode{Why: "missing"}
+	m := ClaudeMode{Why: "missing"}
+	if binary, err := claudeBinary(); err == nil {
+		code, _ := claudeMachineWhy(binary)
+		m = ClaudeMode{TUI: code == "", Why: code, WSL: binary.wsl != nil}
+		if code == "broken" {
+			m.Broken, _ = claudetui.BrokenSince()
+		}
 	}
-	code, _ := claudeMachineWhy(binary)
-	m := ClaudeMode{TUI: code == "", Why: code, WSL: binary.wsl != nil}
-	if code == "broken" {
-		m.Broken, _ = claudetui.BrokenSince()
+	claudeLast.Lock()
+	if !claudeLast.run.At.IsZero() {
+		r := claudeLast.run
+		m.Last = &r
 	}
+	claudeLast.Unlock()
 	return m
 }
 
@@ -2391,6 +2429,9 @@ func (w *lockedWriter) Write(p []byte) (int, error) {
 		for _, l := range strings.Split(string(p), "\n") {
 			if why, ok := strings.CutPrefix(l, "claude-tui: "); ok {
 				log.Printf("claude: %s", why)
+				if strings.HasSuffix(why, "this run is -p") {
+					noteClaudeRun("start")
+				}
 			}
 		}
 	}
