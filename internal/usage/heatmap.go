@@ -454,7 +454,7 @@ func heatAdvance(d heatDiskRef, cut, since, now time.Time, f Filter, identities 
 	return days, true
 }
 
-// heatCold is the days from since to cut, of a pairing a few weeks at a
+// heatCold is the days from since to cut, of a pairing a few days at a
 // time (coldSpans), written under key; or false.
 func heatCold(cut, since, now time.Time, f Filter, identities map[string]sessions.CodexIdentity, sets [3][]*rowChunk, key string) ([]Day, bool) {
 	all := heatDays{}

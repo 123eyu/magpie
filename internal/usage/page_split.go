@@ -175,7 +175,7 @@ func pageAdvance(d heatDiskRef, cut, since, until time.Time, f Filter, pass *cel
 }
 
 // pageCold is a page's cells before cut from since, of a pairing a few
-// weeks at a time (coldSpans), written under key; or false.
+// days at a time (coldSpans), written under key; or false.
 func pageCold(cut, since time.Time, pass *cellPass, identities map[string]sessions.CodexIdentity, sets [3][]*rowChunk, key string) (*chunkPart, bool) {
 	cells := &chunkPart{}
 	if !coldSpans(since, cut, sets, func(from, to time.Time, span [3][]*rowChunk) {

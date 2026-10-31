@@ -72,7 +72,7 @@ func TestFirstBuildPairsSpans(t *testing.T) {
 		t.Fatal("a pairing of every chunk wrote no sums")
 	}
 	all := paired[0]
-	for _, days := range []int{1, 14} {
+	for _, days := range []int{1, 4, 14} {
 		coldSpan = days
 		restart()
 		spans := []int{}

@@ -168,7 +168,7 @@ func effortSplit(sums effortSums, p Period, now time.Time, gateways, chunks, oth
 	return true
 }
 
-// effortCold is the effort from since to cut, of a pairing a few weeks
+// effortCold is the effort from since to cut, of a pairing a few days
 // at a time (coldSpans), written under key; or false.
 func effortCold(cut, since time.Time, identities map[string]sessions.CodexIdentity, sets [3][]*rowChunk, key string) (map[string][]sessions.ModelEffort, bool) {
 	part := effortSums{}

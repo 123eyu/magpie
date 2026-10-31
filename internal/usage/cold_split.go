@@ -11,13 +11,14 @@ import (
 // message id in one set, every call matched in one map, ~210 MB of a
 // ~355 MB live heap and a ~500 MB footprint on a year's history (#2278).
 // They are built as a day's start advances them (pageAdvance), a few
-// weeks of history at a time: a span's chunks are those with a row a
+// days of history at a time: a span's chunks are those with a row a
 // pairing of it reaches, and each span's pairing is let go before the
 // next.
 
 // coldSpan is the days of history a first build pairs at a time. Zero
-// pairs them all at once (tests compare the two).
-var coldSpan = 14
+// pairs them all at once (tests compare the two). Four days held a
+// span's pairing ~25 MB under two weeks' at the same CPU (#2278).
+var coldSpan = 4
 
 // coldSpanning, in tests, is told how many chunks each span pairs.
 var coldSpanning func(chunks int)
