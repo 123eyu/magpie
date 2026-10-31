@@ -160,6 +160,7 @@ func (p Provider) live() ([]catalog.Model, time.Time, bool) {
 
 // liveByID are the models of live with this id: what a look at one
 // model, asked for each of a list's, reads instead of the whole list.
+// They are the list read, not a copy: a caller only reads them.
 func (p Provider) liveByID(model string) []catalog.Model {
 	if !p.lists() {
 		return nil
@@ -167,7 +168,7 @@ func (p Provider) liveByID(model string) []catalog.Model {
 	// a model listed by an id the user gave it is in the vendor's list
 	// under its own (SetModelID)
 	own := p.OwnModelID(model)
-	ms := catalog.LiveByID(p.ID, own)
+	ms := catalog.LiveByIDShared(p.ID, own)
 	if own == model {
 		return ms
 	}
