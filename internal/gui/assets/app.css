@@ -2140,6 +2140,10 @@ body.window .profiles.detailed > #save { margin-top: 4px; }
    the page's foot, and goes with it. The panel's footer is as it was. */
 body.window footer.foot { position: fixed; left: 0; bottom: 0; width: 0; height: 0; min-height: 0; padding: 0; overflow: visible; z-index: 21; }
 body.window .foot .status:not(:empty):not(.lift) { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); max-width: calc(100vw - 32px); font-size: 12.5px; line-height: 16px; font-weight: 500; padding: 3px 10px; border-radius: 11px; background: color-mix(in srgb, currentColor 16%, var(--card)); box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 30%, transparent), 0 6px 20px rgba(0, 0, 0, .28); animation: fade-in .2s var(--ease); }
+/* a passing note over the page's foot takes no clicks, as a toast: a press
+   on the row under it (the Plugins page's Install at the window's foot)
+   lands on the row. An error or warning stays selectable, to be copied. */
+body.window .foot .status:not(.err):not(.warn) { pointer-events: none; }
 .status { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .3s; }
 .status.ok { color: var(--green); }
 .status.err { color: var(--red); }
