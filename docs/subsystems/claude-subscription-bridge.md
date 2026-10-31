@@ -189,11 +189,27 @@ back, an effort change. A run given up on (`letGo`) is not taken back, since the
 interactive mode can't answer a control request to stop a turn.
 
 If the interactive Claude Code doesn't start or show its prompt within 45
-seconds, the helper becomes `claude -p` with the same arguments
-(`printMode`, `exec` on the same pid, its input still unread), so the
-turn is answered all the same, and it writes
-`<cache>/magpie/claude-tui-broken`: for 30 minutes after, every run goes
-to `-p` at once. A folder not trusted goes to `-p` without the mark.
+seconds (`claudetui.ReadyWait`), or asks how to sign in (`signIn`: a
+Claude Code signed in for `-p` only, as in a container given
+`CLAUDE_CODE_OAUTH_TOKEN`), the helper becomes `claude -p` with the same
+arguments (`printMode`, `exec` on the same pid, its input still unread),
+so the turn is answered all the same, and it writes
+`<cache>/magpie/claude-tui-broken`, which holds the number of failed
+starts in a row. For 30 minutes after one, doubled with each one after
+to a day (`brokenFor`), every run goes to `-p` at once: the helper is
+not started (`claudePrintWhy`, "the interactive mode failed to start
+lately"). A start that shows its prompt removes the mark. A folder not
+trusted goes to `-p` without the mark.
+
+The helper answers the bridge's `initialize` only once the prompt is
+shown, or as `-p` after the fallback, so the bridge waits for it
+`tuiInitWait` (`ReadyWait` and twice a control request's 10s), not the
+10s of any other control request. With 10s, a Claude Code slower than
+that to start (2 vCPU in Docker) was ended as the helper waited, before
+it could become `-p`, and every try was answered 502 "Claude Code has
+not answered magpie's initialize request in 10s" (#4504). A helper that
+answers nothing even then is ended, the mark is written, and `start`
+starts the turn again as `-p`.
 
 ## Why turns go on in one run
 

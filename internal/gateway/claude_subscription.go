@@ -664,6 +664,13 @@ const claudeMCPPath = "/_magpie/claude-mcp/"
 // (FrierenF on Discord).
 func (b *subscriptionBridge) start(ctx context.Context, req *Request, model, configDir, owner string, from *savedSession) (*subscriptionRun, <-chan Event, error) {
 	run, events, err := b.startRun(ctx, req, model, configDir, owner, from)
+	var noStart *tuiNoStart
+	if errors.As(err, &noStart) && ctx.Err() == nil {
+		// marked broken, the next run is -p (claudePrintWhy); from was let
+		// go with the run
+		log.Printf("claude: Claude Code's interactive mode did not start (%v); the turn goes to -p", err)
+		return b.startRun(ctx, req, model, configDir, owner, nil)
+	}
 	var full *claudeFull
 	var refused *cliSchemaRefused
 	if err != nil && from != nil && !errors.As(err, &full) && !errors.As(err, &refused) && ctx.Err() == nil {
@@ -822,7 +829,11 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	tui := claudeTUI(req, binary, prompt)
 	var cmd *exec.Cmd
 	if tui {
-		cmd = proc.CommandContext(context.Background(), exe, append([]string{claudetui.Command, binary.path}, args...)...)
+		helper := exe
+		if claudeTUIHelper != "" {
+			helper = claudeTUIHelper
+		}
+		cmd = proc.CommandContext(context.Background(), helper, append([]string{claudetui.Command, binary.path}, args...)...)
 	} else {
 		cmd = binary.command(context.Background(), args...)
 	}
@@ -917,8 +928,24 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		// it has loaded the session, and one that can't exits instead
 		// (start tells a new one the whole conversation): told the turn
 		// first, it ended with no reply.
-		if err := run.cliControl(map[string]any{"subtype": "initialize"}); err != nil {
+		// The interactive mode's helper answers it once Claude Code shows
+		// its prompt, or, when it doesn't in claudetui.ReadyWait, once
+		// the helper has become -p: the wait is that long and -p's after
+		// it. 10s ended the helper as it waited, before it became -p, and
+		// every try of the turn was answered 502 (#4504).
+		wait := controlWait
+		if tui {
+			wait = tuiInitWait
+		}
+		if err := run.cliControlWithin(ctx, map[string]any{"subtype": "initialize"}, wait); err != nil {
 			run.abort()
+			var unanswered *controlUnanswered
+			if tui && errors.As(err, &unanswered) {
+				// the helper hung: runs here are -p for a while, this
+				// turn's next try too (start)
+				claudetui.MarkBroken()
+				return nil, nil, &tuiNoStart{err}
+			}
 			return nil, nil, err
 		}
 	}
@@ -941,6 +968,32 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	}
 	return run, segment, nil
 }
+
+// claudeTUIHelper, when set, is run as the interactive mode's helper in
+// place of magpie's executable: a test's stand-in.
+var claudeTUIHelper string
+
+// controlWait is how long Claude Code may take to answer a control
+// request; tuiInitWait the interactive mode's helper its initialize: as
+// long as Claude Code may take to show its prompt, and then -p's
+// controlWait with room, for the helper become -p to answer it.
+var (
+	controlWait = 10 * time.Second
+	tuiInitWait = claudetui.ReadyWait + 2*controlWait
+)
+
+// controlUnanswered is a control request Claude Code took and didn't
+// answer in time.
+type controlUnanswered struct{ what string }
+
+func (e *controlUnanswered) Error() string { return "Claude Code has not " + e.what }
+
+// tuiNoStart is a run whose interactive mode's helper never answered its
+// initialize request: start tries the turn again as -p.
+type tuiNoStart struct{ err error }
+
+func (e *tuiNoStart) Error() string { return e.err.Error() }
+func (e *tuiNoStart) Unwrap() error { return e.err }
 
 // claudeTUIRuns is false where magpie's executable has no shim to run:
 // the gateway's tests, whose fake Claude Codes are -p ones.
@@ -989,6 +1042,7 @@ func claudePrintWhy(req *Request, binary claudeCLI, prompt []map[string]any) str
 		{len(req.Format.schema()) > 0, "a JSON schema"},
 		{urlImages(req.Messages) > 0, "an image known by its URL"},
 		{settings.Load().ClaudePrintMode, "the interactive mode is turned off"},
+		{tuiBroken(), "the interactive mode failed to start lately"},
 		{len(b) > tuiPromptMost, "a first message over 400KB"},
 	} {
 		if c.is {
@@ -1044,9 +1098,22 @@ func (r *subscriptionRun) setSafeguards(req *Request) error {
 	return err
 }
 
+// tuiBroken is whether the interactive mode failed to start on this
+// machine lately (claudetui.BrokenSince): a run is -p at once, rather
+// than its helper's finding so after it starts.
+func tuiBroken() bool {
+	_, ok := claudetui.BrokenSince()
+	return ok
+}
+
 // cliControl shares the SDK reply dispatcher with rewind, so unrelated or
 // late control responses cannot acknowledge a safety-context update.
 func (r *subscriptionRun) cliControl(request map[string]any) error {
+	return r.cliControlWithin(context.Background(), request, controlWait)
+}
+
+// cliControlWithin is cliControl, answered within wait, while ctx lasts.
+func (r *subscriptionRun) cliControlWithin(ctx context.Context, request map[string]any, wait time.Duration) error {
 	id := randomToken()
 	ch := make(chan controlReply, 1)
 	// one that ended says how, and the last it wrote to stderr: "Claude
@@ -1071,7 +1138,7 @@ func (r *subscriptionRun) cliControl(request map[string]any) error {
 	if err := r.tell(line); err != nil {
 		return err
 	}
-	t := time.NewTimer(10 * time.Second)
+	t := time.NewTimer(wait)
 	defer t.Stop()
 	select {
 	case reply, ok := <-ch:
@@ -1082,8 +1149,10 @@ func (r *subscriptionRun) cliControl(request map[string]any) error {
 			return fmt.Errorf("Claude settings: %s", reply.Error)
 		}
 		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	case <-t.C:
-		return fmt.Errorf("Claude Code has not %s in 10s", what)
+		return &controlUnanswered{fmt.Sprintf("%s in %s", what, wait)}
 	}
 }
 
