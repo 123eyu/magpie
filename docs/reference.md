@@ -2999,12 +2999,17 @@ the command.
 Rex (superlogical.com/rex) is listed too when its `rex` program is found,
 on `PATH` or inside a `Rex*.app` in `/Applications` or `~/Applications`
 (only a native program counts, so the Perl tool also called `rex` is not
-taken). Rex claims no `.command` files, so magpie opens it through its CLI:
-`rex run --label <session or agent> -- /bin/sh -c '<command>; exec $SHELL -l'`
-adds a tab to the session Rex shows. When there is no session to add to
-(exit 3) it runs `rex new` instead, and when Rex's server can't be reached
-(exit 4) it says to open Rex. The same applies to an agent's *Open in
-terminal* and a carried-over session (StringKe, #4565;
+taken). Rex claims no `.command` files, so magpie opens it through its CLI,
+in a Rex session of its own labelled `magpie`. Outside Rex, `rex run` with no
+`-s` adds a tab only when Rex has exactly one session: with none or several it
+exits 3 (not found or ambiguous), and the CLI can't tell which session the app
+shows. So magpie finds its session with `rex ls --json` and runs
+`rex run -s <its ID> --label=<session or agent> -- /bin/sh -c '<command>; exec $SHELL -l'`,
+then names the new tab with `rex window rename`. With no such session (or one
+that ended since the list) it runs `rex new magpie --window=<session or agent> -- …`,
+whose first tab is so named. When Rex's server can't be reached (exit 4) it
+says to open Rex. The same applies to an agent's *Open in terminal* and a
+carried-over session (StringKe, #4565;
 [`terminal_rex.go`](../internal/gui/terminal_rex.go)).
 
 Keys in the terminal version:
