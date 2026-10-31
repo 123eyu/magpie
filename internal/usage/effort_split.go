@@ -50,28 +50,50 @@ type effortDiskEntry struct {
 	Sums  map[string][]sessions.ModelEffort `json:"sums"`
 }
 
-func effortDiskEntryRead() (effortDiskEntry, bool) {
+// effortDiskPeriods bounds the periods the file holds, the last written
+// first. It held one: the Sessions list's All and the overview's period
+// wrote over each other, so every start paired one of them a few days at
+// a time again, ~100 MB of a warm start's live heap and seconds of CPU
+// (#2278).
+const effortDiskPeriods = 4
+
+// effortDiskEntries is the file's entries; a file of one entry, as
+// releases before wrote it, is that one.
+func effortDiskEntries() []effortDiskEntry {
 	b, err := os.ReadFile(effortDiskPath())
 	if err != nil {
-		return effortDiskEntry{}, false
+		return nil
 	}
-	var e effortDiskEntry
-	if json.Unmarshal(b, &e) != nil || e.Sums == nil {
-		return effortDiskEntry{}, false
+	var all []effortDiskEntry
+	if json.Unmarshal(b, &all) != nil {
+		var e effortDiskEntry
+		if json.Unmarshal(b, &e) != nil {
+			return nil
+		}
+		all = []effortDiskEntry{e}
 	}
-	return e, true
+	return slices.DeleteFunc(all, func(e effortDiskEntry) bool { return e.Sums == nil })
 }
 
 func effortDiskRead(key string) (map[string][]sessions.ModelEffort, bool) {
-	e, ok := effortDiskEntryRead()
-	if !ok || e.Key != key {
-		return nil, false
+	for _, e := range effortDiskEntries() {
+		if e.Key == key {
+			return e.Sums, true
+		}
 	}
-	return e.Sums, true
+	return nil, false
 }
 
+// effortDiskWrite keeps sums under key, in place of the entry of the same
+// since, through a file renamed over the last.
 func effortDiskWrite(key string, cut, since time.Time, sums map[string][]sessions.ModelEffort) error {
-	b, err := json.Marshal(effortDiskEntry{Key: key, Cut: cut, Since: since, Sums: sums})
+	all := []effortDiskEntry{{Key: key, Cut: cut, Since: since, Sums: sums}}
+	for _, o := range effortDiskEntries() {
+		if o.Key != key && !o.Since.Equal(since) && len(all) < effortDiskPeriods {
+			all = append(all, o)
+		}
+	}
+	b, err := json.Marshal(all)
 	if err != nil {
 		return err
 	}
@@ -186,8 +208,14 @@ func effortCold(cut, since time.Time, identities map[string]sessions.CodexIdenti
 // an earlier cut counted under the same key there and a pairing of the
 // chunks of the days between, written under key; or false.
 func effortAdvance(d heatDiskRef, cut, since, until time.Time, identities map[string]sessions.CodexIdentity, sets [3][]*rowChunk, key string) (map[string][]sessions.ModelEffort, bool) {
-	e, ok := effortDiskEntryRead()
-	if !ok || e.Cut.IsZero() || !e.Cut.Before(cut) || !e.Since.Equal(since) {
+	var e effortDiskEntry
+	for _, o := range effortDiskEntries() {
+		if o.Since.Equal(since) {
+			e = o
+			break
+		}
+	}
+	if e.Cut.IsZero() || !e.Cut.Before(cut) {
 		return nil, false
 	}
 	at := e.Cut.In(cut.Location())
