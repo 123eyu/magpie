@@ -2477,6 +2477,8 @@ type keptAlive struct {
 	// it asked; streams, whether it asked for a stream
 	told    time.Time
 	streams bool
+	// codex, whether Codex sent the request (fromCodex)
+	codex bool
 	// Only opted-in Claude cache reporting can defer initial keepalives.
 	// Selection releases it before process startup; expiry keeps the stream alive.
 	cacheReportUntil time.Time
@@ -2492,6 +2494,18 @@ type keptAlive struct {
 // Discord). Each try was held for up to holdThinking or holdLead by
 // itself, so a second held try, or a group's pause (#1418), went past it.
 var agentQuietMost = 4 * time.Minute
+
+// compactsInStream says a refusal of a request too large to be taken —
+// past the vendor's byte cap (413) or the model's window (tooLong) — goes
+// to the agent in its stream though none was sent yet: Codex compacts on
+// response.failed context_length_exceeded alone. Told by status, it takes
+// a 413 for an unexpected status and a 400 context_length_exceeded for an
+// invalid request, and either ends the turn with nothing compacted, a
+// compaction refused the same way failing outright (codex-rs codex-api
+// api_bridge.rs). Another client keeps the status.
+func (a *keptAlive) compactsInStream(status int, msg string) bool {
+	return a.codex && a.streams && a.proto == provider.Responses && (status == http.StatusRequestEntityTooLarge || tooLong(status, msg))
+}
 
 // tooQuiet says whether a Responses agent that has had no event of its
 // reply would go agentQuietMost without one after d more.
