@@ -690,7 +690,7 @@ func openURLInBrowser(url string) {
 }
 
 // refreshAccounts: `magpie accounts refresh` renews the sign-in of every
-// saved ChatGPT account, and every saved Claude account that is on (Claude
+// saved ChatGPT account, and every saved Claude account, on or off (Claude
 // Code's /usage run in its own directory), the agent isn't signed in to
 // now — what the gateway does every eight days, for a magpie that isn't
 // left running (cron, launchd). A sign-in the vendor refuses is marked as
