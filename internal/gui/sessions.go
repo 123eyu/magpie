@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"maps"
+	"math"
 	"net/http"
 	"os"
 	"reflect"
 	"runtime"
 	"runtime/debug"
+	"runtime/metrics"
 	"slices"
 	"strconv"
 	"strings"
@@ -788,8 +790,9 @@ func underTightGC(fn func()) {
 // when the first to begin ended before the second.
 var tightGC struct {
 	sync.Mutex
-	n   int // reads under it
-	was int // GOGC before the first
+	n      int  // reads under it
+	was    int  // GOGC before the first
+	hooked bool // a retightenGC is waiting for the next collection
 }
 
 // tightenGC begins a read under a tight GC; undo ends it.
@@ -802,6 +805,10 @@ func tightenGC() (undo func()) {
 			debug.SetGCPercent(was)
 		}
 		tightGC.was = was
+		if tightGCRoom > 0 && !tightGC.hooked {
+			tightGC.hooked = true
+			afterNextGC(retightenGC)
+		}
 	}
 	tightGC.n++
 	return sync.OnceFunc(func() {
@@ -820,6 +827,58 @@ func tightenGC() (undo func()) {
 // MB and 271–275 MB, for ~20% more CPU in the first start's minute and
 // ~2 s a minute of polls asking ten answers every 5 s (#2278).
 const tightGCPercent = 10
+
+// tightGCRoom is the least a tight GC lets the heap grow by before a
+// collection. A tenth of a small heap is a few MB: a first start's reads
+// began on a ~50 MB heap and allocate ~400 MB a second, so it collected
+// ~28 times a second, 2,205 times in its first 78 s, and the collections
+// were 69–72 s of its ~4:10 of CPU (#2278). With this room a heap of
+// over 320 MB is held to a tenth still; one below grows by 32 MB. 0 in
+// tests, whose GOGC is read as tightGCPercent while a read is under it.
+var tightGCRoom = func() int64 {
+	if testing.Testing() {
+		return 0
+	}
+	return 32 << 20
+}()
+
+// tightPercent is the GOGC a tight GC sets on a live heap of live bytes:
+// tightGCPercent, or enough for tightGCRoom, never above was, what was
+// set before (off stays off).
+func tightPercent(live int64, was int) int {
+	p := tightGCPercent
+	if live > 0 && tightGCRoom > 0 {
+		p = max(p, int(min(tightGCRoom*100/live, math.MaxInt32)))
+	}
+	if was < p {
+		return was
+	}
+	return p
+}
+
+// retightenGC sets the GOGC for the heap the collection just left, while
+// a read is under a tight GC, and waits for the next one.
+func retightenGC() {
+	tightGC.Lock()
+	defer tightGC.Unlock()
+	if tightGC.n == 0 {
+		tightGC.hooked = false
+		return
+	}
+	s := []metrics.Sample{{Name: "/gc/heap/live:bytes"}}
+	metrics.Read(s)
+	if s[0].Value.Kind() == metrics.KindUint64 {
+		debug.SetGCPercent(tightPercent(int64(s[0].Value.Uint64()), tightGC.was))
+	}
+	afterNextGC(retightenGC)
+}
+
+// afterNextGC runs fn on the finalizer goroutine once the next collection
+// has finished.
+func afterNextGC(fn func()) {
+	type tick struct{ _ *byte } // a pointer keeps it off the tiny allocator
+	runtime.SetFinalizer(&tick{}, func(*tick) { go fn() })
+}
 
 // agentCommand is the shell line that starts a: its Launch where it has
 // one (agy, Claude Science, Cursor Private Inference), else its own
