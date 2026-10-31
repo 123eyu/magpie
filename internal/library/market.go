@@ -960,10 +960,12 @@ func (l *Library) haveSkill(source, id, name string) string {
 		}
 	}
 	// one taken in from an agent's folder (npx skills puts them in
-	// ~/.agents/skills) has no source to match, and adding is turned away
-	// by name all the same (InstallMarketSkill): it's had by its name
+	// ~/.agents/skills) has no repository to match: it's had by its name,
+	// unless it is known to come from another repository. One by that name
+	// from another repository is another skill, added beside it
+	// (skill_beside.go)
 	for _, n := range []string{id, name} {
-		if s := l.skill(n); s != nil {
+		if s := l.skill(n); s != nil && (s.Source == nil || s.Source.Kind == "folder") && (s.From == "" || strings.EqualFold(s.From, source)) {
 			return s.Name
 		}
 	}

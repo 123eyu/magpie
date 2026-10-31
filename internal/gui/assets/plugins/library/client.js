@@ -5110,7 +5110,11 @@ magpie.plugin("library", (ctx) => {
         const w = el("span", "who");
         w.append(el("span", "name", x.name), el("span", "sub", x.description || x.path || ""));
         r.append(cb, w);
-        if (x.have) r.append(tag(t("in the library"), ""));
+        // another skill from elsewhere has its name (mora1n on Discord):
+        // this one is in the library, or goes in beside it, by its own
+        if (x.have && x.as) r.append(tag(t("In the library as {name}", { name: x.as }), "lib-as", t("In the library as {name}", { name: x.as })));
+        else if (x.have) r.append(tag(t("in the library"), ""));
+        else if (x.as) r.append(tag(t("adds as {name}", { name: x.as }), "lib-as", t("The library has another skill called {name}, from elsewhere. This one goes in beside it as {as}.", { name: x.name, as: x.as })));
         list.append(r);
       }
     };
