@@ -87,7 +87,12 @@ func codexAppRoute() (route string, out, known bool) {
 	defer filememo.Hold()()
 	home, _ := homes()
 	a := codex(home)
-	if _, err := os.ReadFile(a.Path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	// opened, not read: a config.toml of 1.5 MB (Codex keeps every
+	// project's trust level in it) read whole every 3s was 1.55 GB of a
+	// live magpie's 33 GB in 53 minutes; the keys below come from filememo
+	if f, err := os.Open(a.Path); err == nil {
+		f.Close()
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		return "", false, false
 	}
 	out = a.AppOut != nil && a.AppOut()
