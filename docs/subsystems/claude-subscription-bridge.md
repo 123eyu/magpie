@@ -117,7 +117,23 @@ talks to it as it talks to `-p`: stream-json in and out. The helper:
   the `-p` run's (`proc.Command`). Ending, the helper closes the console
   (Claude Code is told as a closed window tells it) and kills it after
   3s. Its `-p` fallback runs Claude Code as a child, since Windows has no
-  exec;
+  exec. A Claude Code in WSL is run the same way, through `wsl.exe` in
+  the console: the gateway hands the helper `MAGPIE_CLAUDE_TUI_WSL`
+  (`claudetui.WSL`, `claudeCLI.tuiWSL`), wsl.exe's arguments up to
+  Claude Code's (`wslrun.Tool.Args`, `MAGPIE_WSL_RUN` among them), the
+  distro's mount of the drives, and the projects folder as Windows reads
+  it: the account's config directory (handed in as
+  `CLAUDE_CONFIG_DIR/p`), or the distro user's own `~/.claude/projects`
+  through `\\wsl$\<distro>` (`wslrun.Tool.Home`, from the probe). `TERM` is
+  added to `WSLENV`, and an image's path is pasted as the distro reads
+  it (`/mnt/c/…`, `shim.path`). The helper itself is the Windows
+  magpie.exe, not the `/mnt/c/…` path the MCP helper is started at.
+  In the distro user's own folder the run is `-p` when Windows can't
+  stat `\\wsl$\<distro>\<home>` (`tuiWSLUnread`), since the helper
+  would wait for a transcript it can't see: a session with no 9P
+  redirector, as one over ssh, reads nothing there.
+  Killing the gateway ended the distro's Claude Code with wsl.exe (tried
+  on Windows 11 26200, magpie-desktop, Claude Code 2.1.289);
 - pastes each user message into the prompt (bracketed paste) and presses
   Enter. A message opening with `/`, `!`, `#` or `&` is pasted after a
   line break, so it is words, not a command (`pasteable`);
@@ -173,7 +189,8 @@ A run is `-p`, as before, when (`claudeTUI`):
 
 - Settings › Models › Replies › Claude Code's interactive mode is Off
   (`claudePrintMode`);
-- it is Claude Code in WSL;
+- it is Claude Code in WSL whose home the probe didn't find, or, in
+  the distro user's own folder, one Windows can't read;
 - the request has safeguards, client cache marks, a JSON schema, an image
   known only by its URL (`urlImages`: the helper pastes files, and has no
   bytes of it), or words over 400KB (`tuiPromptMost`, images not counted),

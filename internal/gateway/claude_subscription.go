@@ -47,6 +47,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -631,6 +632,38 @@ func (c claudeCLI) file(path string) string {
 	return path
 }
 
+// tuiWSL is how the interactive mode's helper runs this Claude Code, one
+// in WSL, in config directory configDir (claudetui.WSL), as JSON: its
+// transcripts read from Windows, through \\wsl$ for the distro's own
+// folder.
+func (c claudeCLI) tuiWSL(configDir string) string {
+	projects := filepath.Join(configDir, "projects")
+	if configDir == "" {
+		projects = c.wsl.Windows(path.Join(c.wsl.Home, ".claude", "projects"))
+	}
+	b, _ := json.Marshal(claudetui.WSL{Args: c.wsl.Args(), Mount: c.wsl.Mount, Projects: projects})
+	return string(b)
+}
+
+// wslStat is os.Stat; a var for tests.
+var wslStat = os.Stat
+
+// tuiWSLUnread is the folder of this Claude Code in WSL that Windows can't
+// read, where its transcripts are in config directory configDir: the
+// distro user's home through \\wsl$ for its own folder, which a session
+// with no 9P redirector (one over ssh) has none of. "" when it is read,
+// or is the account's, a Windows folder.
+func (c claudeCLI) tuiWSLUnread(configDir string) string {
+	if configDir != "" {
+		return ""
+	}
+	home := c.wsl.Windows(c.wsl.Home)
+	if _, err := wslStat(home); err != nil {
+		return home
+	}
+	return ""
+}
+
 // exe is magpie's own executable, as this Claude Code starts it.
 func (c claudeCLI) exe() (string, error) {
 	if c.wsl != nil {
@@ -827,13 +860,34 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	// the shim (claudetui) is handed the -p arguments, and becomes that -p
 	// run when the interactive one doesn't start
 	tui := claudeTUI(req, binary, prompt)
+	if tui && binary.wsl != nil {
+		// the helper would wait for a transcript it can't see
+		if dir := binary.tuiWSLUnread(configDir); dir != "" {
+			log.Printf("claude: this run is -p: Windows can't read %s, where Claude Code in WSL writes its transcripts", dir)
+			tui = false
+		}
+	}
 	var cmd *exec.Cmd
 	if tui {
 		helper := exe
+		if binary.wsl != nil {
+			// the helper runs here, on Windows: exe is magpie as the
+			// distro starts it (/mnt/c/…), for the MCP helper
+			if helper, err = os.Executable(); err != nil {
+				cleanup()
+				return nil, nil, err
+			}
+		}
 		if claudeTUIHelper != "" {
 			helper = claudeTUIHelper
 		}
-		cmd = proc.CommandContext(context.Background(), helper, append([]string{claudetui.Command, binary.path}, args...)...)
+		// Claude Code in WSL is run through wsl.exe, its arguments in
+		// claudetui.WSLEnv
+		claude := binary.path
+		if binary.wsl != nil {
+			claude = "wsl.exe"
+		}
+		cmd = proc.CommandContext(context.Background(), helper, append([]string{claudetui.Command, claude}, args...)...)
 	} else {
 		cmd = binary.command(context.Background(), args...)
 	}
@@ -857,6 +911,9 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		env = append(env, claudetui.TrustEnv+"=1")
 	}
 	cmd.Env = binary.env(binary.asRoot(env), configDir)
+	if tui && binary.wsl != nil {
+		cmd.Env = append(cmd.Env, claudetui.WSLEnv+"="+binary.tuiWSL(configDir))
+	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		cleanup()
@@ -1008,8 +1065,8 @@ const tuiPromptMost = 400 << 10
 // person runs it (claudetui), rather than -p: the plan counts a -p
 // request, its entrypoint sdk-cli, at about twice the interactive mode's
 // (anthropics/claude-code#97074). On unless the user turned it off
-// (ClaudePrintMode), on macOS, Linux and Windows, for a run whose Claude Code is
-// this machine's; not for what only -p takes: safeguards and a client's
+// (ClaudePrintMode), on macOS, Linux and Windows, Claude Code in WSL too (its home
+// known, so its transcripts are found); not for what only -p takes: safeguards and a client's
 // cache marks (control requests and an extra body), a JSON schema, and
 // images. prompt is the run's first message.
 func claudeTUI(req *Request, binary claudeCLI, prompt []map[string]any) bool {
@@ -1035,8 +1092,8 @@ func claudePrintWhy(req *Request, binary claudeCLI, prompt []map[string]any) str
 	}{
 		{!claudeTUIRuns, "no shim"},
 		{runtime.GOOS != "darwin" && runtime.GOOS != "linux" && runtime.GOOS != "windows", runtime.GOOS},
-		{binary.wsl != nil, "Claude Code in WSL"},
-		{binary.path == "", "no Claude Code path"},
+		{binary.wsl != nil && binary.wsl.Home == "", "Claude Code in WSL, its home unknown"},
+		{binary.wsl == nil && binary.path == "", "no Claude Code path"},
 		{len(req.Safeguards) > 0, "safeguards"},
 		{req.clientCache != nil, "the client's cache marks"},
 		{len(req.Format.schema()) > 0, "a JSON schema"},

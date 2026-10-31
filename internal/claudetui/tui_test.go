@@ -506,3 +506,30 @@ func TestTranslatorAPIError(t *testing.T) {
 		t.Fatalf("result %v", r)
 	}
 }
+
+// A Claude Code in WSL is pasted an image's path as the distro reads it,
+// and is handed TERM through WSLENV, the gateway's own names kept.
+func TestShimInWSL(t *testing.T) {
+	s := &shim{wsl: &WSL{Args: []string{"-d", "Ubuntu"}, Mount: "/mnt/", Projects: `\\wsl$\Ubuntu\home\me\.claude\projects`}}
+	if got := s.path(`C:\Users\me\AppData\Local\Temp\magpie-images-1\1.png`); got != "/mnt/c/Users/me/AppData/Local/Temp/magpie-images-1/1.png" {
+		t.Fatalf("path %q", got)
+	}
+	if got := (&shim{}).path("/tmp/a.png"); got != "/tmp/a.png" {
+		t.Fatalf("this machine's path %q", got)
+	}
+	t.Setenv(WSLEnv, `{"args":["-d","Ubuntu"],"projects":"x"}`)
+	t.Setenv("WSLENV", "CLAUDE_CONFIG_DIR/p")
+	env := childEnv()
+	var wslenv []string
+	for _, e := range env {
+		if strings.HasPrefix(e, WSLEnv+"=") {
+			t.Fatalf("the child was handed %s", e)
+		}
+		if strings.HasPrefix(strings.ToUpper(e), "WSLENV=") {
+			wslenv = append(wslenv, e)
+		}
+	}
+	if len(wslenv) != 1 || wslenv[0] != "WSLENV=CLAUDE_CONFIG_DIR/p:TERM" {
+		t.Fatalf("WSLENV %q", wslenv)
+	}
+}
