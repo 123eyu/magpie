@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"errors"
+	"io"
 	"maps"
 	"math"
 	"net/http"
@@ -192,7 +193,7 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			rw.WriteHeader(http.StatusOK)
 			return
 		}
-		tag := writeSame(rw, r, func(b *bytes.Buffer) error { return statsAnswer(b, st, agents) })
+		tag := writeSame(rw, r, func(w io.Writer) error { return statsAnswer(w, st, agents) })
 		if tag != "" {
 			statsTags.Lock()
 			if statsTags.m == nil || len(statsTags.m) >= statsMemoMost {
@@ -966,52 +967,75 @@ func viaOf(x usage.ViaIndex, s sessions.Session) []usage.Via {
 	return nil
 }
 
-// statsAnswer writes the stats answer into b as an Encoder of
-// struct{ sessions.Stats; Agents } does, its days one at a time: encoded
-// whole, the Encoder's own buffer grew to the ~6 MB answer from nothing
-// after each collection, ~200 MB of 90 s of polls while an agent worked
-// (#2278).
-func statsAnswer(b *bytes.Buffer, st sessions.Stats, agents map[string]string) error {
-	enc := json.NewEncoder(b)
+// statsAnswer writes the stats answer to w as an Encoder of
+// struct{ sessions.Stats; Agents } does, a part at a time: encoded whole,
+// the Encoder's own buffer grew to the ~6 MB answer from nothing after
+// each collection, ~200 MB of 90 s of polls while an agent worked, and a
+// buffer kept for the next held it between polls (#2278).
+func statsAnswer(w io.Writer, st sessions.Stats, agents map[string]string) error {
+	var part bytes.Buffer
+	enc := json.NewEncoder(&part)
 	// v as Marshal writes it: Encode ends it with a newline
 	put := func(v any) error {
+		part.Reset()
 		if err := enc.Encode(v); err != nil {
 			return err
 		}
-		b.Truncate(b.Len() - 1)
-		return nil
+		_, err := w.Write(part.Bytes()[:part.Len()-1])
+		return err
 	}
-	b.WriteString(`{"from":`)
+	text := func(s string) error {
+		_, err := io.WriteString(w, s)
+		return err
+	}
+	if err := text(`{"from":`); err != nil {
+		return err
+	}
 	if err := put(st.From); err != nil {
 		return err
 	}
-	b.WriteString(`,"to":`)
+	if err := text(`,"to":`); err != nil {
+		return err
+	}
 	if err := put(st.To); err != nil {
 		return err
 	}
-	b.WriteString(`,"days":`)
+	if err := text(`,"days":`); err != nil {
+		return err
+	}
 	if st.Days == nil {
-		b.WriteString("null")
+		if err := text("null"); err != nil {
+			return err
+		}
 	} else {
-		b.WriteByte('[')
+		if err := text("["); err != nil {
+			return err
+		}
 		for i := range st.Days {
 			if i > 0 {
-				b.WriteByte(',')
+				if err := text(","); err != nil {
+					return err
+				}
 			}
 			if err := put(&st.Days[i]); err != nil {
 				return err
 			}
 		}
-		b.WriteByte(']')
+		if err := text("]"); err != nil {
+			return err
+		}
 	}
-	b.WriteString(`,"keys":`)
+	if err := text(`,"keys":`); err != nil {
+		return err
+	}
 	if err := put(st.Keys); err != nil {
 		return err
 	}
-	b.WriteString(`,"agents":`)
+	if err := text(`,"agents":`); err != nil {
+		return err
+	}
 	if err := put(agents); err != nil {
 		return err
 	}
-	b.WriteString("}\n")
-	return nil
+	return text("}\n")
 }

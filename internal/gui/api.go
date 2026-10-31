@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"maps"
 	"mime"
@@ -2899,20 +2900,21 @@ func writeJSON(rw http.ResponseWriter, v any) {
 // WebView2 is sent no If-None-Match, and Wails turns its 304 into a 505.
 // It returns the tag, or "" when v could not be written.
 func writeJSONSame(rw http.ResponseWriter, r *http.Request, v any) string {
-	return writeSame(rw, r, func(b *bytes.Buffer) error { return json.NewEncoder(b).Encode(v) })
+	return writeSame(rw, r, func(w io.Writer) error { return json.NewEncoder(w).Encode(v) })
 }
 
-// writeSame is writeJSONSame of the answer write puts in b, a kept buffer
-// (answerBuffer).
-func writeSame(rw http.ResponseWriter, r *http.Request, write func(b *bytes.Buffer) error) string {
-	b := answerBuffer()
-	defer keepAnswer(b)
-	if err := write(b); err != nil {
+// writeSame is writeJSONSame of the answer write writes to the writer it
+// is given, called twice: once into the hash, for the tag, and once
+// straight to rw when the page hasn't got it. The answer is never held
+// whole: the stats' ~6 MB each, in buffers kept between polls, were
+// 12.5 MB of a warm start's 169 MB live heap over a full history (#2278).
+func writeSame(rw http.ResponseWriter, r *http.Request, write func(w io.Writer) error) string {
+	h := sha256.New()
+	if err := write(h); err != nil {
 		fail(rw, err)
 		return ""
 	}
-	sum := sha256.Sum256(b.Bytes())
-	tag := hex.EncodeToString(sum[:16])
+	tag := hex.EncodeToString(h.Sum(nil)[:16])
 	rw.Header().Set("X-Magpie-Tag", tag)
 	if r.Header.Get("X-Magpie-Had") == tag {
 		rw.Header().Set("X-Magpie-Same", "1")
@@ -2920,7 +2922,9 @@ func writeSame(rw http.ResponseWriter, r *http.Request, write func(b *bytes.Buff
 		return tag
 	}
 	rw.Header().Set("Content-Type", "application/json")
-	_, _ = rw.Write(b.Bytes())
+	out := bufio.NewWriterSize(rw, 32<<10)
+	_ = write(out) // as the first time: it was written without a fault
+	_ = out.Flush()
 	return tag
 }
 
@@ -2934,52 +2938,6 @@ var sentRows struct {
 }
 
 const sentRowsKept = 4
-
-// answerBuffers are the buffers a long answer is written in, kept between
-// polls: grown from nothing for each, the Sessions tab's list and its
-// stats, ~6 MB each, were ~110 MB of 90 s of polls while an agent worked
-// (#2278). They go answerLinger after the last answer.
-var answerBuffers struct {
-	sync.Mutex
-	free []*bytes.Buffer
-	t    *time.Timer
-}
-
-const answerBuffersKept = 2
-
-var answerLinger = 30 * time.Second
-
-// answerBuffer is a kept buffer, empty, or a new one
-func answerBuffer() *bytes.Buffer {
-	answerBuffers.Lock()
-	defer answerBuffers.Unlock()
-	if n := len(answerBuffers.free); n > 0 {
-		b := answerBuffers.free[n-1]
-		answerBuffers.free = answerBuffers.free[:n-1]
-		return b
-	}
-	return new(bytes.Buffer)
-}
-
-// keepAnswer puts b back once its answer is written: nothing reads it
-// after, a ResponseWriter copies what it is given.
-func keepAnswer(b *bytes.Buffer) {
-	b.Reset()
-	answerBuffers.Lock()
-	defer answerBuffers.Unlock()
-	if len(answerBuffers.free) < answerBuffersKept {
-		answerBuffers.free = append(answerBuffers.free, b)
-	}
-	if answerBuffers.t == nil {
-		answerBuffers.t = time.AfterFunc(answerLinger, func() {
-			answerBuffers.Lock()
-			answerBuffers.free = nil
-			answerBuffers.Unlock()
-		})
-		return
-	}
-	answerBuffers.t.Reset(answerLinger)
-}
 
 // writeJSONRows is writeJSONSame for an answer that is a long list, key,
 // beside the fields of rest: one asked with the tag of a list sent before
