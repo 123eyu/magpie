@@ -1527,7 +1527,16 @@ func (p Provider) Exposed() []catalog.Model {
 	if p.ServesNone() || p.waitsForPicks() {
 		return nil
 	}
-	avail := p.Available()
+	return p.ExposedOf(p.Available())
+}
+
+// ExposedOf is Exposed of avail, p.Available() as the caller has already
+// read it: an editor's look at a provider read the vendor's list four
+// times over, each built afresh with its names and levels.
+func (p Provider) ExposedOf(avail []catalog.Model) []catalog.Model {
+	if p.ServesNone() || p.waitsForPicks() {
+		return nil
+	}
 	byID := make(map[string]catalog.Model, len(avail))
 	for _, m := range avail {
 		byID[m.ID] = m
@@ -1630,6 +1639,15 @@ func (p Provider) Picks() []string {
 		return p.Models
 	}
 	return p.withNewlyListed(p.Models, p.Available())
+}
+
+// PicksOf is Picks of avail, p.Available() as the caller has already read
+// it (ExposedOf).
+func (p Provider) PicksOf(avail []catalog.Model) []string {
+	if len(p.Models) == 0 {
+		return p.Models
+	}
+	return p.withNewlyListed(p.Models, avail)
 }
 
 // withNewlyListed is picks with the models the vendor has listed since
