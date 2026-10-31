@@ -859,8 +859,9 @@ func checkinWhy(msg string) string {
 }
 
 // accountNamed is the saved account of agent that user names: its name as
-// magpie lists it ("a@b.com · Team"), or the email alone when only one of
-// the agent's accounts has it.
+// magpie lists it ("a@b.com · Team"), the email alone when only one of the
+// agent's accounts has it, or the name the user gave it (alias), when that
+// is one account's and no other's email (provider.AccountByName).
 func accountNamed(agent, user string) (string, error) {
 	user = strings.TrimSpace(user)
 	if agent == "copilot" {
@@ -872,6 +873,13 @@ func accountNamed(agent, user string) (string, error) {
 		}
 	}
 	ls := provider.Logins(agent)
+	users := make([]string, 0, len(ls))
+	for _, l := range ls {
+		users = append(users, l.User)
+	}
+	if u, err := provider.AccountByName(agent, users, user); err != nil || u != "" {
+		return u, err
+	}
 	var names, same []string
 	for _, l := range ls {
 		if strings.EqualFold(l.User, user) {

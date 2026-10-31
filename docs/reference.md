@@ -2438,7 +2438,12 @@ name in its provider's editor, or `magpie accounts alias <agent> <email>
 <name>` (`--clear` takes it off). The name is magpie's, kept in
 providers.json; the vendor's or plugin's sign-in is never written to. It
 shows on the account's Usage card, in the menu bar, in `magpie accounts`,
-`magpie quota` and `GET /v1/magpie/quotas` (`alias`). A GLM Coding Plan
+`magpie quota` and `GET /v1/magpie/quotas` (`alias`). The name picks the
+account wherever its email does: `magpie accounts switch claude Work`,
+`forget`, `alias`, `provider pool <id> --accounts` and `provider
+account-cap`. magpie refuses a name two accounts have, or one that is
+another account's email, rather than pick one by guess; `next` after
+`switch` is always the next account (see above). A GLM Coding Plan
 seat added both as a key and as a signed-in ZCode account is shown once, on
 the account's card (two cards would count its allowance twice); that card
 is then named for the key's provider until you name it yourself, and says
