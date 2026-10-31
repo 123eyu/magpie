@@ -1030,7 +1030,16 @@ func claudeIn(at place) *Agent {
 	// Claude Desktop's ids too while it runs on magpie, its Code tab being
 	// Claude Code on this settings.json
 	desktopOn := func() bool {
-		return at.id == "" && at.sys == nil && desktopWiredAny(desktopSets(desktopdir.OS, at.home, os.Getenv))
+		// a distro's: Claude Desktop on Windows runs a Code tab session
+		// whose host is WSL on the distro's Claude Code, which reads
+		// ${CLAUDE_CONFIG_DIR:-$HOME/.claude} there (4.29.0's remote
+		// probe), not Windows' settings.json, and is handed the same
+		// mythos-magpie id and no window; only Windows' Desktop wired
+		// tells (young02036 on Discord: 500K group at "/ 200k" in WSL)
+		if at.sys != nil {
+			return desktopWiredAny(desktopSetsHere())
+		}
+		return at.id == "" && desktopWiredAny(desktopSets(desktopdir.OS, at.home, os.Getenv))
 	}
 	// Desktop's Explore compatibility flag has its own ownership: taking
 	// Claude Code off magpie must leave it while Desktop still needs it.
