@@ -1,7 +1,7 @@
 package usage
 
 import (
-	"slices"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -98,18 +98,41 @@ func coldSpans(since, cut time.Time, sets [3][]*rowChunk, fn func(from, to time.
 // paired whole in each span it reached: the last spans of a long
 // history paired ~340k rows each, ~230k of them a few hundred such
 // files' (#2278). Its rows past a span's reach pair with none of it.
+// It has the strings its rows name alone, copied into one block of its
+// own: a copy of the whole table held the whole file's decoded strings
+// through each span it reached, 5–12 MB of a first start's most live
+// heap (241–245 MB from 250–253).
 func (c *rowChunk) within(lo, hi time.Time) *rowChunk {
 	var rows chunkRows
 	defer rows.release()
 	open := rows.of(c)
 	out := &rowChunk{Source: c.Source, Computer: c.Computer}
 	var actors codexActors
+	// ids is each string's id in out, plus one, and order out's strings
+	// by their id in c; the first is "" in both
+	ids := make([]uint32, len(open.Strings))
+	order := []uint32{}
+	if len(ids) > 0 {
+		ids[0], order = 1, append(order, 0)
+	}
+	size := 0
 	for i := range open.Rows {
 		p := &open.Rows[i]
 		if t := p.Time(); !t.IsZero() && (t.Before(lo) || !t.Before(hi)) {
 			continue
 		}
-		out.Rows = append(out.Rows, *p)
+		t := open.texts(p)
+		for k, id := range t {
+			if ids[id] == 0 {
+				order = append(order, id)
+				ids[id] = uint32(len(order))
+				size += len(open.Strings[id])
+			}
+			t[k] = ids[id] - 1
+		}
+		row := *p
+		out.setTexts(&row, t)
+		out.Rows = append(out.Rows, row)
 		if c.codexActors.ids != nil {
 			actors.add(c.codexActors.at(i))
 		}
@@ -120,7 +143,18 @@ func (c *rowChunk) within(lo, hi time.Time) *rowChunk {
 	if len(out.Rows) == 0 {
 		return nil
 	}
-	out.Strings, out.Shapes, out.codexActors = slices.Clone(open.Strings), slices.Clone(open.Shapes), actors
+	var b strings.Builder
+	b.Grow(size)
+	for _, id := range order {
+		b.WriteString(open.Strings[id])
+	}
+	text := b.String()
+	out.Strings = make([]string, len(order))
+	for i, id := range order {
+		n := len(open.Strings[id])
+		out.Strings[i], text = text[:n], text[n:]
+	}
+	out.shapeIDs, out.codexActors = nil, actors
 	out.Count = len(out.Rows)
 	out.Bytes = int64(len(out.Rows)) * int64(unsafe.Sizeof(packedRow{}))
 	return out
