@@ -639,6 +639,33 @@ Windows has no SCM_RIGHTS for a listening socket in this form, and
 for the gateway to be idle (#577). `make dev` keeps its own handover, a
 new backend listening beside the old one (`gateway.Handover`, `devBackend`).
 
+`magpie update` in a terminal restarts the app the same way
+(gaubeebangeel on X: an agent the gateway serves ran the update at 4am,
+and the app ran on as the old version until it was quit and reopened,
+which cut the agent off). Once it has put the new version in
+(`updateCmd` in [`update_cli.go`](../../internal/cli/update_cli.go)),
+`restartRunning` posts the version to `gateway.RestartPath`
+(`/v1/magpie/restart`, [`restart.go`](../../internal/gateway/restart.go)),
+answered only to a program on this computer over loopback, never to a
+page or another Host (`restartRefused`, the heap profile's rule). The
+updater's `restartBeside` ([`update_beside.go`](../../internal/gui/update_beside.go))
+restarts only when it was the copy replaced (`replaced`, which now also
+compares a Mac's `.app` binary, `bundleExe`), takes the version as
+`ready` without asking the feed, and runs Settings' AutoRestart restart
+(`autoRestart`): at once when the restart cuts nothing short, else
+through `waitIdle`. It answers `restarting`, `waiting` (with `Busy`),
+`current` (another copy) or `unsupported` (`magpie serve`, which has no
+restarter and is restarted the way it was started), and the command says
+which. A magpie older than this answers 404, and the command says to
+quit and reopen it, so the first update into this version still needs
+that. On Windows, with no handover, the restart waits for an idle
+gateway as above, so nothing in flight is cut but the port is closed
+while the new version starts (#4521). See `TestUpdateInATerminalRestartsTheAppWithoutCuttingIt` in
+[`update_beside_unix_test.go`](../../internal/gui/update_beside_unix_test.go),
+`TestRestartAskedOnlyFromThisComputer` in
+[`restart_test.go`](../../internal/gateway/restart_test.go) and
+`TestUpdateAsksTheRunningMagpieToRestart`.
+
 See `TestRestartHandsTheGatewayOver` (the new version a second process,
 a stream across the restart finishing whole, requests during it answered,
 and the old one quitting only after its stream) and

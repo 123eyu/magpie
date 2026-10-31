@@ -36,7 +36,7 @@ type updater struct {
 	stuck   string      // why the .app or binary can't be replaced where it is (update.Stuck, exeStuck)
 	exe     string      // not in a .app: the binary to replace, "" when not writable
 	exeDir  string      // not in a .app: the binary's folder, named when it is stuck there
-	self    os.FileInfo // exe as this process started from it
+	self    os.FileInfo // exe (in a .app: bundleExe) as this process started from it
 	retry   bool        // error: the download failed, and may be tried again
 	mirror  string      // error: the mirror the failed download came through (#893)
 	network bool        // error: the network broke the download off (update.Network)
@@ -44,6 +44,8 @@ type updater struct {
 	// stable: latest was found on Settings' Stable channel
 	stable bool
 	aside  string // Windows: where install moved the running exe, to put back
+	// in a .app: its binary, where this process started from
+	bundleExe string
 	// a version this computer wouldn't start (Smart App Control, #894),
 	// which the clock's checks don't download again; byClock, the check
 	// under way is the clock's
@@ -129,6 +131,7 @@ func updateDue(s settings.Settings, last, now time.Time) bool {
 
 func (u *updater) start() {
 	u.place(runtime.GOOS, update.GUI)
+	gateway.SetRestarter(u.restartBeside) // magpie update in a terminal
 	if u.bundle != "" {
 		go update.ForgetOldStaging(u.bundle) // #3965
 	}
@@ -165,6 +168,12 @@ func (u *updater) place(goos string, gui bool) {
 	if b := bundleOf(); b != "" {
 		if u.stuck = update.Stuck(b); u.stuck == "" {
 			u.bundle = b
+			// what `magpie update` replacing the .app is told by
+			// (replaced)
+			if exe, err := executable(); err == nil {
+				u.bundleExe = exe
+				u.self, _ = os.Stat(exe)
+			}
 		}
 	} else if goos != "darwin" || !gui {
 		if exe, err := executable(); err == nil {
@@ -529,10 +538,17 @@ func (u *updater) assetSize(rel *update.Release) int64 {
 	return rel.Assets[update.BinaryAsset()].Size
 }
 
-// replaced is whether the binary was updated by another magpie since this
-// one started, which runs on from where it was moved aside.
+// replaced is whether the binary, or the .app, was updated by another
+// magpie since this one started (`magpie update` in a terminal), which
+// runs on from where it was moved aside.
 func (u *updater) replaced() bool {
-	return u.exe != "" && update.Replaced(u.exe, u.self)
+	switch {
+	case u.exe != "":
+		return update.Replaced(u.exe, u.self)
+	case u.bundle != "" && u.bundleExe != "":
+		return update.Replaced(u.bundleExe, u.self)
+	}
+	return false
 }
 
 func (u *updater) json() updateJSON { return u.jsonIn("") }
