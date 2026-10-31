@@ -1485,7 +1485,7 @@ func codexIn(at place) *Agent {
 			// in them written as Codex's own (a distro's Codex locks its
 			// files where this machine's locks can't reach)
 			if at.spell == nil {
-				portCodexHome(dir, codexPortUnwire)
+				portCodexHome(dir, codexPortUnwire, true)
 			}
 			// and are listed where Codex now is
 			bringBack()
