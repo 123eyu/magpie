@@ -793,6 +793,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		named, inTurns := clientNamedWorkPlace(req)
 		req.envElsewhere = named != ""
 		req.envInTurns = inTurns
+		req.envDir = named
 		// a caller on another computer that names no folder: Claude Code's
 		// environment is this computer's, and the tools run on the
 		// caller's (packinggoods on Discord: a Mac client of a Windows
@@ -3214,15 +3215,21 @@ const envUnknownNote = "\n\nThe environment given elsewhere in this conversation
 
 // envTurnsNote is envElsewhereNote, in either mode, for a caller whose
 // environment is in its messages, not its instructions (Claude Code
-// 2.1.296 and later, req.envInTurns). envElsewhereNote pointed the model
-// at instructions that describe no environment, while the caller's own
-// came after them as a message, and the gateway's Claude Code gave its
-// own before them all (packinggoods on Discord: a Mac client of a
-// Windows gateway still had commands wrapped in PowerShell). The run's
-// own environment is always the first one given, at the start of its
-// first message, and the caller's comes after it, so the last one given
-// is the caller's. It names no app and no vendor.
-const envTurnsNote = "\n\nOf the environments given in this conversation (working directory, platform, OS, shell, git status), the last one given is the one every tool runs in. Where an earlier one differs, go by the last; nothing has changed and there is no need to check."
+// 2.1.296 and later, req.envInTurns), dir the working directory it names.
+// envElsewhereNote pointed the model at instructions that describe no
+// environment. d77da5bff then said the last environment given is the
+// caller's, taking the run's own to come first; but the run's Claude Code
+// gives its own as a {role: "system"} message after the run's first
+// message (2.1.316, claude-opus-5-5), so after the caller's, and the model
+// was pointed at the gateway's (packinggoods on Discord: a Mac client of a
+// Windows gateway told to use PowerShell). Which comes last depends on
+// Claude Code's version and the model, so the caller's environment is
+// named by its working directory, never by its place. It names no app and
+// no vendor.
+func envTurnsNote(dir string) string {
+	return "\n\nOf the environments given in this conversation (working directory, platform, OS, shell, git status), the one whose working directory is " + dir +
+		" is the one every tool runs in. Any other one describes a computer no tool runs on: don't take a platform, shell or path for a tool call from it. Nothing has changed and there is no need to check."
+}
 
 // envNote is what a run is told after the caller's instructions of where
 // its tools run: "" for a run in the caller's own folder, or for a caller
@@ -3230,7 +3237,7 @@ const envTurnsNote = "\n\nOf the environments given in this conversation (workin
 func envNote(req *Request) string {
 	switch {
 	case req.envElsewhere && req.envInTurns:
-		return envTurnsNote
+		return envTurnsNote(req.envDir)
 	case req.envElsewhere && req.leanPrompt:
 		return envElsewhereLeanNote
 	case req.envElsewhere:

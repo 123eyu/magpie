@@ -185,6 +185,8 @@ type Request struct {
 	// Code's environment as a {role: "system"} message), not in the
 	// caller's instructions (envTurnsNote).
 	envInTurns bool
+	// envDir: that working directory, as the caller names it.
+	envDir string
 	// envUnknown: the caller is on another computer (remoteCaller) and its
 	// instructions name no working directory, so the run's own prompt
 	// describes a machine no tool runs on, and nothing says which does
