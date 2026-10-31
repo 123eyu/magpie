@@ -181,6 +181,7 @@ func shaped(kind, v string) string {
 		shapes[f] = kind
 		addKnown(f, k)
 	}
+	touch(f)
 	mu.Unlock()
 	if taken && have != k {
 		// another value's made-up key, which nothing ever is by chance
@@ -417,6 +418,7 @@ func ipStandIn(v string) (string, bool) {
 		f := at(i)
 		have, taken := values[f]
 		if taken && have == v {
+			touch(f)
 			return f, true
 		}
 		if !taken && free == "" {
@@ -431,6 +433,7 @@ func ipStandIn(v string) (string, bool) {
 	kinds["IP"] = true
 	shapes[free] = "IP"
 	addKnown(free, v)
+	touch(free)
 	return free, true
 }
 
@@ -461,6 +464,7 @@ func standIn(put func(kind, v string) string) func(kind, v string) string {
 			shapes[f] = kind
 			addKnown(f, v)
 		}
+		touch(f)
 		mu.Unlock()
 		if taken && have != v {
 			return put(kind, v)
