@@ -474,16 +474,35 @@ func (u *unroutedHold) inBody() bool {
 	return false
 }
 
-// bodyArriving is whether less of the body has come than the request's
-// own Content-Length says. The hold can run out between two reads, or
-// before the first, and a read's absence alone answered such a request
+// bodyArriving is whether the handler has begun reading the body, is
+// between two of its reads, and less has come than the request's own
+// Content-Length says. The hold can run out in the gap between two reads
+// of a trickled body, and a read's absence alone answered such a request
 // 504, as if magpie held it of its own (a full run raced one out there,
 // #4511); a body short of its length is still arriving, and the time is
-// the client's. A body read whole, a length never said and an empty one
-// are judged by the read alone.
+// the client's. Not before its first read: a request waiting for body
+// room (bodyRoom.take) is held by magpie, whose 503 or 504 says so, and
+// its client may have sent the whole body already. A body read whole, a
+// length never said and an empty one are judged by the read alone.
 func (u *unroutedHold) bodyArriving() bool {
 	d := u.r.ContentLength
-	return d > 0 && u.bodyRead.Load() < d
+	if d <= 0 || u.bodyRead.Load() >= d {
+		return false
+	}
+	u.wmu.Lock()
+	defer u.wmu.Unlock()
+	read := false
+	for _, k := range u.kinds {
+		switch k.kind {
+		case "body":
+			read = true
+		case "body room":
+			if k.n > 0 {
+				return false
+			}
+		}
+	}
+	return read
 }
 
 // bodySaid is how much of u's request's body had come, and when the last
