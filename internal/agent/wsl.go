@@ -497,7 +497,9 @@ var wslKinds = []wslKind{
 				return append(miniMaxOwnOptions("", cur["model"]), viaMagpie("minimax-code", magpieID+"/")...)
 			}
 		}},
-	{id: "dsh", name: "DeepSeek Harness", dir: ".dsh", bin: "dsh", in: dshIn,
+	// version: a dsh with no profile yet is told from one before profiles
+	// by it (liby233)
+	{id: "dsh", name: "DeepSeek Harness", dir: ".dsh", bin: "dsh", in: dshIn, version: true,
 		restart: newNotice("{agent} in WSL {distro} reads its config at start-up — restart open dsh sessions to use this."),
 		asleep: func(key string) func(map[string]string) []Option {
 			// the thinking levels hang on which patch lists there are, the
