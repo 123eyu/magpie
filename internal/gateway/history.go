@@ -424,8 +424,15 @@ func tally(d dayFile, c counted) counted {
 // was one answered under Google's name for the deployment serving its
 // Gemini model (gemini-3.8-flash as gemini-3.8-flash-n) or xAI's for a Grok
 // one (grok-4.7 as grok-4.7-build), usage.ServingName, nor one answered
-// under the name its provider's list gives it (usage.ListedAs).
+// under the name its provider's list gives it (usage.ListedAs). Its
+// agent is named again as usage.AgentOf names it now, as the ledger's
+// records are: Kimi Code's "kimi-code-cli", kept before AgentOf knew it,
+// is Kimi Code ("kimi") on the Routing page and the Context tab too, its
+// icon and name with it, not a card of its own drawn as the cube (jiabubu).
 func (r *Route) routedAgain() {
+	if r.Agent != "" {
+		r.Agent = usage.AgentOf(r.Agent)
+	}
 	for i := range r.Tries {
 		if tr := &r.Tries[i]; tr.Swapped && usage.GroupRouted(tr.Model, tr.Served) {
 			tr.Swapped, tr.Routed = false, true
