@@ -2,6 +2,8 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "Each session's context window": "各会话的上下文窗口",
+    "Show this session's newest request": "显示这个会话最新的请求",
     "Its plugin sent this request itself, so magpie can't split its time": "此请求由插件自行发出，magpie 无法拆分它的耗时",
     "Claude Code sent this request itself, so magpie can't split its time": "此请求由 Claude Code 自行发出，magpie 无法拆分它的耗时",
     "magpie is masking this request before routing it (Settings › Privacy), so who takes it isn't picked yet.": "magpie 正在给这个请求脱敏（设置 › 隐私），脱敏完才路由，所以还没选出由谁处理。",
@@ -627,6 +629,8 @@ magpie.strings({
     "Open Folder": "打开文件夹",
   },
   "zh-TW": {
+    "Each session's context window": "各會話的上下文視窗",
+    "Show this session's newest request": "顯示這個會話最新的請求",
     "Its plugin sent this request itself, so magpie can't split its time": "此請求由外掛自行發出，magpie 無法拆分它的耗時",
     "Claude Code sent this request itself, so magpie can't split its time": "此請求由 Claude Code 自行發出，magpie 無法拆分它的耗時",
     "magpie is masking this request before routing it (Settings › Privacy), so who takes it isn't picked yet.": "magpie 正在為這個請求脫敏（設定 › 隱私），脫敏完才路由，所以還沒選出由誰處理。",
@@ -1252,6 +1256,8 @@ magpie.strings({
     "Open Folder": "打開資料夾",
   },
   ja: {
+    "Each session's context window": "セッションごとのコンテキストウィンドウ",
+    "Show this session's newest request": "このセッションの最新のリクエストを表示",
     "Its plugin sent this request itself, so magpie can't split its time": "このリクエストはプラグインが自ら送信したため、magpie では時間の内訳を出せません",
     "Claude Code sent this request itself, so magpie can't split its time": "このリクエストは Claude Code が自ら送信したため、magpie では時間の内訳を出せません",
     "magpie is masking this request before routing it (Settings › Privacy), so who takes it isn't picked yet.": "magpie はルーティングの前にこのリクエストをマスクしています（設定 › プライバシー）。誰が処理するかはまだ決まっていません。",
@@ -1877,6 +1883,8 @@ magpie.strings({
     "Open Folder": "フォルダを開く",
   },
   de: {
+    "Each session's context window": "Kontextfenster jeder Sitzung",
+    "Show this session's newest request": "Die neueste Anfrage dieser Sitzung zeigen",
     "Its plugin sent this request itself, so magpie can't split its time": "Diese Anfrage hat die Erweiterung selbst gesendet, daher kann magpie ihre Zeit nicht aufschlüsseln",
     "Claude Code sent this request itself, so magpie can't split its time": "Diese Anfrage hat Claude Code selbst gesendet, daher kann magpie ihre Zeit nicht aufschlüsseln",
     "magpie is masking this request before routing it (Settings › Privacy), so who takes it isn't picked yet.": "magpie maskiert diese Anfrage vor der Weiterleitung (Einstellungen › Datenschutz), daher steht noch nicht fest, wer sie übernimmt.",
