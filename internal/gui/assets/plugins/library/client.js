@@ -5892,7 +5892,10 @@ magpie.plugin("library", (ctx) => {
     ed.append(head);
     if (x.description) ed.append(el("p", "mk-about", about(x)));
     if (x.signIn) ed.append(el("p", "mk-hint", t("Each agent asks you to sign in, in the browser, the first time it uses it.")));
-    if (x.optIn) ed.append(el("p", "mk-hint", t("Pick the agents that may generate images: each image costs what the model set in Settings → Images charges.")));
+    if (x.name === "magpie-browser") {
+      ed.append(el("p", "mk-hint", t("Pick the agents that may use your browser: they act in your tabs, signed in as you are.")));
+      ed.append(browserSetup());
+    } else if (x.optIn) ed.append(el("p", "mk-hint", t("Pick the agents that may generate images: each image costs what the model set in Settings → Images charges.")));
     const firsts = [];
     for (const i of x.inputs || []) {
       const f = field2("", i.placeholder || (i.where === "env" ? i.key : ""), (v) => { values[i.key] = v.trim(); });
@@ -5929,6 +5932,46 @@ magpie.plugin("library", (ctx) => {
     modal = { save };
     openLib(ed);
     if (firsts.length) requestAnimationFrame(() => firsts[0].focus());
+  }
+
+  // Magpie Browser's extension: whether it is connected, and setting it up
+  // in the user's own browser, where their sign-ins are
+  function browserSetup() {
+    const box = el("div", "mk-browser");
+    const state = el("div", "mk-browser-state");
+    const steps = el("ol", "mk-browser-steps");
+    const go = button(t("Set up the extension…"), "action", async () => {
+      go.disabled = true;
+      try {
+        draw(await api("library/browser/setup", {}));
+        steps.hidden = false;
+      } catch (e) { status(e.message, "err"); }
+      go.disabled = false;
+    });
+    const draw = (b) => {
+      state.replaceChildren();
+      const dot = el("span", "mk-browser-dot" + (b.connected ? " on" : ""));
+      state.append(dot, el("span", "", b.connected
+        ? t("Connected to your browser") + (b.extension ? " · " + b.extension : "")
+        : b.written ? t("Not connected: load the folder below in your browser, and keep that browser open") : t("Not set up: set up the extension in Chrome, Edge, Arc, Brave or another Chromium browser")));
+      go.textContent = b.written ? t("Show the extension folder") : t("Set up the extension…");
+      steps.replaceChildren(
+        el("li", "", t("Open chrome://extensions (edge://extensions in Edge) in the browser you use every day.")),
+        el("li", "", t("Turn on Developer mode.")),
+        el("li", "", t("Click Load unpacked and choose {dir}.", { dir: tilde(b.dir) })),
+      );
+      if (b.connected) steps.hidden = true;
+      else if (b.written) steps.hidden = false;
+    };
+    steps.hidden = true;
+    box.append(state, steps, go);
+    const poll = async () => {
+      if (!box.isConnected) return;
+      try { draw(await api("library/browser")); } catch {}
+      setTimeout(poll, 3000);
+    };
+    requestAnimationFrame(poll);
+    return box;
   }
 
   function extLink(href, text) {
