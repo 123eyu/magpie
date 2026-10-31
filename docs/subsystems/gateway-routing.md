@@ -615,6 +615,89 @@ when nothing else makes videos. Covered by `TestMiniMaxKeysMakeH3Videos`,
 `TestMiniMaxComesAfterOtherVideomakers` and
 `TestMiniMaxVideoMovesPastATokenPlanKey`.
 
+## Short-lived gateway keys
+
+A gateway key may expire (`access.Key.Expires`), and one issued under another
+key keeps that key's id (`Key.Issuer`). They are for an orchestrator that
+gives each sandboxed agent a key of its own that stops working by itself
+(xazaj on X, moving off an enterprise LLM gateway). `access.IssueKey` in
+[`issue.go`](../../internal/access/issue.go) makes one, living 1 minute to
+30 days (`MinTTL`, `MaxTTL`); `--tokens`/`--cost` cap it over its whole life,
+as one `hours` limit as long as its life from the moment it is issued.
+
+Where it is issued:
+
+- `POST /v1/magpie/keys` with `{"ttl": "1h" | 3600, "name", "models",
+  "accounts", "tokens", "cost", "readOnly"}` answers 201 with the key's
+  `id`, `name`, `key` (the secret, told once, `Cache-Control: no-store`),
+  `expires` and what it is held to. `GET /v1/magpie/keys` lists the keys
+  the caller issued, masked; `DELETE /v1/magpie/keys/{id}` revokes one.
+  See [`issue_keys.go`](../../internal/gateway/issue_keys.go).
+- `magpie gateway-key issue --ttl 1h [--name n] [--models a,b] [--accounts
+  a,b] [--tokens N] [--cost USD] [--read-only] [--from <id>] [--json]`
+  prints the secret alone; `gateway-key issuer <id> on|off` lets a key
+  issue; `gateway-key list` shows `until <time>`, `expired`, `issued by
+  <id>` and `issues keys`.
+
+Who may call the endpoint (`keyIssuer`): a key the user let issue
+(`Key.Issues`, `issuer-key` in `access.Update`), from wherever that key is
+let in, so an orchestrator in a container or on another computer can; or a
+request with no key that `profileRefused` passes: loopback, no proxy's
+forwarding header, no browser's marks (`Origin`, `Sec-Fetch-*`, a
+`Mozilla/` agent) and a loopback `Host`, so neither a page nor a rebound
+name can. That request may already use every model with no key and could
+run `magpie gateway-key` itself, so it gains nothing. A key not let issue,
+a read-only key (`readOnlyGuard` refuses the route), an issued key and an
+expiring key never may; the sharing key may only if the user lets it.
+
+An issued key never outlives or exceeds its issuer. `IssueKey` clamps its
+expiry to the issuer's and refuses a model or account the issuer may not
+use. Then at every authentication (`access.Check`, which `Authenticate`,
+`access.On` and so every route reach) `identityOf` folds it into its issuer
+as the issuer is now: its models are those both allow (`foldModels`; none
+in common is a refusal), its accounts are held to the issuer's
+(`foldAccounts`), it is read-only if either is, told quotas only if both
+are, and it expires when the first of them does. An issuer removed, turned
+off or expired refuses it. What it spends counts against the issuer's
+limits too: its usage rows carry `callerIssuerId` (`usage.Record.
+CallerIssuerID`), `budget.read` and `budget.Append` count a row for both
+keys, and `budget.Reserve` reserves on both (`Identity.Issuer`). `GET
+/v1/magpie/limit` answers its `expires` and `issuerLimits`.
+
+An expired key, or one its issuer no longer lets in, is answered 401 with
+why (`access.Refused`, "the gateway key "sandbox-1" expired at …: ask for a
+new one") on every route, from loopback too (`identifyCaller`): a sandbox on
+this computer whose restricted key ran out would otherwise be let on as a
+request with no key, which may use everything. Whether a connection already open
+when the key expires (a Responses WebSocket) is refused at its next turn is
+untested. An expired key is kept an hour for
+that message, then `access.Prune` removes it (every 10 minutes while the
+gateway serves, and on each issue), with the keys of an issuer that is
+gone. A turned-off key on loopback is unchanged: it reads as no key.
+
+`TestIssuedKeyExpiresOnEveryRoute`, `TestKeysEndpointWhoMayIssue` and
+`TestIssuedKeysSpendTheirIssuersLimit` in
+[`issue_keys_test.go`](../../internal/gateway/issue_keys_test.go), and
+`TestIssuedKeyBoundedByIssuer` in
+[`issue_test.go`](../../internal/access/issue_test.go).
+
+### The stats and management API
+
+Every route under `/v1/magpie/` answers a program on this computer, and
+another computer only with an enabled gateway key while magpie is shared
+(`sharedWith`). A key held to a budget, models or accounts (`heldKey`) is
+told its own calls and limit alone:
+
+| Route | What it answers |
+| --- | --- |
+| `GET /v1/magpie/usage?period=today\|7d\|30d\|all` | the usage summary: totals, by model, agent, provider, account and gateway key |
+| `GET /v1/magpie/usage/requests?period=&offset=&limit=` | the request log, filtered by `day`, `model`, `agent`, `provider`, `account`, `callerKey` (a gateway key's id, an issued one's too), `failed=1`, `retried=1`, `q`, `computer`, `via` |
+| `GET /v1/magpie/quotas[?kept=1]` | each subscription's windows; `kept=1` without asking a vendor |
+| `GET /v1/magpie/quotas/history?days=&provider=&user=` | what was left of each window over time (45 days at most) |
+| `GET /v1/magpie/limit` | the key's own limits, its `expires`, and `issuerLimits` |
+| `GET /v1/magpie/concurrency` | requests in flight per account |
+| `POST`/`GET /v1/magpie/keys`, `DELETE /v1/magpie/keys/{id}` | short-lived keys, above |
+
 ## Turning provider search off
 
 [Settings](../../internal/settings/settings.go)' `searcher: "off"` disables magpie's provider-assisted search,

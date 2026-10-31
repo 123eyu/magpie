@@ -807,6 +807,11 @@ func (s *Server) routes() *routeMux {
 	mux.HandleFunc("GET /v1/magpie/trace", s.gatewayTrace)
 	mux.HandleFunc("GET /v1/magpie/concurrency", s.concurrency)
 	mux.HandleFunc("GET /v1/magpie/limit", s.keyLimit)
+	// short-lived keys, issued by a key let issue them or from loopback
+	// (issue_keys.go)
+	mux.HandleFunc("POST "+KeysPath, s.issueKey)
+	mux.HandleFunc("GET "+KeysPath, s.issuedKeys)
+	mux.HandleFunc("DELETE "+KeysPath+"/{id}", s.revokeIssuedKey)
 	mux.HandleFunc("GET "+KeyPagePath, s.keyPage)
 	mux.HandleFunc("GET "+keyPageData, s.keyInfo)
 	// the Claude Code processes the Claude subscription runs, for magpie

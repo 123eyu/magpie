@@ -44,6 +44,9 @@ type Record struct {
 	ProviderAccount string `json:"providerAccount,omitempty"`
 	CallerKeyID     string `json:"callerKeyId,omitempty"`
 	CallerKeyName   string `json:"callerKeyName,omitempty"`
+	// CallerIssuerID is the key CallerKeyID was issued under (an issued,
+	// short-lived key: access.IssueKey), whose limits count this call too.
+	CallerIssuerID string `json:"callerIssuerId,omitempty"`
 	// SessionProvider is the provider ID recorded by the agent. SessionAccount
 	// identifies the session's creator, not the account used for an API request.
 	// Neither field establishes an upstream route from today's configuration.
