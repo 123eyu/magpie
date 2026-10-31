@@ -1087,6 +1087,13 @@ OpenCode ignores:
   and the icon the plugin market lists for the plugin is shown instead.
   The `package.json` icon is also the card's picture under Discover →
   Unofficial, on GitHub for a repository tagged `magpie-plugin`.
+- **The plugin's name**: `"magpie": { "name": "…" }` in its `package.json`
+  names its row in Settings → Plugins, and its sidebar tab when its page
+  gives no title, for a plugin the community's list doesn't name (that
+  list's name wins). A package's npm name, which Bun keys it by, has to be
+  ASCII, so this is where a name like 华为云 HUAWEI goes. One line of at
+  most 80 bytes; anything else is ignored. It is the package's own word:
+  never shown as reviewed, and never used to find a plugin by name.
 - **An API key's field**: a `type: "api"` method's `label` titles the key's
   field, as OpenCode's dialog does (one that only says "API key" reads
   "<provider> API key"), and its `placeholder` is the hint inside the field
