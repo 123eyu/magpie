@@ -763,8 +763,9 @@ func coldTurn(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// underTightGC runs fn letting the heap grow by a tenth of what it holds
-// before a collection, not Go's default of all of it, and then puts back
+// underTightGC runs fn letting the heap grow by a tenth of what it holds,
+// or by tightGCRoom when that is more (tightPercent), before a
+// collection, not Go's default of all of it, and then puts back
 // what was set; a GOGC the user set lower, or off, is kept. The usage
 // page's read of the whole history holds every row of it at once (~270 MB
 // live for 390k calls), and a cold start that rests at ~200 MB peaked at
