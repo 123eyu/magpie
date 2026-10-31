@@ -643,6 +643,10 @@ type Rest struct {
 	// vendor unreachable) is asked again in the background, and its rest
 	// lifted as soon as it answers (rest_probe.go)
 	Probed bool `json:"probed,omitempty"`
+	// Error: what the vendor said, for the app to show beside "failed"
+	// (GanHei37443 on X: three WorkBuddy accounts each "failed · back in
+	// 16s", and nothing on the row said why)
+	Error string `json:"error,omitempty"`
 
 	// the subscription account resting, when it is one; agent "" and its
 	// provider.KeyAllowanceID for a key out of its own windows
@@ -1108,6 +1112,14 @@ func resetsWritten(body []byte, now time.Time) time.Duration {
 	return 0
 }
 
+// restError is the vendor's words a rest is shown with, cut short: the
+// request's details keep them whole
+func restError(status int, body []byte) string {
+	return clipRunes(strings.TrimSpace(provider.APIError(body, http.StatusText(status))), restErrorRunes)
+}
+
+const restErrorRunes = 300
+
 // restAfter sets a failed candidate aside for as long as its failure says.
 func (s *Server) restAfter(c candidate, status int, header http.Header, body []byte) Rest {
 	return s.restAfterMarked(c, status, header, body, openRouterSharedPool(body))
@@ -1160,7 +1172,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	// trial entry zcode.z.ai's firewall blocked (zcodeTrialBlocked): the
 	// account's GLM Coding Plan goes to another host
 	unserved := why == failOther && (modelRefused(status, body) || codeAssistModelMissing(c.p, status, body) || zcodeTrialBlocked(c, status, body))
-	r := Rest{Why: why, Status: status, By: "cooldown"}
+	r := Rest{Why: why, Status: status, By: "cooldown", Error: restError(status, body)}
 	// out of allowance or credit for as long as magpie guessed: the vendor
 	// named no time, nor did the user (asksAt)
 	guessed := false

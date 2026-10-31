@@ -510,6 +510,11 @@ function routingPage(part) {
   const fill = (w) => Math.max(0, Math.min(100, share(w))) + "%";
   const FAIL = { rate: "rate limited", credit: "out of credit", quota: "quota used up", other: "failed", auth: "sign-in required", canceled: "canceled", foreign: "another account's reasoning", floor: "reply too short", verify: "needs verification", refused: "refused (safety filter)", shape: "request not understood", sight: "images not taken", proxy: "proxy not reachable", effort: "reasoning effort not in its plan", overflow: "too long for its model", room: "reply asked past the window left", slow: "slow to start", prompt: "agent's prompt turned away", restricted: "account restricted by the vendor" };
   const failWord = (why) => t(FAIL[why] || "failed");
+  // a resting row: a failure that names no kind says the status it
+  // answered, and the vendor's own words are over it (restTip), as
+  // "failed · back in 16s" alone said nothing of why (GanHei37443 on X)
+  const restSay = (rest) => `${!FAIL[rest.why] || rest.why === "other" ? (rest.status ? rest.status + " · " : "") : ""}${failWord(rest.why)} · ${restWhen(rest)}`;
+  const restTip = (rest) => (typeof rest.error === "string" && rest.error) || "";
   // a try that answered: one whose reply broke off after it began (its 200
   // sent, then the vendor's error, #733) didn't, and has a fail
   const tryOk = (tr) => tr.status < 400 && !tr.fail;
@@ -2557,7 +2562,7 @@ function routingPage(part) {
       const smart = r.order[0] && id === seat(r.order[0]) && smartFor(r), said = smart ? t("picked for “{intent}”", { intent: smart }) : "";
       let s, b;
       if (w.unlisted) s = unlistedWord(w);
-      else if (resting) s = `${failWord(rest.why)} · ${restWhen(rest)}`;
+      else if (resting) s = restSay(rest);
       else if (w.window) s = t("request longer than its {n} window · passed over", { n: ctxShort(w.window) });
       // a row another request weighed, answering that one: the header
       // tells of this request, so it says the answer is not this one's
@@ -2590,7 +2595,7 @@ function routingPage(part) {
       if (row.st.textContent !== s) row.st.textContent = s;
       // the intent is the user's own words, of any length: cut short on
       // the row (routing.css), read whole over it
-      const full = said && s.includes(said) ? s : "";
+      const full = said && s.includes(said) ? s : resting && !w.unlisted ? restTip(rest) : "";
       if (row.st.title !== full) { if (full) row.st.title = full; else row.st.removeAttribute("title"); } // an empty title would hide the row's own
       // an account's windows each, with when they reset, in its tooltip
       // (#1835): the row says the fullest one while idle and what it is
@@ -4010,7 +4015,7 @@ function routingPage(part) {
       // a line of their own, naming them, under what the account has left
       const parts = resting ? [] : [...a.mrests].filter(([, x]) => at(x.rest.until) > n)
         .sort(([m, x], [l, y]) => at(x.rest.until) - at(y.rest.until) || m.localeCompare(l));
-      if (resting) { st = `${failWord(a.rest.why)} · ${restWhen(a.rest)}`; cls = "rest"; }
+      if (resting) { st = restSay(a.rest); cls = "rest"; }
       else if (w.unlisted) { st = unlistedWord(w); cls = "left"; }
       else if (w.noURL) st = noURLWord(w);
       else if (w.known) {
@@ -4026,10 +4031,14 @@ function routingPage(part) {
         el("span", "ok", t("answered {n}", { n: a.ok })),
         ...(fails.length ? [el("span", "bad", fails.join(", "))] : []),
         ...(a.last ? [el("span", "", t("last answered {time}", { time: clock(a.last) }))] : []));
-      row.append(name, el("div", "st " + cls, st));
+      const stEl = el("div", "st " + cls, st);
+      if (resting && restTip(a.rest)) stEl.title = restTip(a.rest);
+      row.append(name, stEl);
       if (parts.length) {
         const r0 = parts[0][1].rest;
-        row.append(el("div", "st rest part", `${parts.map(([m]) => m).join(", ")} · ${failWord(r0.why)} · ${restWhen(r0)}`));
+        const part = el("div", "st rest part", `${parts.map(([m]) => m).join(", ")} · ${restSay(r0)}`);
+        if (restTip(r0)) part.title = restTip(r0);
+        row.append(part);
       }
       // a subscription account's windows each, with when they reset, as
       // the Usage page read them (#1833): the figure above is the one
