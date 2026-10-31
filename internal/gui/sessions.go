@@ -367,7 +367,7 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, errors.New("no such session"))
 			return
 		}
-		if err := openTerminal(run, settings.Load().SessionTerminal); err != nil {
+		if err := openTerminal(run, s.Title, settings.Load().SessionTerminal); err != nil {
 			fail(rw, err)
 			return
 		}
@@ -386,17 +386,17 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, errors.New("opening Terminal is only for the Mac app"))
 			return
 		}
-		run := ""
+		run, name := "", ""
 		for _, a := range agent.Detected() {
 			if a.ID == in.Agent {
-				run = agentCommand(a)
+				run, name = agentCommand(a), a.Name
 			}
 		}
 		if run == "" {
 			fail(rw, errors.New("no command starts this agent"))
 			return
 		}
-		if err := agentTerminal(run, settings.Load().SessionTerminal); err != nil {
+		if err := agentTerminal(run, name, settings.Load().SessionTerminal); err != nil {
 			fail(rw, err)
 			return
 		}
@@ -431,7 +431,7 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			return
 		}
 		if in.Open {
-			if err := openTerminal(c.Command, settings.Load().SessionTerminal); err != nil {
+			if err := openTerminal(c.Command, s.Title, settings.Load().SessionTerminal); err != nil {
 				fail(rw, err)
 				return
 			}
@@ -906,15 +906,23 @@ var agentTerminal = openTerminal
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
 // openTerminal runs a command in the chosen Mac terminal through a .command
-// file, as it would open from Finder: no Automation consent.
+// file, as it would open from Finder: no Automation consent; in Rex,
+// through its CLI, in a tab labelled label (terminal_rex.go).
 // The shell is left open when the agent quits.
-func openTerminal(command, choice string) error {
+func openTerminal(command, label, choice string) error {
 	var found terminalDiscovery
 	if choice != terminalBundleID {
 		var err error
 		// the system default falls back to Terminal when nothing is found
 		if found, err = discoverTerminals(); err != nil && choice != "" && choice != "system" {
 			return err
+		}
+	}
+	if choice == rexBundleID {
+		for _, app := range found.Apps {
+			if app.ID == rexBundleID {
+				return openInRex(app.Path, command, label)
+			}
 		}
 	}
 	args, err := terminalOpenArgs(choice, found)

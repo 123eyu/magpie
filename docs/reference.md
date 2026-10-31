@@ -2996,6 +2996,17 @@ default listed once. With no saved choice, magpie follows that default, or
 Terminal when the default is not a terminal. The *Resume* button still copies
 the command.
 
+Rex (superlogical.com/rex) is listed too when its `rex` program is found,
+on `PATH` or inside a `Rex*.app` in `/Applications` or `~/Applications`
+(only a native program counts, so the Perl tool also called `rex` is not
+taken). Rex claims no `.command` files, so magpie opens it through its CLI:
+`rex run --label <session or agent> -- /bin/sh -c '<command>; exec $SHELL -l'`
+adds a tab to the session Rex shows. When there is no session to add to
+(exit 3) it runs `rex new` instead, and when Rex's server can't be reached
+(exit 4) it says to open Rex. The same applies to an agent's *Open in
+terminal* and a carried-over session (StringKe, #4565;
+[`terminal_rex.go`](../internal/gui/terminal_rex.go)).
+
 Keys in the terminal version:
 
 | Key        | Action                                |
