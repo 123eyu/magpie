@@ -406,6 +406,9 @@ function optionFor(field, value) {
   return field.options.find((o) => o.value === value);
 }
 
+// a pick as "Name · Provider", as namedIn says it (nb5p); a routing group by name
+const optNamed = (o, v) => o ? (o.label || o.value) + (o.group && o.group !== ROUTING_GROUPS ? " · " + o.group : "") : v;
+
 // directSaid: a model the agent asks its own vendor for itself, magpie not
 // in the way (Claude Code on its own sign-in), so its config names no magpie
 // endpoint — which read as magpie having failed to set it up
@@ -21514,13 +21517,8 @@ function renderCodexAutoReview(s) {
   $("#codexAutoReviewPick").replaceChildren(b);
 }
 
-// renderCodexMemories: the model Codex writes its memories with (#985,
-// Hu9956: the notebook square on Codex's card was all there was, beside the
-// subagent squares, and wasn't found). It is the card's own field, picked
-// in the same picker and written the same way, so the row and the square
-// show one setting; renderAgents draws the row again after every pick.
-// The row is in Codex's sheet now (openAgentPrefs), not Settings.
-// No Codex with a memories field to pick: no row.
+// renderCodexMemories: Codex's memories model (#985), its card's field, in
+// Codex's sheet; drawn again after every pick. No such field: no row.
 function renderCodexMemories() {
   homeAgentPrefRows();
   const row = $("#codexMemoriesRow");
@@ -21533,7 +21531,7 @@ function renderCodexMemories() {
   const b = el("button", "rt-cond on");
   b.type = "button";
   b.setAttribute("aria-label", t("Codex memories model"));
-  if (f.value) b.append(icon(opt?.icon || "generic"), el("span", "", opt?.label || f.value));
+  if (f.value) b.append(icon(opt?.icon || "generic"), el("span", "", optNamed(opt, f.value)));
   else b.append(icon("generic"), el("span", "", t(SAME_SESSION)));
   b.onclick = (ev) => openPicker(a, f, b, ev);
   $("#codexMemoriesPick").replaceChildren(b);
@@ -21557,7 +21555,7 @@ function renderCodexSubagentModel() {
   const b = el("button", "rt-cond on");
   b.type = "button";
   b.setAttribute("aria-label", t("Codex subagent model"));
-  b.append(icon((f.value ? optionFor(f, f.value)?.icon : main && optionFor(main, main.value)?.icon) || "generic"), el("span", "", said.name));
+  b.append(icon((f.value ? optionFor(f, f.value)?.icon : main && optionFor(main, main.value)?.icon) || "generic"), el("span", "", f.value ? optNamed(optionFor(f, f.value), f.value) : said.name));
   b.onclick = (ev) => openPicker(a, f, b, ev);
   $("#codexSubagentModelPick").replaceChildren(b);
   b.title = said.line;
