@@ -20,12 +20,22 @@
 #                      list and its SHA-256 still come from usemagpie.ai,
 #                      never from the mirror, so a file the mirror changed is
 #                      refused.
+#   --uninstall        takes off what this script put there: the magpie
+#                      command, and the app (macOS) or its menu entry, icon
+#                      and magpie:// handler (Linux), and the service and
+#                      opening at login that would start a magpie no longer
+#                      there. Your settings, providers and usage in
+#                      ~/.config/magpie stay, for when you install again.
+#   --purge            --uninstall, and before it `magpie uninstall --yes`:
+#                      every agent disconnected and put back as it was, and
+#                      magpie's settings, providers and usage deleted.
 set -eu
 
 site=https://usemagpie.ai
 bin="${MAGPIE_BIN_DIR:-$HOME/.local/bin}"
 proxy="${MAGPIE_PROXY:-}"
 mirror="${MAGPIE_MIRROR:-}"
+uninstall=
 
 say() { printf '  %s\n' "$*"; }
 die() { printf 'magpie: %s\n' "$*" >&2; exit 1; }
@@ -36,13 +46,18 @@ while [ $# -gt 0 ]; do
     --proxy=*) proxy=${1#--proxy=}; shift ;;
     --mirror) [ $# -ge 2 ] || die "--mirror needs a value"; mirror=$2; shift 2 ;;
     --mirror=*) mirror=${1#--mirror=}; shift ;;
+    --uninstall) [ "$uninstall" = purge ] || uninstall=1; shift ;;
+    --purge) uninstall=purge; shift ;;
     -h|--help)
       printf '%s\n' "usage: curl -fsSL $site/install.sh | sh -s -- [--proxy <url>] [--mirror <prefix>]" \
+        "       curl -fsSL $site/install.sh | sh -s -- --uninstall [--purge]" \
         "  --proxy <url>      http://, https://, socks5:// or socks5h:// proxy for the downloads (or MAGPIE_PROXY=)" \
         "  --mirror <prefix>  GitHub download mirror put before the release's github.com URL (or MAGPIE_MIRROR=);" \
-        "                     the SHA-256 is still checked against $site's"
+        "                     the SHA-256 is still checked against $site's" \
+        "  --uninstall        take off what this script installed; your settings in ~/.config/magpie stay" \
+        "  --purge            with --uninstall: also disconnect every agent and delete magpie's settings (magpie uninstall)"
       exit 0 ;;
-    *) die "unknown option $1 (--proxy <url>, --mirror <prefix>)" ;;
+    *) die "unknown option $1 (--proxy <url>, --mirror <prefix>, --uninstall, --purge)" ;;
   esac
 done
 case "$proxy" in
@@ -60,27 +75,119 @@ get() {
   if [ -n "$proxy" ]; then curl -fsSL --proxy "$proxy" "$@"; else curl -fsSL "$@"; fi
 }
 
-case "$(uname -m)" in
-  arm64|aarch64) arch=arm64 ;;
-  x86_64|amd64) arch=amd64 ;;
-  *) die "unsupported CPU: $(uname -m)" ;;
-esac
 case "$(uname -s)" in
-  Darwin) os=darwin; file="magpie-darwin-$arch.zip" ;;
+  Darwin) os=darwin ;;
   Linux)
     termux="${TERMUX_VERSION:-}"
     case "${PREFIX:-}" in */com.termux/files/usr) termux=1 ;; esac
     if [ -n "$termux" ]; then
       [ -n "${PREFIX:-}" ] || die "Termux requires PREFIX to locate its bin directory"
-      os=android; file="magpie-cli-android-$arch"
+      os=android
       bin="${MAGPIE_BIN_DIR:-$PREFIX/bin}"
     else
-      os=linux; file="magpie-cli-linux-$arch"
-      if [ -z "${MAGPIE_CLI:-}" ] && { ldconfig -p 2>/dev/null | grep -q 'libwebkit2gtk-4\.1\.so\.0'; }; then
-        file="magpie-linux-$arch"
-      fi
+      os=linux
     fi ;;
   *) die "unsupported system: $(uname -s); see $site" ;;
+esac
+share="${XDG_DATA_HOME:-$HOME/.local/share}"
+config="${XDG_CONFIG_HOME:-$HOME/.config}"
+
+# runs <file> <key>: the program an entry's Exec= or a unit's ExecStart=
+# starts, its first word, quoted or not
+runs() {
+  sed -n "s/^$2=//p" "$1" 2>/dev/null | head -n 1 | sed -e 's/^"\([^"]*\)".*/\1/' -e t -e 's/ .*//'
+}
+
+# --uninstall: what the install below puts there, and nothing of the
+# user's. The service and login entry go too while they start this
+# magpie: left, they would start a program that is gone at each login.
+if [ -n "$uninstall" ]; then
+  exe="$bin/magpie"
+  if [ "$uninstall" = purge ]; then
+    # magpie disconnects the agents it connected and deletes its own
+    # folders; deleting them here by hand would leave the agents pointed
+    # at a gateway that is gone
+    [ -x "$exe" ] || die "no magpie at $exe to disconnect your agents and delete its settings: install it again and run this again, or run --uninstall alone to keep them"
+    "$exe" uninstall --yes || die "magpie uninstall didn't finish (see above), so the magpie command and app are left: run this again once it does"
+  fi
+  removed=
+  gone() { rm -rf "$1"; removed=1; say "removed $1"; }
+  if [ "$os" = darwin ]; then
+    for apps in /Applications "$HOME/Applications"; do
+      [ ! -d "$apps/magpie.app" ] || gone "$apps/magpie.app"
+    done
+    case "$(readlink "$exe" 2>/dev/null)" in
+      */magpie.app/Contents/MacOS/magpie) gone "$exe" ;;
+    esac
+  else
+    if [ "$os" = linux ]; then
+      unit="$config/systemd/user/magpie.service"
+      if [ "$(runs "$unit" ExecStart)" = "$exe" ]; then
+        if ! "$exe" daemon uninstall >/dev/null 2>&1; then
+          command -v systemctl >/dev/null && systemctl --user disable --now magpie.service >/dev/null 2>&1 || true
+          rm -f "$unit"
+        fi
+        removed=1; say "removed magpie's service ($unit)"
+      fi
+      login="$config/autostart/magpie.desktop"
+      [ "$(runs "$login" Exec)" != "$exe" ] || gone "$login"
+    fi
+    [ ! -f "$exe" ] || gone "$exe"
+    if [ "$os" = linux ]; then
+      apps="$share/applications"
+      # the menu entry and its icon while they start this magpie, or one
+      # that is gone; another magpie's stays
+      run=$(runs "$apps/magpie.desktop" Exec)
+      if [ -f "$apps/magpie.desktop" ] && { [ "$run" = "$exe" ] || [ ! -e "$run" ]; }; then
+        gone "$apps/magpie.desktop"
+      fi
+      # with no menu entry (this one, or the one magpie uninstall took),
+      # what came with it: the icon, the magpie:// default xdg-mime set
+      # (that line only) and the menu's cache when it lists nothing else
+      if [ ! -e "$apps/magpie.desktop" ]; then
+        icons="$share/icons/hicolor/256x256/apps"
+        [ ! -f "$icons/magpie.png" ] || gone "$icons/magpie.png"
+        rmdir "$icons" "$share/icons/hicolor/256x256" "$share/icons/hicolor" "$share/icons" 2>/dev/null || true
+        list="$config/mimeapps.list"
+        if [ -f "$list" ] && grep -qx 'x-scheme-handler/magpie=magpie\.desktop;\{0,1\}' "$list"; then
+          grep -vx 'x-scheme-handler/magpie=magpie\.desktop;\{0,1\}' "$list" > "$list.magpie-new" || true
+          mv "$list.magpie-new" "$list"
+          removed=1; say "removed magpie:// from $list"
+        fi
+        if [ -d "$apps" ] && ! ls "$apps" | grep -q '\.desktop$'; then
+          rm -f "$apps/mimeinfo.cache"
+          rmdir "$apps" 2>/dev/null || true
+        elif [ -d "$apps" ]; then
+          command -v update-desktop-database >/dev/null && update-desktop-database "$apps" 2>/dev/null || true
+        fi
+      fi
+    fi
+  fi
+  [ "$removed" ] || say "no magpie installed by this script at $exe"
+  if [ "$uninstall" != purge ]; then
+    say "kept your settings, providers and usage in $config/magpie: install again to have them back, or run with --purge to delete them"
+    if pid=$(pgrep -f "^$exe( |\$)" 2>/dev/null) && [ -n "$pid" ]; then
+      say "magpie is still running (pid $(printf '%s' "$pid" | tr '\n' ' ' | sed 's/ $//')) and ends when you quit it; agents connected to it reach its gateway until then"
+    fi
+  fi
+  # magpie uninstall said so already
+  [ "$uninstall" = purge ] || say "magpie is uninstalled"
+  exit 0
+fi
+
+case "$(uname -m)" in
+  arm64|aarch64) arch=arm64 ;;
+  x86_64|amd64) arch=amd64 ;;
+  *) die "unsupported CPU: $(uname -m)" ;;
+esac
+case "$os" in
+  darwin) file="magpie-darwin-$arch.zip" ;;
+  android) file="magpie-cli-android-$arch" ;;
+  *)
+    file="magpie-cli-linux-$arch"
+    if [ -z "${MAGPIE_CLI:-}" ] && { ldconfig -p 2>/dev/null | grep -q 'libwebkit2gtk-4\.1\.so\.0'; }; then
+      file="magpie-linux-$arch"
+    fi ;;
 esac
 
 tmp=$(mktemp -d)
@@ -128,7 +235,6 @@ if [ "$os" = darwin ]; then
 else
   install -m 755 "$tmp/$file" "$bin/magpie"
   if [ "$file" = "magpie-linux-$arch" ]; then
-    share="${XDG_DATA_HOME:-$HOME/.local/share}"
     mkdir -p "$share/applications" "$share/icons/hicolor/256x256/apps"
     get -o "$share/icons/hicolor/256x256/apps/magpie.png" "$site/img/icon-256.png" || true
     cat > "$share/applications/magpie.desktop" <<EOF
