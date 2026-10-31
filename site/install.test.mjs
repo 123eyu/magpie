@@ -211,6 +211,11 @@ test("--uninstall takes off the command, menu entry, icon and magpie:// default,
   assert.equal(u.status, 0, u.stderr);
   for (const p of [r.exe, r.entry, r.icon]) assert.equal(existsSync(p), false, p);
   assert.equal(readFileSync(r.mime, "utf8"), "[Default Applications]\ntext/html=firefox.desktop\n");
+  // with no line of the user's, the list xdg-mime made goes with it
+  const bare = installedDesktop(t);
+  const bu = bare.run(["--uninstall"]);
+  assert.equal(bu.status, 0, bu.stderr);
+  assert.equal(existsSync(bare.mime), false);
   assert.ok(existsSync(r.settings), "the settings stay");
   assert.equal(r.calls(), "", "magpie isn't asked to uninstall");
   assert.equal(u.calls.length, 0, "nothing is downloaded");
@@ -260,7 +265,7 @@ test("--purge has magpie uninstall itself first, then takes off the install", (t
   assert.match(r.calls(), /^uninstall --yes$/m);
   for (const p of [r.exe, r.entry, r.icon, r.settings]) assert.equal(existsSync(p), false, p);
   // magpie took the menu entry itself; its icon and magpie:// default go too
-  assert.doesNotMatch(readFileSync(r.mime, "utf8"), /magpie/);
+  assert.equal(existsSync(r.mime), false);
   assert.doesNotMatch(u.stdout, /kept your settings/);
 
   // magpie failing to: the command stays, to run it again

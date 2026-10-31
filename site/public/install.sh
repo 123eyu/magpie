@@ -152,6 +152,8 @@ if [ -n "$uninstall" ]; then
         if [ -f "$list" ] && grep -qx 'x-scheme-handler/magpie=magpie\.desktop;\{0,1\}' "$list"; then
           grep -vx 'x-scheme-handler/magpie=magpie\.desktop;\{0,1\}' "$list" > "$list.magpie-new" || true
           mv "$list.magpie-new" "$list"
+          # a list left with no entry at all (the one xdg-mime made) goes
+          grep -qv -e '^\[.*\]$' -e '^[[:space:]]*$' "$list" || rm -f "$list"
           removed=1; say "removed magpie:// from $list"
         fi
         if [ -d "$apps" ] && ! ls "$apps" | grep -q '\.desktop$'; then
