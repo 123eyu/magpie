@@ -297,7 +297,9 @@ func (l *Library) syncMCP(t *Target, b *backups, res *Result) {
 		if !t.MCP.WSL {
 			s = npxDirect(s)
 		}
-		if run {
+		// a server the user keeps direct is started by Codex itself, in
+		// the thread's folder (#4382): magpie would start it from home
+		if run && s.Hub != HubDirect {
 			if via, spec, ok := runVia(s, base); ok {
 				if res.run == nil {
 					res.run = map[string]runSpec{}
