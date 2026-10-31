@@ -8,9 +8,19 @@ package provider
 // it's needed. So whichever magpie runs the gateway renews each such
 // sign-in about as often as Codex renews its own: every eight days, one
 // account an hour, never all of them at once. The account the agent is signed in to is the
-// agent's own to refresh, and is left to it. A Claude account is never
-// refreshed by magpie: Claude Code refreshes it, whenever it runs on it
-// (claude_dirs.go).
+// agent's own to refresh, and is left to it.
+//
+// A saved Claude account that is on goes the same way, but is never
+// refreshed by magpie, nor is Anthropic asked anything with its sign-in
+// (9bf6d4352): Claude Code refreshes it whenever it runs on it
+// (claude_dirs.go), so the keep-alive runs Claude Code's /usage once in the
+// account's own config directory, as its card's refresh does, and keeps
+// what Claude Code made of the sign-in (syncSavedClaude). One switched on
+// to stand behind Claude Code's own but not needed for weeks
+// (switch-only) otherwise had nothing run on it, and was found signed out
+// only when the switch reached it (#4532). How long Anthropic keeps an idle
+// Claude refresh token isn't known, so it is run as often as a ChatGPT
+// one is renewed, every eight days.
 
 import (
 	"context"
@@ -46,9 +56,9 @@ type Renewal struct {
 	Lapsed  bool   `json:"lapsed,omitempty"`
 }
 
-// RenewLogins renews the saved ChatGPT sign-ins not in the
-// agent's hands that have gone every or longer without it; every 0 renews
-// all of them.
+// RenewLogins renews the saved ChatGPT sign-ins, and the saved Claude
+// sign-ins that are on, not in the agent's hands that have gone every or
+// longer without it; every 0 renews all of them.
 func RenewLogins(ctx context.Context, every time.Duration) []Renewal {
 	return renewLogins(ctx, every, 0)
 }
@@ -73,7 +83,7 @@ func renewLogins(ctx context.Context, every time.Duration, atOnce int) []Renewal
 	out := []Renewal{}
 	tried := 0
 	for _, l := range ls {
-		if l.Agent != "codex" || strings.EqualFold(active[l.Agent], l.User) || leftAlone(l.Agent) {
+		if l.Agent != "codex" && !claudeKeptAlive(l) || strings.EqualFold(active[l.Agent], l.User) || leftAlone(l.Agent) {
 			continue
 		}
 		r := Renewal{Agent: l.Agent, User: l.User}
@@ -82,6 +92,10 @@ func renewLogins(ctx context.Context, every time.Duration, atOnce int) []Renewal
 			continue
 		}
 		tried++
+		if l.Agent == "claude" {
+			out = append(out, renewClaude(ctx, r))
+			continue
+		}
 		why := ctx
 		if every > 0 {
 			why = refreshingFor(ctx, codexRefreshScheduled)
@@ -96,6 +110,56 @@ func renewLogins(ctx context.Context, every time.Duration, atOnce int) []Renewal
 		out = append(out, r)
 	}
 	return out
+}
+
+// claudeKeptAlive says the saved Claude login l is one the keep-alive
+// runs Claude Code on: switched on, with a sign-in Claude Code refreshes
+// (a setup-token has none, and lasts a year), and not signed out already,
+// which its row says.
+func claudeKeptAlive(l savedLogin) bool {
+	return l.Agent == "claude" && l.On && claudeSetupToken(l.Auth) == "" && claudeSignedOut(l) == ""
+}
+
+// renewClaude has Claude Code keep the saved Claude account r.User signed
+// in: its /usage run once in the account's config directory, where Claude
+// Code refreshes the sign-in when it is due, and what it made of it kept in
+// logins.json. A run that went through is the account's renewal, refreshed
+// or not (a sign-in Claude Code needn't refresh yet is a live one); one
+// whose sign-in Claude Code was refused is marked as needing a new one, on
+// the account's row, as a request's refusal is (NoteClaudeSignInFailure).
+func renewClaude(ctx context.Context, r Renewal) Renewal {
+	version := ClaudeLoginVersion(r.User)
+	_, err := readSavedClaudeUsage(ctx, r.User)
+	if err != nil {
+		NoteClaudeSignInFailure(r.User, version, err.Error())
+	}
+	loginsMu.Lock()
+	defer loginsMu.Unlock()
+	ls := readLogins()
+	for i := range ls {
+		if ls[i].Agent != "claude" || !strings.EqualFold(ls[i].User, r.User) {
+			continue
+		}
+		if why := claudeSignedOut(ls[i]); why != "" {
+			r.Lapsed, r.Err = true, why
+			return r
+		}
+		if err != nil {
+			r.Err = err.Error()
+			return r
+		}
+		ls[i].Renewed = time.Now().UTC().Truncate(time.Second)
+		if werr := writeLogins(ls); werr != nil {
+			r.Err = werr.Error()
+			return r
+		}
+		r.Renewed = true
+		return r
+	}
+	if err != nil {
+		r.Err = err.Error()
+	}
+	return r
 }
 
 // renewalDue says whether a saved sign-in has gone every without being

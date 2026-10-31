@@ -102,8 +102,10 @@ type savedLogin struct {
 	// Project is the Google Cloud project a Gemini CLI or Antigravity
 	// account's requests go to, when the user named one (google.go).
 	Project string `json:"project,omitempty"`
-	// Renewed is when magpie last refreshed a saved account's sign-in, and
-	// Lapsed why the vendor last refused to (logins_on.go, keepalive.go).
+	// Renewed is when magpie last refreshed a saved account's sign-in (a
+	// Claude one: when Claude Code last refreshed it, or ran on it for the
+	// keep-alive), and Lapsed why the vendor last refused to (logins_on.go,
+	// keepalive.go).
 	Renewed time.Time `json:"renewed,omitzero"`
 	Lapsed  string    `json:"lapsed,omitempty"`
 	// Refused is the Claude credential Anthropic refused (its version, in

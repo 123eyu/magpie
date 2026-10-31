@@ -97,7 +97,7 @@ const usage = `magpie — one place to pick every agent's model
   magpie accounts discovery [on|off]   read agents' sign-ins (default on; MAGPIE_NO_ACCOUNTS=1 disables too)
   magpie accounts import <codex|claude|antigravity|factory> <file>... [--yes]   bring in accounts from other tools' files (Codex's auth.json, Cockpit Tools, CLIProxyAPI, Sub2API); the tool a ChatGPT or Claude file came from is signed out of it
   magpie accounts switch <agent> <email>   sign the agent in to another of them
-  magpie accounts refresh         renew the saved ChatGPT sign-ins now (the gateway does it daily)
+  magpie accounts refresh         renew the saved ChatGPT sign-ins, and the Claude ones that are on, now (the gateway does it every 8 days)
   magpie accounts checkin         WorkBuddy's daily check-in (签到) for each WorkBuddy account, now (Settings can do it daily)
   magpie accounts project <gemini|antigravity> <email> <project>   the Google Cloud project a Google account's requests go to
   magpie accounts alias <agent> <email> [<name>|--clear]   a name of your own for an account, shown on its card, in the menu bar and in magpie quota
