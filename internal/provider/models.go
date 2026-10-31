@@ -2648,8 +2648,8 @@ type Entry struct {
 	// AlwaysThinks, DynamicTools and DefaultEffort are what the provider's
 	// own list says of the model (catalog.Model's): it always thinks, it
 	// loads tools mid-conversation, it thinks at this effort unasked.
-	// Kimi Code's list says them, and Kimi Code is told them (a group
-	// has none of them)
+	// Kimi Code's list says them, and Kimi Code is told them. A group
+	// has each one its members all share (groupSharedKimi)
 	AlwaysThinks  bool   `json:"-"`
 	DynamicTools  bool   `json:"-"`
 	DefaultEffort string `json:"-"`
