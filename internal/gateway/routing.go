@@ -1128,6 +1128,12 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		// as soon as the switch is off
 		return Rest{Why: why, Status: status, By: "off", Until: now}
 	}
+	if status == http.StatusBadGateway && bytes.Contains(body, []byte(openCodeBare)) {
+		// OpenCode's bare 400 (openCodeBareRefusal, #3740) is about the
+		// request, not the key: the key's other requests go through, so
+		// none is set aside and the failure counts nowhere
+		return Rest{Why: why, Status: status, By: "off", Until: now}
+	}
 	if status == http.StatusBadRequest || status == http.StatusForbidden {
 		// a 403 too: Factory's usage policy check refuses at 403
 		// (content_policy_rejected), which failureOf alone reads as the
