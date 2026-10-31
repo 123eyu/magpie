@@ -761,6 +761,14 @@ func thinkingConfig(r *Request, model string, claude bool, at string) map[string
 		}
 		return tc
 	}
+	if off, _, _, ok := vertexBudgets(strings.TrimPrefix(m, "models/")); ok && r.ThinkOff && !claude {
+		// reasoning turned off (a Chat client's effort none, the routing
+		// classifier's ask) goes as 2.5's off budget, as on Vertex AI:
+		// 0 for Flash and Flash-Lite, Pro's least, 128. It went as low's
+		// 4096 (tangtang969 on X: a classifier that doesn't think is
+		// faster)
+		return map[string]any{"thinkingBudget": off}
+	}
 	budget := budgetOf(effortOf(r.Effort))
 	if claude && r.MaxTokens > 0 && budget >= r.MaxTokens {
 		budget = r.MaxTokens - 1
