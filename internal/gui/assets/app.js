@@ -21316,7 +21316,16 @@ function renderAgentPrefs() {
   };
   const compactRow = el("div", "compact-at");
   compactRow.append(compactSegs, compactNum);
-  $("#fullContextSegs").replaceChildren(compactRow);
+  const hb = el("div", "", compactRow);
+  if (s.codexCompactHeld) {
+    const drop = el("button", "text", t("Take it out")), line = el("div", "compact-held", el("span", "", t("Codex's config.toml sets {keys}, which Codex reads before Long conversations, so it compacts by that", { keys: s.codexCompactHeld.map((h) => (h.profile ? `[profiles.${h.profile}] ` : "") + `${h.key} = ${h.value}`).join(", ") })));
+    drop.onclick = () => prefWrite(api("settings/codex-compact-held/drop", {}));
+    line.append(drop);
+    hb.append(line);
+  }
+  const cw = s.codexWindow;
+  if (cw) hb.append(el("div", "compact-held", t("magpie tells Codex {model}'s window is {n}, so Codex compacts it at 90% of that, before Long conversations; a larger one is set in its provider's Context window", { model: cw.model, n: contextsText({ "*": cw.window }).toUpperCase() })));
+  $("#fullContextSegs").replaceChildren(hb);
   // Codex's background compaction (#2490): [features.async_compaction] and
   // its threshold, written where magpie routes Codex (codex_async.go)
   const setAsync = (body) => prefWrite(api("settings/codex-async-compact", body));
