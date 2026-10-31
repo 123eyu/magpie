@@ -91,7 +91,7 @@ func dshAt(at place) *Agent {
 	gw := at.gw
 	dir := at.getenv("DSH_HOME")
 	if dir == "" {
-		dir = filepath.Join(at.home, ".dsh")
+		dir = at.join(".dsh")
 	}
 	// DeepSeek Harness Desktop, on this machine (a distro has none)
 	desktop := func() bool { return at.spell == nil && (&Agent{ID: "dsh"}).HasApp() }

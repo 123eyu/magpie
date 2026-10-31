@@ -191,6 +191,9 @@ func Sync() (*Result, error) {
 }
 
 func (l *Library) syncMCP(t *Target, b *backups, res *Result) {
+	if res.unreached(t) {
+		return
+	}
 	if t.MCP == nil {
 		return
 	}
