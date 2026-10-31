@@ -20091,7 +20091,7 @@ function renderSettings() {
   }
   // gateway mode leaves out what is written into this computer's agents'
   // files, and the alerts its desktop would show
-  for (const r of [$("#plainNamesSegs").parentElement, $("#usageAlertRow"), $("#balanceAlertRow"), $("#resetReminderRow"), $("#turnDoneRow"), $("#maskAlertRow")]) r.hidden = gatewayMode;
+  for (const r of [$("#plainNamesSegs").parentElement, $("#usageAlertRow"), $("#balanceAlertRow"), $("#resetReminderRow"), $("#turnDoneRow")]) r.hidden = gatewayMode;
   // the parts' tabs, one gone whose rows are all hidden here
   setSetTab(setTab);
 }
@@ -21252,8 +21252,6 @@ function renderAlerts(s, keep) {
   const turnOpts = [["0", t("Off")], ...mins.map((m) => [String(m * 60), t("{n} min", { n: m })])];
   if (d && !mins.some((m) => m * 60 === d)) turnOpts.push([String(d), d % 60 ? t("{n} s", { n: d }) : t("{n} min", { n: d / 60 })]);
   $("#turnDoneSegs").replaceChildren(segs(turnOpts, String(d), (v) => savePrefs({ ...keep, turnDoneAlert: Number(v) })));
-  // a value masked for the first time (Must2333 on X): off until turned on
-  $("#maskAlertSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.maskAlert ? "on" : "off", (v) => savePrefs({ ...keep, maskAlert: v === "on" })));
 }
 
 // AGENT_PREFS: an agent's own settings, by its id, each a row kept in
