@@ -200,6 +200,21 @@ func TestDeepSeekRefusalAfterThinkingFailsOver(t *testing.T) {
 			t.Fatalf("tries: %+v", r.Tries)
 		}
 	})
+	// The same from WorkBuddy's own framing, as workbuddy 0.2.6 hands it
+	// on: "tool_calls": [] and "finish_reason": "" on every delta, an empty
+	// reasoning_content beside the line it took out (plugins #540).
+	wire := sse(`data: {"choices":[{"delta":{"content":"","extra_fields":null,"function_call":null,"reasoning_content":" node","refusal":"","tool_calls":[]},"finish_reason":"","index":0,"logprobs":null}],"created":1793401068,"id":"c56c77084382622efa17c799396db5cf","model":"deepseek-v4.1-flash","object":"chat.completion.chunk","usage":null}`,
+		`data: {"choices":[{"delta":{"extra_fields":null,"function_call":null,"reasoning_content":"","refusal":"","role":"assistant","tool_calls":[]},"finish_reason":"content_filter","index":0,"logprobs":null}],"created":0,"id":"c56c77084382622efa17c799396db5cf","model":"deepseek-v4.1-flash","object":"chat.completion.chunk","usage":null}`,
+		`data: [DONE]`)
+	t.Run("workbuddy's wire", func(t *testing.T) {
+		a, b, s, code, body := run(t, wire)
+		if code != 200 || !strings.Contains(body, "from b") || strings.Contains(body, " node") || a.n != 1 || b.n != 1 {
+			t.Fatalf("%d %s (a %d, b %d)", code, body, a.n, b.n)
+		}
+		if r := lastRoute(s); len(r.Tries) != 2 || r.Tries[0].Fail != failRefused {
+			t.Fatalf("tries: %+v", r.Tries)
+		}
+	})
 	t.Run("answered", func(t *testing.T) {
 		a, b, _, code, body := run(t, answered)
 		if code != 200 || !strings.Contains(body, "The user is asking") || !strings.Contains(body, "from a") || strings.Contains(body, "from b") || a.n != 1 || b.n != 0 {
