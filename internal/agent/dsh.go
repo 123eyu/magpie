@@ -1672,8 +1672,12 @@ func dshKindConfig(k dshKind, models []catalog.Model, api, gw string) dshPiRoute
 // dshStartOnItsRoute moves a start (agent-default-model) on a model of
 // magpie's to the route that model is on now: dsh finds a model by its
 // route and id, and fails a session started on a route that no longer has
-// it. The model, effort and everything else in the entry stay, and so does
-// a start on a model magpie no longer gives dsh (dshCheck says so).
+// it. A start on a model by an id magpie lists it by no longer (a found
+// group's group/auto-<slug>, now auto/<model>; a renamed provider's) moves
+// onto the id the route lists: dsh finds no model by the old one, and its
+// desktop app showed no model picked (zyh6036 on X). The effort and
+// everything else in the entry stay, and so does a start on a model magpie
+// no longer gives dsh (dshCheck says so).
 func dshStartOnItsRoute(items []dshItem, models []catalog.Model) []dshItem {
 	for i, it := range items {
 		if it.id != "agent-default-model" {
@@ -1683,13 +1687,18 @@ func dshStartOnItsRoute(items []dshItem, models []catalog.Model) []dshItem {
 		if !isDshRoute(c["provider"]) || c["model"] == "" {
 			continue
 		}
-		want := ""
-		for _, m := range models {
-			if m.ID == c["model"] {
-				want = dshRouteOf(m)
+		want, id := "", c["model"]
+		for _, ref := range []string{id, provider.PublicRef(id), provider.RenamedRef(id), provider.PublicRef(provider.RenamedRef(id))} {
+			for _, m := range models {
+				if m.ID == ref {
+					want, id = dshRouteOf(m), ref
+				}
+			}
+			if want != "" {
+				break
 			}
 		}
-		if want == "" || want == c["provider"] {
+		if want == "" || want == c["provider"] && id == c["model"] {
 			continue
 		}
 		n, err := dshNode(it)
@@ -1697,6 +1706,7 @@ func dshStartOnItsRoute(items []dshItem, models []catalog.Model) []dshItem {
 			continue
 		}
 		yamlSetKey(yamlMapping(n, "config"), "provider", &yaml.Node{Kind: yaml.ScalarNode, Value: want})
+		yamlSetKey(yamlMapping(n, "config"), "model", &yaml.Node{Kind: yaml.ScalarNode, Value: id, Style: yaml.DoubleQuotedStyle})
 		if lines, err := dshNodeLines(n); err == nil {
 			items[i].lines = lines
 		}
