@@ -105,7 +105,10 @@ lowest on level (`codexSideEffort`, `TestCodexSideCallAskedAtAnEffortTheModelTak
 Wherever the levels aren't known, serve asks any request again once at
 its lowest (low) when the upstream turns no effort or none away as needing
 one, matched on the error body (`effortRequired`, on Chat and Responses,
-forwarded or translated; `TestEffortRequiredRefusalAskedAgainAtLow`); any
+forwarded or translated; `TestEffortRequiredRefusalAskedAgainAtLow`), or
+turns none or minimal away in `alwaysThinks`' words, which name no levels
+(`needsReasoning`: Kimi Code's K3.1 Pro on Chat, #3739,
+`TestKimiChatThinkingOffRefused`), then at the model's lowest from the start; any
 other 400 goes back as it came (`TestOtherBadRequestNotAskedAgainAtLow`). A session on Codex's
 own model sends them to ChatGPT as Codex sent them, whatever the config says
 (`TestCodexAppSideTurnsStayWithAnOwnModelSession`); so does a session model

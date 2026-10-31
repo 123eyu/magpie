@@ -5298,7 +5298,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 		res.Body.Close()
 		res.Body = io.NopCloser(bytes.NewReader(b))
-		if effortRequired.Match(b) {
+		if needsReasoning(e, b) {
 			if offEffort(e) {
 				s.markUnfit(p.ID, offRefused(model), proto)
 			}
@@ -6301,7 +6301,7 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 				continue
 			}
 		}
-		if (req.Effort == "" || offEffort(req.Effort)) && beforeOff == nil && res.StatusCode == http.StatusBadRequest && effortRequired.Match(b) {
+		if (req.Effort == "" || offEffort(req.Effort)) && beforeOff == nil && res.StatusCode == http.StatusBadRequest && needsReasoning(req.Effort, b) {
 			// no reasoning effort, or none, turned away by a model that
 			// needs one (a Codex title on a model other than its own
 			// asks none, cybercaius on Discord): asked again once at its
@@ -6429,6 +6429,15 @@ var toolsWithoutEffort = regexp.MustCompile(`(?is)tools with reasoning_effort ar
 // disabled". A refusal of a level the model hasn't, or of the field
 // itself, is not one.
 var effortRequired = regexp.MustCompile(`(?i)reasoning[ _.]?effort\W+(?:is\s+)?(?:required|mandatory|missing)\b|(?:missing|requires?|needs?)\s+(?:a\s+|the\s+)?(?:required\s+)?(?:parameter\W+)?reasoning(?:[ _.]?effort)?\b|reasoning\s+is\s+(?:required|mandatory)\b|reasoning\W+(?:cannot|can't|can not)\s+be\s+(?:disabled|turned off)`)
+
+// needsReasoning is b turning effort away as effortRequired does, or,
+// for reasoning asked off (none, minimal), in the words of a model that
+// always thinks (alwaysThinks), which name no levels: Kimi Code's K3.1
+// Pro answers a Chat request's none "K3.1 Pro does not support disabled
+// thinking mode" as its Messages endpoint does (#3739).
+func needsReasoning(effort string, b []byte) bool {
+	return effortRequired.Match(b) || offEffort(effort) && alwaysThinks.Match(wordsOf(b))
+}
 
 // OpenRouter rejects an explicit reasoning-off request for some endpoints.
 var mandatoryReasoning = regexp.MustCompile(`(?i)reasoning is mandatory for this endpoint and cannot be disabled`)
