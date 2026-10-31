@@ -6964,9 +6964,6 @@ func asksResponses(body []byte) bool {
 	return false
 }
 
-// translate serves a client API the provider lacks by speaking another
-// one to it. The provider is always streamed; the client gets whichever
-// it asked for.
 // cacheControlField is the mark a Messages client of Anthropic's puts on a
 // block of its own.
 var cacheControlField = []byte("cache_control")
@@ -6984,12 +6981,15 @@ var cacheControlField = []byte("cache_control")
 func parseTranslated(from, to provider.Protocol, body []byte) (*Request, error) {
 	if from == provider.Anthropic && to == provider.Anthropic && bytes.Contains(body, cacheControlField) {
 		if req, err := parseAnthropicRequest(body, true); err == nil {
-			return req, nil
+			return afterParse(from, body, req)
 		}
 	}
 	return parseRequest(from, body, false, to == provider.Responses)
 }
 
+// translate serves a client API the provider lacks by speaking another
+// one to it. The provider is always streamed; the client gets whichever
+// it asked for.
 func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Provider, from, to provider.Protocol, model string, body []byte, u *Usage) (int, string) {
 	if from == provider.Responses && hasUnportableCurrentImage(body) {
 		msg := "input_image without image_url cannot be translated; send an image_url or use a native Responses route"
@@ -7295,6 +7295,12 @@ func parseRequest(proto provider.Protocol, body []byte, facts, keepInstructions 
 	if err != nil {
 		return nil, err
 	}
+	return afterParse(proto, body, req)
+}
+
+// afterParse is what every parse of a client's request does after reading
+// it, whichever reader read it (parseRequest, parseTranslated).
+func afterParse(proto provider.Protocol, body []byte, req *Request) (*Request, error) {
 	// a call's id may carry Gemini's thought signature (gemini_signature.go)
 	unsignCalls(req)
 	req.LastIsTurn = proto == provider.Chat || proto == provider.Responses

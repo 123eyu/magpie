@@ -203,3 +203,30 @@ func TestPluginWholeAskedServesBadMarksAsBefore(t *testing.T) {
 		}
 	}
 }
+
+// A Messages ask read with its client's marks (parseTranslated) is
+// finished like any other parse: a call id that carries a Gemini
+// thought signature, from a turn a Gemini model answered, goes to the
+// Anthropic upstream as the call's own id, its result answering it.
+func TestTranslatedWithMarksTakesSignaturesOffCallIDs(t *testing.T) {
+	id := signedID("toolu_1", "c2lnbmF0dXJl")
+	if id == "toolu_1" {
+		t.Fatal("signedID left the id unsigned")
+	}
+	q, _ := json.Marshal(id)
+	body := []byte(`{"model":"m1","max_tokens":64,"messages":[
+{"role":"user","content":[{"type":"text","text":"go"}]},
+{"role":"assistant","content":[{"type":"tool_use","id":` + string(q) + `,"name":"Bash","input":{}}]},
+{"role":"user","content":[{"type":"tool_result","tool_use_id":` + string(q) + `,"content":"ok","cache_control":{"type":"ephemeral","ttl":"1h"}}]}]}`)
+	req, err := parseTranslated(provider.Anthropic, provider.Anthropic, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.clientCache == nil || req.clientCache.tail != "1h" {
+		t.Fatalf("not read with its marks: %+v", req.clientCache)
+	}
+	call, result := req.Messages[1].Parts[0], req.Messages[2].Parts[0]
+	if call.ID != "toolu_1" || result.CallID != "toolu_1" {
+		t.Fatalf("call %q, result %q: want toolu_1 for both", call.ID, result.CallID)
+	}
+}
