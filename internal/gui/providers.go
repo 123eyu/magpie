@@ -246,6 +246,9 @@ type providerJSON struct {
 	// each key's or account's own limit over it (#892), by its name in
 	// lower case or its key id; 0 there is none
 	AccountConcurrency map[string]int `json:"accountConcurrency,omitempty"`
+	// each subscription account's weight under By weight routing, by its
+	// name in lower case; one not in it weighs 1 (provider.AccountWeights)
+	AccountWeights map[string]int `json:"accountWeights,omitempty"`
 	// how many may wait for each key or account, and for how many seconds
 	// (0: no bound)
 	QueueLimit int `json:"queueLimit,omitempty"`
@@ -648,7 +651,7 @@ func providerInfoWith(p provider.Provider, agents []agentUse, desktop map[string
 		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, CapStop: p.CapStop, CapCareful: p.CapCareful, Unlisted: p.Unlisted, NoModels: p.ServesNone(), BestInFamily: p.BestInFamily && len(p.Models) == 0 && !p.NoModels, Off: p.Off, Contexts: p.Contexts,
 		MaxConcurrency: p.MaxConcurrency, PluginConcurrency: p.PluginConcurrency(), PriceRate: p.PriceRate,
 		RateWindows: p.RateWindows, RateNow: rateNowOf(p, time.Now()),
-		AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM,
+		AccountConcurrency: p.AccountConcurrency, AccountWeights: p.AccountWeights, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM,
 		Outputs: provider.OutputsOf(p.ID), Compacts: provider.CompactsOf(p.ID),
 	}
 	if p.Account != nil {
@@ -1357,6 +1360,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// it follow the account's cap
 			Cap    int    `json:"cap"`
 			Window string `json:"window"`
+			// Weight, for accountweight: the account's share under By
+			// weight routing, 1 to provider.MaxKeyWeight (0 or 1: none)
+			Weight int `json:"weight"`
 			// Alias, for accountname: the account's name of the user's
 			// own, "" to take it off (#1515)
 			Alias string `json:"alias"`
@@ -1700,11 +1706,13 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				if old != nil {
 					in.AccountModels = old.AccountModels
 				}
-				// and their usage caps, with accountcap and windowcap, and their
-				// limits on requests at once, with accountconcurrency
+				// and their usage caps, with accountcap and windowcap, their
+				// limits on requests at once, with accountconcurrency, and
+				// their weights, with accountweight
 				if old != nil {
 					in.AccountCaps, in.AccountWindowCaps = old.AccountCaps, old.AccountWindowCaps
 					in.AccountConcurrency = old.AccountConcurrency
+					in.AccountWeights = old.AccountWeights
 					in.AccountNames = old.AccountNames // with accountname
 				}
 				// the image models unticked in its editor likewise: []
@@ -1931,6 +1939,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			}
 		case "accountconcurrency":
 			if err := provider.SetAccountConcurrency(in.ID, req.Account, req.Limit); err != nil {
+				fail(rw, err)
+				return
+			}
+		case "accountweight":
+			if err := provider.SetAccountWeight(in.ID, req.Account, req.Weight); err != nil {
 				fail(rw, err)
 				return
 			}
