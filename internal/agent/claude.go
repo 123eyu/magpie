@@ -969,8 +969,16 @@ func claudeIn(at place) *Agent {
 		// ids whole, so a tier fixed at an effort (codex/gpt-6-luna:max)
 		// kept its model's row as a second entry (#1616, iTanX). That row
 		// is left out here; a tier at no effort Claude Code matches itself.
+		// With the own-models switch on, replaceBuiltInOptions takes the
+		// tier rows out of /model with the built-in lineup (Claude Code
+		// keeps only the Default row and the picker's own), so a tier's
+		// model keeps its row then, or it would be in /model nowhere.
+		replace := provider.OwnModelsHidden("claude")
 		var onTier []string
 		for _, t := range claudeTiers {
+			if replace {
+				break
+			}
 			if v := env(tierEnv(t)); v != "" {
 				if _, e := tierAt(v); e != "" {
 					onTier = append(onTier, v)
@@ -1013,7 +1021,7 @@ func claudeIn(at place) *Agent {
 		// row stays, Claude Code keeping it as its own fallback. The flag
 		// goes again with the switch on, the whole picker written either way.
 		picker := map[string]any{"options": rows}
-		if provider.OwnModelsHidden("claude") {
+		if replace {
 			picker["replaceBuiltInOptions"] = true
 		}
 		stash(map[string]string{pickerKey: "1"})
