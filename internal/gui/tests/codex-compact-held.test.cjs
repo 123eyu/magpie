@@ -16,13 +16,9 @@ const { chromium, webkit } = require("playwright");
 const { watchSettingsReads, agentRow, openAgentSettings, reach } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
-const holds = [
-  { path: "/home/u/.codex/config.toml", key: "model_context_window", value: "128000" },
-  { path: "/home/u/.codex/config.toml", key: "model_auto_compact_token_limit", profile: "work", value: "120000" },
-];
 
 function serve(lang, posts) {
-  let settings = { theme: "light", lang, tray: "panel", currency: "usd", version: "0.1.900", dir: "~/.config/magpie", gateway: "http://127.0.0.1:3425", proxyNow: "none", proxySource: "none", visionModels: [], imageGenModels: [], titleModels: [], workbuddyCheckins: [], lanURLs: [], redactWords: [], trayUsageEvery: 3, compactAt: 544000, codexCompactHeld: holds, codexWindow: { model: "relay/gpt-6-A", window: 128000 } };
+  let settings = { theme: "light", lang, tray: "panel", currency: "usd", version: "0.1.900", dir: "~/.config/magpie", gateway: "http://127.0.0.1:3425", proxyNow: "none", proxySource: "none", visionModels: [], imageGenModels: [], titleModels: [], workbuddyCheckins: [], lanURLs: [], redactWords: [], trayUsageEvery: 3, compactAt: 544000, codexCompactKeys: keys, codexWindow: { model: "relay/gpt-6-A", window: 128000, n: "128K" } };
   const providers = { providers: [], presets: [], excluded: [], gateway: { running: true, window: true } };
   return async (route) => {
     const req = route.request(), url = new URL(req.url());
@@ -34,7 +30,7 @@ function serve(lang, posts) {
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
     if (url.pathname === "/api/settings/codex-compact-held/drop") {
       posts.push({ path: url.pathname, body: req.postDataJSON() });
-      settings = { ...settings, codexCompactHeld: undefined };
+      settings = { ...settings, codexCompactKeys: undefined };
       return json(settings);
     }
     if (url.pathname === "/api/settings") {
@@ -55,7 +51,7 @@ function serve(lang, posts) {
 
 const keys = "model_context_window = 128000, [profiles.work] model_auto_compact_token_limit = 120000";
 const words = {
-  en: { line: `Codex's config.toml sets ${keys}, which Codex reads before Long conversations, so it compacts by that`, drop: "Take it out", at: "Compact at 544K", own: "magpie tells Codex relay/gpt-6-A's window is 128K, so Codex compacts it at 90% of that, before Long conversations; a larger one is set in its provider's Context window" },
+  en: { line: `Codex's config.toml sets ${keys}, read before Long conversations`, drop: "Take it out", at: "Compact at 544K", own: "Codex compacts relay/gpt-6-A at 90% of its 128K window, before Long conversations; set a larger one in its provider's Context window" },
   zh: { line: `Codex 的 config.toml 设了 ${keys}，Codex 先读它再读「长对话」，所以按它压缩`, drop: "拿掉它", at: "544K 时压缩", own: "magpie 告诉 Codex relay/gpt-6-A 的窗口是 128K，所以 Codex 在它的 90% 处压缩，不等「长对话」；更大的窗口在它服务商的「上下文窗口」里设" },
   "zh-TW": { line: `Codex 的 config.toml 設了 ${keys}，Codex 先讀它再讀「長對話」，所以按它壓縮`, drop: "拿掉它", at: "544K 時壓縮", own: "magpie 告訴 Codex relay/gpt-6-A 的視窗是 128K，所以 Codex 在它的 90% 處壓縮，不等「長對話」；更大的視窗在它服務商的「上下文視窗」裡設" },
   ja: { line: `Codex の config.toml に ${keys} があり、Codex は「長い会話」より先にこれを読むため、これで圧縮します`, drop: "取り除く", at: "544K で圧縮", own: "magpie は Codex に relay/gpt-6-A のウィンドウを 128K と伝えているため、Codex は「長い会話」より先にその 90% で圧縮します。より大きいウィンドウはプロバイダの「コンテキストウィンドウ」で設定します" },

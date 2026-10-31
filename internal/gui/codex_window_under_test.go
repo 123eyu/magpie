@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -42,7 +43,7 @@ func TestCodexWindowUnderLongConversations(t *testing.T) {
 
 	cfg("model = \"relay/gpt-6-A\"\nmodel_provider = \"magpie\"\n")
 	save(settings.Settings{CompactAt: 544000})
-	if w := got(); w == nil || *w != (codexRunWindow{Model: "relay/gpt-6-A", Window: 128000}) {
+	if w := got(); w == nil || *w != (codexRunWindow{Model: "relay/gpt-6-A", Window: 128000, Size: "128K"}) {
 		t.Fatalf("544K over a 128K model: codexWindow = %+v; want relay/gpt-6-A at 128000", w)
 	}
 
@@ -69,5 +70,20 @@ func TestCodexWindowUnderLongConversations(t *testing.T) {
 	save(settings.Settings{CompactAt: 544000, ModelCompacts: map[string]int{"relay/gpt-6-A": 100000}})
 	if w := got(); w != nil {
 		t.Fatalf("the model's own threshold: codexWindow = %+v; want none", w)
+	}
+}
+
+func TestCodexKeysTextAndSize(t *testing.T) {
+	got := codexKeysText([]agent.CodexCompactHold{{Key: "model_context_window", Value: "128000"}, {Key: "model_auto_compact_token_limit", Profile: "work", Value: "120000"}})
+	if want := "model_context_window = 128000, [profiles.work] model_auto_compact_token_limit = 120000"; got != want {
+		t.Fatalf("codexKeysText = %q; want %q", got, want)
+	}
+	if got := codexKeysText(nil); got != "" {
+		t.Fatalf("no keys: %q", got)
+	}
+	for n, want := range map[int]string{128000: "128K", 1000000: "1M", 2000000: "2M", 1050000: "1050K", 128500: "128500"} {
+		if got := tokensSize(n); got != want {
+			t.Errorf("tokensSize(%d) = %q; want %q", n, got, want)
+		}
 	}
 }

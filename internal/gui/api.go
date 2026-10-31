@@ -519,8 +519,9 @@ type settingsJSON struct {
 	CodexAsyncHeld []agent.CodexReader `json:"codexAsyncHeld,omitempty"`
 	// the keys this machine's Codex config has that Codex reads before
 	// Long conversations (model_context_window,
-	// model_auto_compact_token_limit; agent.CodexCompactHeld)
-	CodexCompactHeld []agent.CodexCompactHold `json:"codexCompactHeld,omitempty"`
+	// model_auto_compact_token_limit; agent.CodexCompactHeld), written
+	// as the row names them: "[profiles.p] key = value, ..."
+	CodexCompactKeys string `json:"codexCompactKeys,omitempty"`
 	// the magpie model Codex's config runs, when its own window is no
 	// larger than Long conversations' threshold: Codex compacts it at 90%
 	// of that window (codexWindowUnder)
@@ -654,6 +655,33 @@ var loginState = autostart.Enabled
 type codexRunWindow struct {
 	Model  string `json:"model"`
 	Window int    `json:"window"`
+	// Size is Window as the page writes a window (contextsText): 128K, 1M;
+	// "n" is its slot in the row's words, which take the struct whole
+	Size string `json:"n"`
+}
+
+func tokensSize(n int) string {
+	switch {
+	case n%1_000_000 == 0:
+		return strconv.Itoa(n/1_000_000) + "M"
+	case n%1000 == 0:
+		return strconv.Itoa(n/1000) + "K"
+	}
+	return strconv.Itoa(n)
+}
+
+// codexKeysText names Codex's config keys as the Long conversations row
+// shows them, each with its profile and value.
+func codexKeysText(hs []agent.CodexCompactHold) string {
+	var b []string
+	for _, h := range hs {
+		k := h.Key + " = " + h.Value
+		if h.Profile != "" {
+			k = "[profiles." + h.Profile + "] " + k
+		}
+		b = append(b, k)
+	}
+	return strings.Join(b, ", ")
 }
 
 // codexWindowUnder is model's window when Long conversations' threshold
@@ -675,7 +703,7 @@ func codexWindowUnder(st settings.Settings, model string) *codexRunWindow {
 	if !ok || e.Context <= 0 || provider.CompactFor(st, e, provider.GroupFinder()) > 0 || st.Working(e.Context) < e.Context {
 		return nil
 	}
-	return &codexRunWindow{Model: model, Window: e.Context}
+	return &codexRunWindow{Model: model, Window: e.Context, Size: tokensSize(e.Context)}
 }
 
 func settingsState() settingsJSON {
@@ -732,7 +760,7 @@ func settingsState() settingsJSON {
 	s.CodexWarmed, s.ClaudeWarmed = latest(provider.CodexWarmed()), latest(provider.ClaudeWarmed())
 	s.CodexUsers, s.ClaudeUsers = loginUsers("codex"), loginUsers("claude")
 	s.CodexAsyncHeld = agent.CodexAsyncHeld()
-	s.CodexCompactHeld = agent.CodexCompactHeld("")
+	s.CodexCompactKeys = codexKeysText(agent.CodexCompactHeld(""))
 	s.CodexWindow = codexWindowUnder(s.Settings, agent.CodexModel(""))
 	s.WorkBuddy, s.WorkBuddyCheckins = provider.HasWorkBuddy(), provider.WorkBuddyCheckins()
 	s.Trae, s.TraeCheckins = provider.HasTrae(), provider.TraeCheckins()
