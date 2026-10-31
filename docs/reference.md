@@ -1995,7 +1995,15 @@ file from the old one there. The files are only read. An account
 magpie has already is left as it is, two Team seats of one email stay two
 accounts, and an entry with only an access token (a ChatGPT web session)
 is refused, since it would stop working within days with nothing to renew
-it.
+it. For Claude it takes Claude Code's `.credentials.json`, CLIProxyAPI's
+auth files and claude-swap's export (`cswap --export <file>`, format 1;
+an encrypted one is decrypted first, and an API-key account is added as a
+key instead). A Claude sign-in is kept as the file has it, magpie asking
+Anthropic nothing, with its organization, and a cswap alias becomes the
+account's name in magpie when it has none and the name picks no other
+account. Claude Code renews it the first time it runs on it, and the
+file's copy stops working then: remove the account from cswap (`cswap
+--remove-account`) rather than switch to it there again.
 
 ### Connecting anything else
 

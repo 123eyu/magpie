@@ -560,7 +560,7 @@ const importUsage = "usage: magpie accounts import <codex|claude|antigravity|fac
 // in accounts from other tools' files, as the window's "Import accounts from
 // a file…" does (#1453): Codex's auth.json, codexbar's config.json, and
 // Cockpit Tools', CLIProxyAPI's and Sub2API's exports for ChatGPT; Claude
-// Code's .credentials.json and
+// Code's .credentials.json, claude-swap's export (cswap --export) and
 // CLIProxyAPI's for Claude; Antigravity Cockpit's, Antigravity Manager's
 // and CLIProxyAPI's for Antigravity (Factory's API keys go to its plugin,
 // with accounts add factory). The files are only
