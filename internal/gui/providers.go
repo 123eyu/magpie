@@ -284,7 +284,11 @@ type providerJSON struct {
 	// Groups are the routing groups ("group/<id>") each of its models is
 	// in, by model id: what an unlisted one is still used through, and the
 	// editor names those in none
-	Groups   map[string][]string `json:"groups,omitempty"`
+	Groups map[string][]string `json:"groups,omitempty"`
+	// KeptBy are the routing groups listing alone (Group.Unlists) that
+	// keep each of its models out of agents' lists, by model id: its own
+	// "Only through routing groups" switched off doesn't bring those back
+	KeptBy   map[string][]string `json:"keptBy,omitempty"`
 	Off      bool                `json:"off"`                // switched off: kept, but agents get none of its models
 	Contexts map[string]int      `json:"contexts,omitempty"` // the windows the user set, "*" for all its models
 	Outputs  map[string]int      `json:"outputs,omitempty"`  // the reply limits the user set (provider.OutputsOf)
@@ -755,6 +759,14 @@ func providerInfoWith(p provider.Provider, agents []agentUse, desktop map[string
 				out.Groups = map[string][]string{}
 			}
 			out.Groups[m] = gs
+		}
+	}
+	for id, gs := range provider.GroupKept() {
+		if m, ok := strings.CutPrefix(id, p.ID+"/"); ok {
+			if out.KeptBy == nil {
+				out.KeptBy = map[string][]string{}
+			}
+			out.KeptBy[m] = gs
 		}
 	}
 	if a := p.Account; a != nil {

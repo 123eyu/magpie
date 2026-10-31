@@ -11202,6 +11202,8 @@ function renderModels(p) {
       // an agent's own list can leave a pick out (Kylin_Cloud on X)
       const by = !draft.unlisted && (on || served.has(m.id)) ? hiders(m.id) : [];
       if (by.length) c.title = (c.title || m.id) + "\n" + t("Left out of {agents}'s model list, on the Agents page", { agents: by.join(", ") });
+      const kb = !draft.unlisted && (on || served.has(m.id)) ? p.keptBy?.[m.id] || [] : [];
+      if (kb.length) c.title = (c.title || m.id) + "\n" + t("Kept out of agents' lists by {groups}, a routing group listed alone", { groups: kb.join(", ") });
       tested(c, m.id);
       menu(c, m.id);
       // a click picks the model, a served one too: with none picked it
@@ -11253,10 +11255,13 @@ function renderModels(p) {
     hid.replaceChildren();
     const ids = draft.unlisted || decideOnly(p) ? [] : servedIds(p);
     const lines = (p.agents || []).map((a) => [a.name, ids.filter((id) => a.hides?.includes(id))]).filter(([, l]) => l.length);
-    hid.hidden = !lines.length;
-    for (const [agent, l] of lines.slice(0, 4)) {
-      hid.append(el("div", "", t("{agent}'s model list leaves out {models}: shown again from there, on the Agents page.", { agent, models: l.slice(0, 6).join(", ") + (l.length > 6 ? " …" : "") })));
-    }
+    // a group listed alone keeps its models out of every agent's list,
+    // this switch off or on (hayden4608 on Discord)
+    const kept = [...new Set(ids.flatMap((id) => p.keptBy?.[id] || []))].map((g) => [g, ids.filter((id) => p.keptBy?.[id]?.includes(g))]);
+    hid.hidden = !lines.length && !kept.length;
+    const few = (l) => l.slice(0, 6).join(", ") + (l.length > 6 ? " …" : "");
+    for (const [agent, l] of lines.slice(0, 4)) hid.append(el("div", "", t("{agent}'s model list leaves out {models}: shown again from there, on the Agents page.", { agent, models: few(l) })));
+    for (const [group, l] of kept.slice(0, 4)) hid.append(el("div", "", t("The routing group {group} is listed alone, so agents don't see {models}: change its Model lists on the Routing page.", { group, models: few(l) })));
   };
   // those of its models in no routing group, while it is kept for groups:
   // nothing can use them, which is said here rather than left for the

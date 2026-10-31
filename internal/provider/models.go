@@ -2727,7 +2727,7 @@ func catalogKeeping(keep func(Entry) bool) []Entry {
 	out := slices.Clone(groupEntries(entries)) // held: the caller's to change
 	kept := unlistedByGroups(entries)
 	for _, e := range entries {
-		if !e.Provider.Unlisted && !kept[e.ID] || keep != nil && keep(e) {
+		if !e.Provider.Unlisted && len(kept[e.ID]) == 0 || keep != nil && keep(e) {
 			out = append(out, e)
 		}
 	}
@@ -2735,13 +2735,14 @@ func catalogKeeping(keep func(Entry) bool) []Entry {
 }
 
 // unlistedByGroups are the models, by "provider/model", that a group
-// keeps out of the lists (Group.Unlists): those it names, a member fixed
-// at an effort counting as its model, and those its patterns match.
-func unlistedByGroups(entries []Entry) map[string]bool {
+// keeps out of the lists (Group.Unlists), with the names of the groups
+// that do: those it names, a member fixed at an effort counting as its
+// model, and those its patterns match.
+func unlistedByGroups(entries []Entry) map[string][]string {
 	if !slices.ContainsFunc(heldOf("file", load).Groups, func(g Group) bool { return g.Unlists }) {
 		return nil
 	}
-	out := map[string]bool{}
+	out := map[string][]string{}
 	for _, g := range groupsIn(entries) {
 		if !g.Unlists || g.Hidden || g.Disabled {
 			continue
@@ -2751,9 +2752,29 @@ func unlistedByGroups(entries []Entry) map[string]bool {
 				continue
 			}
 			model, _ := memberEffortIn(entries, id)
-			if p, m, ok := resolveIn(entries, model); ok {
-				out[p.ID+"/"+m] = true
+			if p, m, ok := resolveIn(entries, model); ok && !slices.Contains(out[p.ID+"/"+m], cmp.Or(g.Name, g.ID)) {
+				out[p.ID+"/"+m] = append(out[p.ID+"/"+m], cmp.Or(g.Name, g.ID))
 			}
+		}
+	}
+	return out
+}
+
+// GroupKept is the models, by "provider/model", that a group listing
+// alone (Group.Unlists) keeps out of agents' lists, with those groups'
+// names: a provider's editor names them, as a model its own switch put
+// back for agents is still left out by them. A signed-in subscription's
+// models, which agents keep (SubscriptionKept), aren't among them.
+func GroupKept() map[string][]string {
+	entries := providerEntries()
+	kept := unlistedByGroups(entries)
+	if len(kept) == 0 {
+		return nil
+	}
+	out := map[string][]string{}
+	for _, e := range entries {
+		if gs := kept[e.ID]; len(gs) > 0 && !SubscriptionKept(e) {
+			out[e.ID] = slices.Clone(gs)
 		}
 	}
 	return out
@@ -2779,7 +2800,7 @@ func Unlisted() []Entry {
 	entries := providerEntries()
 	kept := unlistedByGroups(entries)
 	for _, e := range entries {
-		if e.Provider.Unlisted || kept[e.ID] && !SubscriptionKept(e) {
+		if e.Provider.Unlisted || len(kept[e.ID]) > 0 && !SubscriptionKept(e) {
 			out = append(out, e)
 		}
 	}
