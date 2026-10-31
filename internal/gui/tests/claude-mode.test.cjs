@@ -10,6 +10,10 @@
 // - hovering or focusing the pill shows both modes, the one in use marked,
 //   each with its advantage, inside the window; moving away hides it;
 // - Claude Code in WSL whose home wasn't found says so;
+// - Interactive only: a request it can't take fails, and the card says
+//   nothing runs as -p; where it can't run, the pill names Interactive
+//   only (never claude -p), says Claude requests fail and why, and
+//   Change in Settings goes to the row;
 // - another subscription (Codex), and Only switch, which serves nothing,
 //   have no such row, and /api/claude/mode isn't read for them.
 // The mode is read from /api/claude/mode once as the editor opens.
@@ -33,6 +37,8 @@ const RUNS = {
   schema: { tui: true, last: { tui: false, why: "schema", at: ago(3) } },
   off: { tui: false, why: "off", last: { tui: false, why: "off", at: ago(3) } },
   wsl: { tui: false, why: "wsl-home", wsl: true },
+  only: { tui: true, only: true },
+  onlyBroken: { tui: false, why: "broken", only: true },
 };
 
 // each language's words, as the i18n table has them
@@ -153,6 +159,42 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForTimeout(300);
       assert(await page.locator("#claudeTuiRow.flash").isVisible(), "the interactive mode's row is shown, lit");
       assert.equal(await page.locator(".cc-tip").count(), 0, "the card went with the editor");
+      assert.deepEqual(errors, []);
+    });
+
+    test(`${engine} ${lang}: Interactive only says a request fails rather than running as -p`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const { page, errors } = await openEditor(browser, lang, RUNS.only);
+      const row = runRow(page);
+      await row.waitFor();
+      const tr = (k, v) => page.evaluate(([k, v]) => t(k, v), [k, v]);
+      assert.equal(await row.locator(".cc-pill.tui").count(), 1);
+      assert.equal((await row.locator(".cc-said").textContent()).trim(), await tr("Interactive only: a request it can't take fails instead of running as -p"));
+      assert.equal(await row.locator("button", { hasText: w.change }).count(), 0);
+      await row.locator(".cc-pill").hover();
+      const foot = await tr("Interactive only is set in Settings › Models › Replies: nothing runs as -p, and a request the interactive mode can't take, or one it fails to start for, fails saying why.");
+      assert.equal((await page.locator(".cc-tip .foot").textContent()).trim(), foot);
+      if (lang !== "en") assert(!/^Interactive only/.test(foot), `not translated: ${foot}`);
+      assert.deepEqual(errors, []);
+    });
+
+    test(`${engine} ${lang}: Interactive only where it can't run says Claude requests fail, and why`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const { page, errors } = await openEditor(browser, lang, RUNS.onlyBroken);
+      const row = runRow(page);
+      await row.waitFor();
+      const tr = (k, v) => page.evaluate(([k, v]) => t(k, v), [k, v]);
+      const pill = row.locator(".cc-pill");
+      assert.equal(await pill.evaluate((e) => e.classList.contains("tui")), false);
+      assert.equal((await pill.textContent()).trim(), await tr("Interactive only"), "never claude -p: nothing runs as it");
+      const why = await tr("the interactive mode failed to start lately, and is tried again later");
+      assert.equal((await row.locator(".cc-said").textContent()).trim(), await tr("Claude requests fail: {why}", { why }));
+      if (lang !== "en") assert(!/Claude requests fail/.test(await row.locator(".cc-said").textContent()));
+      // the way out is the setting
+      await row.locator("button", { hasText: w.change }).click();
+      await page.locator("#view-settings #claudeTuiRow.flash").waitFor();
       assert.deepEqual(errors, []);
     });
 
