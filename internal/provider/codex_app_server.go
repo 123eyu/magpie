@@ -270,6 +270,10 @@ var codexApp struct {
 	// one has to start (codexAppBackWait after the last end)
 	ended  map[int]bool
 	backBy time.Time
+	// why: what made the app-servers in stale stale, said in the log line
+	// when they are ended, so a crash a user reports can be put down to
+	// an account switch, a route change or a used-up account (#4550)
+	why string
 }
 
 // CodexAppStuck is whether a Codex app is left on the provider it started
@@ -377,6 +381,14 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 			return nil
 		}
 		c.Lock()
+		switch {
+		case c.switched:
+			c.why = "Codex's ChatGPT account was switched"
+		case !c.seen:
+			c.why = "Codex's account is used up, so magpie serves it"
+		default:
+			c.why = "where Codex's config sends it changed"
+		}
 		c.seen, c.route, c.switched = true, route, false
 		c.stale, c.stuck = map[int]int{}, false
 		for _, p := range pids {
@@ -482,6 +494,9 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 			c.ended = map[int]bool{}
 		}
 		c.ended[p], c.backBy = true, now.Add(codexAppBackWait)
+	}
+	if len(ended) > 0 {
+		log.Printf("codex: ended the Codex app's app-server %v for the app to start another: %s", ended, c.why)
 	}
 	return ended
 }
