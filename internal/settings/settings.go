@@ -1784,6 +1784,36 @@ func EditUsageAliases(edit func(map[string]string) (map[string]string, error)) e
 	return save(s, false)
 }
 
+// EditPluginOptions changes PluginOptions alone, as edit returns them from
+// what the file holds now (provider id → option key → on), as
+// EditUsageAliases does. edit is given a deep copy; an error from it, or a
+// settings file that can't be read, saves nothing.
+func EditPluginOptions(edit func(map[string]map[string]bool) (map[string]map[string]bool, error)) error {
+	defer lockFile()()
+	s, err := loadChecked()
+	if err != nil {
+		return err
+	}
+	cp := make(map[string]map[string]bool, len(s.PluginOptions))
+	for id, o := range s.PluginOptions {
+		cp[id] = maps.Clone(o)
+	}
+	m, err := edit(cp)
+	if err != nil {
+		return err
+	}
+	for id, o := range m {
+		if len(o) == 0 {
+			delete(m, id)
+		}
+	}
+	if len(m) == 0 {
+		m = nil
+	}
+	s.PluginOptions = m
+	return save(s, false)
+}
+
 // SetRedactModel turns the local masking model on or off, on its own, as
 // Settings → Privacy does once the model is downloaded; off is the
 // user's own (RedactModelOff), which the default never turns on again.

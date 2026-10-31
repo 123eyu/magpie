@@ -1164,6 +1164,11 @@ magpie plugin options model-map off   # clears them
 The name can be a package's short name (`model-map` for
 `@magpie-community/middleware-model-map`). A package's
 `"magpie": { "options": {…} }` is the example the editor starts from.
+A key that a provider plugin declares as a switch for its provider (the
+editor's Plugin options, such as Cursor's `wire_trace`) goes where the
+plugin reads it, beside the switches the editor saves: `magpie plugin
+options cursor '{"wire_trace": true}'` turns it on, and `off` puts every
+switch back to the plugin's default.
 
 Ready-made middleware, under Plugins › Discover › Gateway middleware
 (`@magpie-community/middleware-<name>`), mostly New API's channel settings
