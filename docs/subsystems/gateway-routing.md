@@ -1174,7 +1174,12 @@ Covered by `TestSearchMCPServesWebSearch`, `TestSearchMCPWithNoSearcher`,
 
 Whether a model sees is its provider's list's word (`ImageInput`), else
 the served entry's (`blindTo`), and a list that says nothing takes
-models.dev's modalities for the model (`catalog.SeesImages`). A relay's
+models.dev's modalities for the model (`catalog.SeesImages`). A list's
+modalities are read as models.dev words them (`catalog.Kinds`): OpenCode
+Go's `/models` names media types (`image/jpeg`, `video/mp4`,
+`application/pdf`), which read word for word held no `image`, so every
+Go model was text-only (zeo9901 on Discord); a list saved that way is
+mended when read (`mendKinds`). A relay's
 copy of a model can take text only where models.dev says it sees: xyenon
 (Discord) picked provider-1/DeepSeek-V4.1-Flash in pi with Image
 recognition set, magpie sent it the raw image, DeepSeek answered 400
