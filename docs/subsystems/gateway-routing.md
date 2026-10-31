@@ -621,7 +621,8 @@ never fall back to a provider while this setting is off. Without a ready
 Search API, [`canSearchFor`](../../internal/gateway/search_kimi.go) does not offer magpie's replacement search tool.
 `searchesOwn` is the one check for a provider searching for its own models (Kimi Code, WorkBuddy, a Google sign-in), so
 `ownSearcher` and the model list another magpie reads (`webSearchOf`, which then says no search) follow it too.
-A provider's native search on the client's protocol remains unchanged.
+A provider's native search on the client's protocol remains unchanged,
+unless `searchAll` is on (next section).
 An empty `searcher` still selects a provider automatically; an unavailable
 named provider (gone, off, can't search) still falls back to that selection.
 One that is available but fails a search is not replaced by another
@@ -630,6 +631,31 @@ provider (below).
 [`webSearch`](../../internal/gateway/search.go) enforces the API-only path.
 Covered by `TestSearchProviderOff`, `TestSearchProviderOffForwarding`, `TestSearchProviderOffTellsRemoteMagpie`,
 `TestSearcherChosen`, `TestSettingsSearchProviderOff`, and `searcher-pick.test.cjs`.
+
+## magpie's search for a model that searches by itself
+
+[Settings](../../internal/settings/settings.go)' `searchAll` (cybercaius on
+Discord) gives a model whose provider searches the web by itself
+(`searchesFor`) magpie's search too: the searcher and the search APIs, in
+their usual order, as a model that can't search has. Settings › Models ›
+Web search shows it as "Models that search by themselves", Their own or
+magpie's, when magpie has anything to search with.
+[`magpieSearches`](../../internal/gateway/search.go) is the one check: on
+in Settings, magpie can search for this provider (`canSearchFor`), and the
+request isn't magpie's own searcher request (`searching`), which needs the
+provider's search. Where it holds, `searchedForIt` stops the relay of a
+body that asks for web search, and `translate` neither picks an API for
+the provider's own search nor keeps it, so the provider is sent magpie's
+web_search function tool. With nothing magpie can search with, the
+provider keeps its own search and the relay as sent.
+
+Not covered: a Codex sign-in's turns relayed as Codex sent them
+(`codexAsSent`) and a sealed agent message keep the provider's search, as
+they keep the rest of the body; the model list another magpie reads
+(`webSearchOf`) still says native.
+
+Covered by `TestSearchAllTakesTheSearchFromAProviderThatSearches` and
+`search-all.test.cjs`.
 
 ## WorkBuddy's search service
 

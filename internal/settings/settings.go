@@ -471,6 +471,12 @@ type Settings struct {
 	// SearchFirstAPI for the search APIs, the provider's search after them
 	// when they fail; empty for the provider first, as before.
 	SearchFirst string `json:"searchFirst,omitempty"`
+	// SearchAll is that magpie searches for every model, one whose
+	// provider searches the web by itself too (cybercaius on Discord):
+	// the client's search is answered by the searcher and the search APIs,
+	// as for a model that can't, and the provider is sent no search tool.
+	// Only while magpie can search for it (gateway.magpieSearches).
+	SearchAll bool `json:"searchAll,omitempty"`
 	// TrayUsages are the subscriptions and plans whose windows are shown
 	// beside the tray icon, in the order shown, each by its provider and
 	// account ("claude|a@b.c"); none when empty.

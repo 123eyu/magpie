@@ -1470,6 +1470,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		// used or left is the Usage page's toggle as much as Settings', set on its own
 		in.QuotaLeft = cur.QuotaLeft
 		in.QuotaReads = cur.QuotaReads // set on its own (quota-reads below)
+		in.SearchAll = cur.SearchAll   // set on its own (search-all below)
 		in.UsageOrder = cur.UsageOrder // the Usage page's, dragged there
 		// and what the tray panel's Allowances tab leaves out, set there
 		in.PanelUsageHidden = cur.PanelUsageHidden
@@ -1633,6 +1634,24 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		s := settings.Load()
 		s.QuotaReads = in.Reads
+		if err := settings.Save(s); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
+	// whether magpie searches for a model whose provider searches by itself
+	// too (Settings › Models › Web search)
+	mux.HandleFunc("POST /api/settings/search-all", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			On bool `json:"on"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		s := settings.Load()
+		s.SearchAll = in.On
 		if err := settings.Save(s); err != nil {
 			fail(rw, err)
 			return
