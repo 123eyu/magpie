@@ -9,9 +9,11 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"encoding/json"
+	"fmt"
 	"hash/crc32"
 	"hash/fnv"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -42,12 +44,32 @@ import (
 // v15: Codex calls keep the compaction marker independently of its duration.
 // What each version names is what a cache of the one before it cannot serve:
 // the version is part of the directory's name, so a cache written by an older
-// one is never read (pruneCalls).
+// one is never read (pruneCalls). It is raised for a change to every agent's
+// calls, or to the shards' form; a change to one agent's calls raises that
+// agent's callParseVersions instead.
 const callCacheVersion = "calls-v15"
 
-// CallCacheVersion is callCacheVersion, for a cache of what is made of the
-// calls (usage's requests-v1.bin).
-const CallCacheVersion = callCacheVersion
+// callParseVersions is each agent's calls' version, for a change to how one
+// agent's calls are read: its shards written before are read again from
+// their sessions, and every other agent's are kept. Raising callCacheVersion
+// for one agent read every agent's history again, every call shard of a
+// long history (~16,000 files, minutes of CPU) after an update. An agent
+// not named here is at 0, as every shard written before this was.
+var callParseVersions = map[string]int{}
+
+// CallCacheVersion is callCacheVersion and callParseVersions, for a cache
+// of what is made of the calls (usage's requests-v1.bin and heatmap): a
+// raised agent's calls change what is made of them.
+func CallCacheVersion() string {
+	v := callCacheVersion
+	for _, agent := range slices.Sorted(maps.Keys(callParseVersions)) {
+		if n := callParseVersions[agent]; n != 0 {
+			v += fmt.Sprintf(",%s=%d", agent, n)
+		}
+	}
+	return v
+}
+
 const maxKeptCalls = 131072
 const maxKeptFiles = 64
 
@@ -492,6 +514,7 @@ type callDiskState struct {
 	Head               string
 	HeadSize           int
 	Path, Agent        string
+	Parser             int // callParseVersions[Agent] when written
 	At, End, AsstEnd   int64
 	Session, Requested string
 	LastUser, LastAsst time.Time
@@ -506,7 +529,7 @@ type callDiskState struct {
 
 func diskCallState(s *callFile) callDiskState {
 	d := callDiskState{ContentHash: s.ContentHash, Size: s.Size, Mod: s.Mod, Off: s.Off, Head: s.Head, HeadSize: s.HeadSize,
-		Path: s.Path, Agent: s.Agent, At: s.At, End: s.End, AsstEnd: s.AsstEnd, Session: s.Session, Requested: s.Requested,
+		Path: s.Path, Agent: s.Agent, Parser: callParseVersions[s.Agent], At: s.At, End: s.End, AsstEnd: s.AsstEnd, Session: s.Session, Requested: s.Requested,
 		LastUser: s.LastUser, LastAsst: s.LastAsst}
 	if s.Dsh != nil {
 		d.Dsh, _ = json.Marshal(s.Dsh)
@@ -599,7 +622,7 @@ func loadCalls(f file) *callFile {
 			return nil
 		}
 		frame := k.frame()
-		if decodeFrame(data, frame) != nil || frame.State.Path != f.path || frame.State.Agent != f.agent {
+		if decodeFrame(data, frame) != nil || frame.State.Path != f.path || frame.State.Agent != f.agent || frame.State.Parser != callParseVersions[f.agent] {
 			return nil
 		}
 		if st != nil && frame.State.Off < st.Off {
