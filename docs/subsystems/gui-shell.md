@@ -223,6 +223,28 @@ come only with Select, and Done lets the pick go. Relocate project and
 Delete all sessions are in a folder's ⋯ menu, shown on hover (always on a
 touch screen) and on a right-click. See `sessions-folder-list.test.cjs`.
 
+### Routing day tallies
+
+Live, an account's row under Accounts and keys counts its tried, answered
+and failed over the day's whole history, not over the last few requests
+the gateway keeps (#3351): the two said different things by orders of
+magnitude, and the day tabs above the section count the day. The counts
+come with the history read the page already polls (`/api/gateway/history`
+with no day, its `tallies`), counted by `DayTallies` in
+[`internal/gateway/history.go`](../../internal/gateway/history.go) from
+the same files the Usage page reads, keyed as the page groups accounts
+(provider and user, a key or provider by its id). Each look folds in only
+the whole lines added to today's files since the last one: a busy day's
+file is hundreds of MB (#3383), and the page asks every 15 seconds. A
+request done since the last look is counted at the next one. The note
+under the heading says the counts are today's. What the history cannot
+say — the readings the latest request was weighed by, the rests, one
+model resting alone, the accounts in the kept requests — the page still
+takes from the trace over these tallies; a day picked, or a purpose
+picked, counts its own list as before, and the note then points at that
+list. An older answer without tallies counts the kept requests as it
+did. See `routing-day-tallies.test.cjs`.
+
 ### Stored agent sessions in WSL
 
 The Sessions page uses `sessions.ListAgent`; Usage → Sessions uses
