@@ -1415,6 +1415,26 @@ function routingPage(part) {
   let cur = null;           // the route the header and the log tell of: the newest played
   let pinned = null;        // a past route picked from the strip
   let rows = new Map();     // id → { li, wire, st, bi, tg, w, rid, up }
+  // a request's session, and what its agent's own files name it: the
+  // list's session heads and the stage's rows read them, the stage from
+  // its first pass, so they are made here
+  const groupSession = (r) => r.parentSession || r.session || "";
+  const sessionKey = (r) => groupSession(r) ? JSON.stringify([r.agent || "other", groupSession(r)]) : "";
+  // Other agents' sessions are named from their own files, by the id the
+  // agent gave (magpie's X-Magpie-Session can stand in front of it), so a
+  // Claude Code session heads its group with its title, not its UUID
+  // (#1293). Kept here by agent:id, as each trace update brings its rows
+  // anew; a key not asked about yet is asked about at once. Codex's are
+  // kept by its thread id, from its own name index, for the same reason.
+  const ownSession = (r) => r.native_session || r.session || "";
+  const ownKey = (r) => r.agent && r.agent !== "codex" && ownSession(r) ? r.agent + ":" + ownSession(r) : "";
+  const otherTitles = new Map(), askedTitles = new Set(), codexNames = new Map(), codexAsked = new Set();
+  let namesBusy = false, askSoon = 0;
+  const namesDue = new Set(); // asked about, not yet read by a pass
+  // the title of the session a request is of, as its agent named it, or
+  // nothing: never one matched to it by its prompt (parentMatched), which
+  // the list's head says is a guess (connor_yang on Discord)
+  const titleOf = (r) => !r || r.parentMatched ? "" : r.agent === "codex" ? codexNames.get(groupSession(r)) || "" : otherTitles.get(ownKey(r)) || "";
   const subs = new Map();   // a group in the group's way down → its heading { li, wire, key, up }
   // A provider's keys serving one model, FOLD_AT or more of them side by
   // side, fold into one row that tells of them all (#1319: 53 keys for one
@@ -2517,8 +2537,9 @@ function routingPage(part) {
     if (!cur) return;
     hubText();
     const n = now(), rs = staged();
-    const trying = new Set(), busy = new Set();
-    for (const r of rs) for (const tr of r.tries) if (!tr.done) { trying.add(tryseat(r, tr)); busy.add(r.agent); }
+    const trying = new Map(), busy = new Set(); // a seat → the request it answers now
+    for (const r of rs) for (const tr of r.tries) if (!tr.done) { trying.set(tryseat(r, tr), r); busy.add(r.agent); }
+    askUnnamed(rs);
     const onWire = new Set();
     for (const f of flying.values()) { onWire.add(f.id); busy.add(f.agent); }
     // what each request found, read once a pass: hundreds of a route's
@@ -2560,14 +2581,17 @@ function routingPage(part) {
       const r = src().get(row.rid) || pinned || cur, { answered, rests, gave, went } = findings(r);
       const w = row.w, rest = rests.get(w.id) || rests.get(w.id + "\u0000" + (w.model || "")), resting = rest && at(rest.until) > n;
       const smart = r.order[0] && id === seat(r.order[0]) && smartFor(r), said = smart ? t("picked for “{intent}”", { intent: smart }) : "";
-      let s, b;
+      // the session it answers or answered, by its title, so which one
+      // has the account shows (connor_yang on Discord): the request's
+      // own, not each request's words
+      let s, b, named = "";
       if (w.unlisted) s = unlistedWord(w);
       else if (resting) s = restSay(rest);
       else if (w.window) s = t("request longer than its {n} window · passed over", { n: ctxShort(w.window) });
       // a row another request weighed, answering that one: the header
       // tells of this request, so it says the answer is not this one's
-      else if (trying.has(id)) s = (r.id !== cur.id && agents.size <= 1 ? t("answering another request…") : t("answering…")) + (said && " · " + said);
-      else if (answered.has(id)) s = (agents.size > 1 ? t("answered {agent}", { agent: agentName(r.agent) }) : t("answered this request")) + (said && " · " + said);
+      else if (trying.has(id)) { s = (r.id !== cur.id && agents.size <= 1 ? t("answering another request…") : t("answering…")) + (said && " · " + said); named = titleOf(trying.get(id)); }
+      else if (answered.has(id)) { s = (agents.size > 1 ? t("answered {agent}", { agent: agentName(r.agent) }) : t("answered this request")) + (said && " · " + said); named = titleOf(r); }
       else if (gave.has(id)) s = t("{status} · {fail} · passed to {agent}", { status: gave.get(id).status, fail: failWord(gave.get(id).fail), agent: agentName(r.agent) });
       else if (went.has(id)) s = t("{status} · {fail} · went on to the next", { status: went.get(id).status, fail: failWord(went.get(id).fail) });
       else if (w.noURL) s = noURLWord(w);
@@ -2592,10 +2616,15 @@ function routingPage(part) {
       else if (w.aside) s = t("{api} only · after the others", { api: API[w.speaks] || w.speaks || t("any API") });
       else if (w.speaks) s = t("{api} only", { api: API[w.speaks] || w.speaks });
       else s = w.kind === "key" ? t("API key") : t("one key");
-      if (row.st.textContent !== s) row.st.textContent = s;
-      // the intent is the user's own words, of any length: cut short on
-      // the row (routing.css), read whole over it
-      const full = said && s.includes(said) ? s : resting && !w.unlisted ? restTip(rest) : "";
+      // the title in a span of its own, one line cut short however the
+      // status wraps on a narrow stage (routing.css .ses)
+      const line = s + (named ? " · " : "");
+      if (row.st.textContent !== line + named) {
+        if (named) { const n = el("span", "ses", named); row.st.replaceChildren(line, n); } else row.st.textContent = s;
+      }
+      // the intent and a session's title are the user's own words, of any
+      // length: cut short on the row (routing.css), read whole over it
+      const full = said && s.includes(said) || named ? line + named : resting && !w.unlisted ? restTip(rest) : "";
       if (row.st.title !== full) { if (full) row.st.title = full; else row.st.removeAttribute("title"); } // an empty title would hide the row's own
       // an account's windows each, with when they reset, in its tooltip
       // (#1835): the row says the fullest one while idle and what it is
@@ -2632,6 +2661,9 @@ function routingPage(part) {
       if (resting) parts.push(t("{n} resting", { n: resting }));
       if (held) parts.push(t("{n} held", { n: held }));
       setText(f.st, parts.join(" · "));
+      // a title or an intent the row cut short is read whole over the fold too
+      const tip = on?.st.title ? f.st.textContent : "";
+      if (f.st.title !== tip) { if (tip) f.st.title = tip; else f.st.removeAttribute("title"); }
       lightRow(f.li, f.wire, !!on, ms.some((m) => has(m, "now")));
       if (on) f.wire.style.setProperty("--agent", on.wire.style.getPropertyValue("--agent"));
       return !!ms.length && resting + held === ms.length;
@@ -3310,26 +3342,25 @@ function routingPage(part) {
   const reqRows = new Map(); // id → { b, sig, r }
   const sessionRows = new Map(); // agent + session → persistent heading
   const closedSessions = new Set();
-  const groupSession = (r) => r.parentSession || r.session || "";
-  const sessionKey = (r) => groupSession(r) ? JSON.stringify([r.agent || "other", groupSession(r)]) : "";
-  let namesBusy = false;
-  // Other agents' sessions are named from their own files, by the id the
-  // agent gave (magpie's X-Magpie-Session can stand in front of it), so a
-  // Claude Code session heads its group with its title, not its UUID
-  // (#1293). Kept here by agent:id, as each trace update brings its rows
-  // anew; a key not asked about yet is asked about at once.
-  const ownSession = (r) => r.native_session || r.session || "";
-  const ownKey = (r) => r.agent && r.agent !== "codex" && ownSession(r) ? r.agent + ":" + ownSession(r) : "";
-  const otherTitles = new Map(), askedTitles = new Set();
-  let askSoon = 0;
+  // asked about once each: one the list doesn't hold isn't fetched, and
+  // asking again for it on every pass would be a fetch a second
   function askUnnamed(rs) {
-    if (askSoon || !rs.some((r) => ownKey(r) && !askedTitles.has(ownKey(r)))) return;
-    askSoon = setTimeout(() => { askSoon = 0; refreshSessionNames(); }, 300);
+    if (askSoon) return;
+    let ask = false;
+    for (const r of rs) {
+      const k = ownKey(r), id = !k && r.agent === "codex" && !r.parentMatched ? groupSession(r) : "";
+      if (k && !askedTitles.has(k)) { askedTitles.add(k); namesDue.add(k); ask = true; }
+      if (id && !codexAsked.has(id)) { codexAsked.add(id); namesDue.add("codex\u0000" + id); ask = true; }
+    }
+    // one asked while names are being read waits for that read to end,
+    // and none is made when a read since (the page's first) took them all
+    const go = () => { askSoon = namesBusy ? setTimeout(go, 300) : 0; if (!askSoon && namesDue.size) { namesDue.clear(); refreshSessionNames(); } };
+    if (ask) askSoon = setTimeout(go, 300);
   }
   async function refreshOtherNames() {
     const keys = [...new Set(listed().map(ownKey).filter(Boolean))].slice(0, 2000);
     if (!keys.length) return false;
-    for (const k of keys) askedTitles.add(k);
+    for (const k of keys) { askedTitles.add(k); namesDue.delete(k); }
     const res = await fetch("/api/gateway/session-titles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: [], routeIds: [], sessions: keys }) });
     if (!res.ok) return false;
     const titles = (await res.json()).titles || {};
@@ -3345,7 +3376,7 @@ function routingPage(part) {
     namesBusy = true;
     let others = false;
     try { others = await refreshOtherNames(); } catch {} finally { namesBusy = false; }
-    if (others) steady(renderHist);
+    if (others) { steady(renderHist); render(); }
     if (namesBusy || !shown()) return;
     const rs = listed().filter((r) => r.agent === "codex"), sourceDay = day, routeIDs = new Set(rs.map((r) => r.id));
     if (!rs.some(groupSession)) return;
@@ -3356,6 +3387,7 @@ function routingPage(part) {
       // the API's 2,000-row limit. Only Codex rows need names or associations.
       for (let i = 0; i < rs.length; i += 2000) {
         const batch = rs.slice(i, i + 2000), ids = [...new Set(batch.map(groupSession).filter(Boolean))];
+        for (const id of ids) namesDue.delete("codex\u0000" + id);
         const res = await fetch("/api/gateway/session-titles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids, groups: true, routeIds: batch.map((r) => r.id), day: sourceDay }) });
         if (!res.ok) return;
         const part = await res.json();
@@ -3379,11 +3411,15 @@ function routingPage(part) {
             r.parentSession = parent; r.parentMatched = matched; changed = true;
           }
         }
+        // a reply silent on a session says nothing of it: the title the
+        // trace brought stays (an ask for a new row lands between updates)
         const id = groupSession(r);
+        if (!id || !Object.hasOwn(names, id)) continue;
         const name = typeof names[id] === "string" ? names[id] : "";
         if ((r.sessionTitle || "") !== name) { r.sessionTitle = name; changed = true; }
+        if (!r.parentMatched && (codexNames.get(id) || "") !== name) { if (name) codexNames.set(id, name); else codexNames.delete(id); changed = true; }
       }
-      if (changed) steady(renderHist);
+      if (changed) { steady(renderHist); render(); }
     } catch {} finally { namesBusy = false; }
   }
   setInterval(refreshSessionNames, 15000);
