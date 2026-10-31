@@ -4413,7 +4413,8 @@ async function renderUpdateBadge() {
     delete b.dataset.pulling;
     b.classList.remove("busy");
   }
-  const on = pulling || (!!u && !updatePillOff(u.latest) && (u.state === "ready" || u.state === "available" || u.state === "found" || (u.state === "error" && u.retry)));
+  // a package manager's magpie: Settings names its command, no pill
+  const on = pulling || (!!u && !updatePillOff(u.latest) && (u.state === "ready" || (u.state === "available" && !u.packaged) || u.state === "found" || (u.state === "error" && u.retry)));
   if (b.hidden !== !on) b.hidden = !on;
   if (!on) return;
   const hide = $("#updateHide");
@@ -4539,6 +4540,8 @@ async function backAsNew(was) {
 // the Mac, a folder it may not write to, such as C:\ (#1277), or a
 // container, whose image is what gets updated.
 function updateStuck(u) {
+  const p = u.packaged;
+  if (p) return p.command ? t("{manager} installed magpie ({pkg}), so {manager} updates it, not magpie: {cmd}", { manager: p.manager, pkg: p.package, cmd: p.command }) : t("{manager} installed magpie, so {manager} updates it, not magpie.", { manager: p.manager });
   if (u.stuck === "container") return t("magpie runs in a container, so it can't update itself; pull the new image (docker pull ghcr.io/yetone/magpie:latest) and recreate the container.");
   if (u.stuck === "not-writable") return t("magpie can't write to the folder it runs from ({dir}), so it can't update itself; move it to a folder you can write to and open it from there.", { dir: u.stuckDir || "" });
   return u.stuck === "translocated"
@@ -22642,6 +22645,7 @@ async function renderUpdate(r, u) {
     case "available":
       sub.textContent = t("{v} is out", { v: u.latest });
       if (u.stuck) sub.textContent += " · " + updateStuck(u);
+      if (u.packaged) { sub.classList.add("wraps"); btn(t("Check"), check); break; }
       btn(t("Download"), () => (web && u.url ? window.open(u.url, "_blank", "noopener") : api("update/install", {})));
       if (!web) page();
       break;

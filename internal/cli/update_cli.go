@@ -23,6 +23,7 @@ var (
 	updateExecutable  = update.Executable
 	updateCanElevate  = update.CanElevate
 	updateInContainer = gateway.InContainer
+	updatePackagedBy  = update.PackagedBy
 )
 
 // updateEveries are the intervals magpie update auto takes, by their
@@ -247,8 +248,13 @@ func updateCmd(args []string) error {
 	if exe, err := updateExecutable(); err == nil && !update.Writable(filepath.Dir(exe)) && !updateCanElevate() && updateInContainer() {
 		return fmt.Errorf("this magpie runs in a container and can't replace itself; pull the new image (docker pull ghcr.io/yetone/magpie:latest) and recreate the container")
 	}
-	if exe, err := update.Executable(); err == nil && update.Homebrew(exe) {
-		return fmt.Errorf("this magpie was installed with Homebrew; update it with: brew upgrade magpie")
+	// a package manager's binary (Homebrew's, pacman's magpie-bin from
+	// the AUR, a .deb's): replaced under it, the manager's database names
+	// the old version and its next upgrade writes over this one
+	if exe, err := updateExecutable(); err == nil {
+		if p := updatePackagedBy(exe); p != nil {
+			return fmt.Errorf("%s", p.Say())
+		}
 	}
 	fmt.Println(muted.Render("  downloading " + update.BinaryAsset() + via(ctx) + " …"))
 	if err := update.ReplaceBinary(ctx, rel); err != nil {
