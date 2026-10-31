@@ -1770,7 +1770,8 @@ func openAIModel(model string) bool {
 // the model on itself, so a request on it is relayed as it is rather than
 // translated — Responses for a ChatGPT sign-in, or an OpenAI model on
 // OpenAI's API or Copilot's; Anthropic's Messages for a Claude model
-// where that is served; Chat where that is served. "" when every
+// where that is served; the API a custom provider's Base URL was given as
+// (BaseAPI); Chat where that is served. "" when every
 // request is translated anyway: a sign-in served through its agent's own
 // API (Claude Code's binary, Devin, Code Assist).
 func (p Provider) Native(model string) Protocol {
@@ -1795,6 +1796,13 @@ func (p Provider) Native(model string) Protocol {
 	}
 	if p.MessagesFirst(model) && slices.Contains(out, Anthropic) {
 		return Anthropic
+	}
+	// the API the user gave a custom provider's Base URL as, where it
+	// serves the model: a relay whose Chat URL was found beside it (Detect
+	// sets every API that answers) is still the Responses one they picked
+	// (nb5p on Discord: dsh, Pi and droid asked its GPTs on Chat)
+	if pr := Protocol(p.BaseAPI); pr != "" && slices.Contains(out, pr) {
+		return pr
 	}
 	return out[0]
 }
