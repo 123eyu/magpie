@@ -19,9 +19,16 @@ import (
 // account's name, a key's KeyID) is let serve model: true when it has no
 // list of its own, and for a model Codex calls by itself that no list can
 // hold (codexOwnHidden).
+//
+// A model the user lists by an id of theirs (SetModelID) is in the list
+// by that id, or by the vendor's own one a list kept from before has.
 func (p Provider) AccountServes(ref, model string) bool {
 	ms, ok := p.AccountModels[accountKey(ref)]
-	return !ok || len(ms) == 0 || slices.Contains(ms, model) || codexOwnHidden(p, model)
+	if !ok || len(ms) == 0 || slices.Contains(ms, model) || codexOwnHidden(p, model) {
+		return true
+	}
+	own := p.OwnModelID(model)
+	return own != model && slices.Contains(ms, own)
 }
 
 // codexOwnHidden says model is one a Codex account serves that its list

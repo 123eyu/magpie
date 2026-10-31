@@ -21,9 +21,15 @@ import (
 // It is ModelWires turned round: a wire keeps magpie's id and changes the
 // one sent, this keeps the one sent and changes magpie's.
 //
-// Only a provider of the user's own (a key) takes one: an account's or a
-// plugin's requests are built by its own backend or plugin from the id it
-// lists, which no wire name reaches.
+// An account's and a plugin's provider take one too (zeewell on X:
+// SuperGrok's grok-4.6@500k as grok-4.6, Cursor's, Devin's and
+// WorkBuddy's plugin models). The body's model goes out by the wire name
+// as at any provider, and what is read of the model by the vendor's id
+// is read by the own id: a plugin's model (pluginModel, so its APIs,
+// tiers and prices), Claude Code's run on a Claude account (the
+// gateway's serveClaudeSubscription), Code Assist's and Antigravity's
+// sent id (codeAssistBody, SentNameOnIn), and an account's own list
+// (Account.Lists in the gateway's fallback, AccountServes).
 
 // localIDs are the ids the user lists a provider's models by: from the
 // provider's own id to the one the user gave, and back.
@@ -129,12 +135,13 @@ func (l localIDs) ids(set map[string]bool) map[string]bool {
 }
 
 // takesModelIDs is whether the user can list p's models by ids of their
-// own: a provider of theirs, whose requests carry a wire name.
-func (p Provider) takesModelIDs() bool { return p.Account == nil }
+// own: every provider with a chat list of its own, a key's, an account's
+// or a plugin's. A provider that only decides (DecideOnly) lists Jev's
+// models and nothing else.
+func (p Provider) takesModelIDs() bool { return !p.DecideOnly() }
 
 // TakesModelIDs is whether p's models can be listed by ids the user gives
-// them (SetModelID): a provider of the user's own, not an account's or a
-// plugin's.
+// them (SetModelID).
 func (p Provider) TakesModelIDs() bool { return p.takesModelIDs() }
 
 // ids are the ids the user gave p's models, none for a provider that
@@ -232,7 +239,7 @@ func setModelID(ref, id string) (string, bool, error) {
 		return "", false, err
 	}
 	if !p.takesModelIDs() {
-		return "", false, fmt.Errorf("%s is a signed-in account or a plugin's: its requests ask for the id its list gives, so its models can't be listed by another", p.Name)
+		return "", false, fmt.Errorf("%s only decides for the routing groups: it has no models of its own to list by another id", p.Name)
 	}
 	id = strings.TrimSpace(id)
 	if id != "" {
@@ -279,7 +286,7 @@ func setModelID(ref, id string) (string, bool, error) {
 	if len(s.ModelIDs) == 0 {
 		s.ModelIDs = nil
 	}
-	if err := moveModelRefs(p.ID, cur, id); err != nil {
+	if err := moveModelRefs(p.ID, cur, id, p.Account != nil); err != nil {
 		return "", false, err
 	}
 	s.MoveModel(p.ID+"/"+cur, p.ID+"/"+id)
@@ -303,17 +310,18 @@ var ModelMoved func(from, to string) error
 // moveModelRefs gives every ref the providers file keeps to the provider
 // pid's model from as to: its picks, those set aside and listed when
 // picked, a key's models and its context, the fallbacks and the routing
-// groups' refs.
-func moveModelRefs(pid, from, to string) error {
+// groups' refs. A signed-in account's or a plugin's provider is kept
+// there only once the user has set something on it (withPicks): with
+// none kept (account), only the other providers' refs to it move.
+func moveModelRefs(pid, from, to string, account bool) error {
 	f, err := read()
 	if err != nil {
 		return err
 	}
 	i := slices.IndexFunc(f.Providers, func(q Provider) bool { return q.ID == pid })
-	if i < 0 {
+	if i < 0 && !account {
 		return fmt.Errorf("no provider %q", pid)
 	}
-	q := &f.Providers[i]
 	moved := func(ids []string) []string {
 		if !slices.Contains(ids, from) {
 			return ids
@@ -329,15 +337,18 @@ func moveModelRefs(pid, from, to string) error {
 		}
 		return out
 	}
-	q.Models, q.PickedFrom, q.Delisted = moved(q.Models), moved(q.PickedFrom), moved(q.Delisted)
-	for k, ms := range q.AccountModels {
-		q.AccountModels[k] = moved(ms)
-	}
-	if n, ok := q.Contexts[from]; ok {
-		if _, has := q.Contexts[to]; !has {
-			q.Contexts[to] = n
+	if i >= 0 {
+		q := &f.Providers[i]
+		q.Models, q.PickedFrom, q.Delisted = moved(q.Models), moved(q.PickedFrom), moved(q.Delisted)
+		for k, ms := range q.AccountModels {
+			q.AccountModels[k] = moved(ms)
 		}
-		delete(q.Contexts, from)
+		if n, ok := q.Contexts[from]; ok {
+			if _, has := q.Contexts[to]; !has {
+				q.Contexts[to] = n
+			}
+			delete(q.Contexts, from)
+		}
 	}
 	ref := func(m string) string {
 		pre, rest := "", m

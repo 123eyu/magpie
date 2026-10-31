@@ -1066,6 +1066,14 @@ func SentNameIn(wires map[string]string, pid, model, effort string) string {
 // the route, which is holding the provider, asks about the account and lets
 // the gateway's dispatch (codeAssistID, on the same agent) be the one rule.
 func SentNameOnIn(wires map[string]string, pid, account, model, effort string) string {
+	if account == "antigravity" {
+		// a family the user lists by an id of theirs (SetModelID) goes
+		// out as the variant of its own id the effort picks, as the
+		// gateway's envelope does (codeAssistBody)
+		if own := modelIDsOf(pid).ownOf(model); own != model {
+			return UpstreamNameAsIn(wires, pid, own, antigravitySentID(account, own, effort))
+		}
+	}
 	return UpstreamNameAsIn(wires, pid, model, antigravitySentID(account, model, effort))
 }
 
