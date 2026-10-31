@@ -27,8 +27,21 @@ const RoutingGroups = "Routing groups"
 
 // viaMagpie lists the catalog as agent is shown it, for a picker: the
 // routing groups first, in one group of their own, then one group per
-// provider.
+// provider. Built again only when provider.StampNow moved, or
+// magpieModelsFor after it was; each caller is given its own copy.
 func viaMagpie(agent, prefix string) []Option {
+	return builtOptions.get(agent+"\x00"+prefix, func() []Option { return buildVia(agent, prefix) })
+}
+
+// builtOptions is what viaMagpie built last, per agent and prefix. Each
+// agent's model field offers it, and the window's drift poll asked every
+// field's options of every agent each 15s: Claude Code's alone
+// (claudeViaMagpie) allocated 4.7 GB of the 33 GB a live magpie did in 53
+// minutes.
+var builtOptions stampedLists[Option]
+
+// buildVia is viaMagpie built afresh.
+func buildVia(agent, prefix string) []Option {
 	var out, groups []Option
 	shown, _ := provider.CatalogFor(agent)
 	// own: whether a provider is the account the agent is signed in to,
@@ -186,22 +199,7 @@ func firstOf(xs []string) string {
 // provider.StampNow moved, or magpieModelsFor after it was, each caller
 // given its own copy of the list.
 func magpieModels(agent string) []catalog.Model {
-	builtModels.Lock()
-	b, ok := builtModels.m[agent]
-	builtModels.Unlock()
-	// the stamp is read before the list is built: a change while it is
-	// moves it past the one kept, and the next call builds it again
-	stamp := provider.StampNow()
-	if !ok || b.stamp != stamp || time.Since(b.at) >= magpieModelsFor {
-		b = builtList{buildModels(agent), stamp, time.Now()}
-		builtModels.Lock()
-		if builtModels.m == nil {
-			builtModels.m = map[string]builtList{}
-		}
-		builtModels.m[agent] = b
-		builtModels.Unlock()
-	}
-	return slices.Clone(b.models)
+	return builtModels.get(agent, func() []catalog.Model { return buildModels(agent) })
 }
 
 // builtModels is what magpieModels built last, per agent. The window asks
@@ -209,15 +207,38 @@ func magpieModels(agent string) []catalog.Model {
 // per field, each built whole with its prices and Vision's ranking of the
 // models that see: 14.5 GB of the 33 GB a live magpie allocated in 53
 // minutes, the garbage its footprint peaks on.
-var builtModels struct {
+var builtModels stampedLists[catalog.Model]
+
+// stampedLists keeps a list built per key while provider.StampNow stays
+// the same, magpieModelsFor at most, and gives each caller a copy.
+type stampedLists[T any] struct {
 	sync.Mutex
-	m map[string]builtList
+	m map[string]stampedList[T]
 }
 
-type builtList struct {
-	models []catalog.Model
-	stamp  provider.Stamp
-	at     time.Time
+type stampedList[T any] struct {
+	list  []T
+	stamp provider.Stamp
+	at    time.Time
+}
+
+func (s *stampedLists[T]) get(key string, build func() []T) []T {
+	s.Lock()
+	b, ok := s.m[key]
+	s.Unlock()
+	// the stamp is read before the list is built: a change while it is
+	// moves it past the one kept, and the next call builds it again
+	stamp := provider.StampNow()
+	if !ok || b.stamp != stamp || time.Since(b.at) >= magpieModelsFor {
+		b = stampedList[T]{build(), stamp, time.Now()}
+		s.Lock()
+		if s.m == nil {
+			s.m = map[string]stampedList[T]{}
+		}
+		s.m[key] = b
+		s.Unlock()
+	}
+	return slices.Clone(b.list)
 }
 
 // magpieModelsFor is how long a list is kept while provider.StampNow says
