@@ -769,7 +769,8 @@ func restartToUpdate(web, window bool, view string) bool {
 
 // restartInto is restartToUpdate; bySelf, Settings' AutoRestart restarts
 // (#2096), and the Mac's new one too opens only its menu bar icon when no
-// window was up, rather than putting up one the user had closed.
+// window was up, rather than putting up one the user had closed. The new
+// one, by itself, also takes no focus (quiet_restart.go).
 func restartInto(web, window bool, view string, bySelf bool) bool {
 	if pending.Load() != nil {
 		return false // a handover under way restarts already
@@ -785,19 +786,24 @@ func restartInto(web, window bool, view string, bySelf bool) bool {
 		return false
 	}
 	updatedInApp(version) // its first start leaves the notes to Settings (#525)
+	if bySelf && !web {
+		markQuietRestart() // it comes back without taking focus
+	} else {
+		unmarkQuietRestart() // one asked for comes to the front
+	}
 	if web {
 		webReexec.Store(true)
 		return true
 	}
 	// on a Mac or Linux the new version takes the gateway over while this
 	// one finishes its requests (handover.go)
-	if bundle != "" && beginHandover(bundle, "", window || !bySelf, "") ||
-		bundle == "" && beginHandover("", exe, window, view) {
+	if bundle != "" && beginHandover(bundle, "", window || !bySelf, "", bySelf) ||
+		bundle == "" && beginHandover("", exe, window, view, bySelf) {
 		return true
 	}
 	var err error
 	if bundle != "" {
-		err = update.Relaunch(bundle, window || !bySelf)
+		err = update.Relaunch(bundle, window || !bySelf, bySelf)
 	} else {
 		updates.mu.Lock()
 		aside := updates.aside
@@ -808,6 +814,7 @@ func restartInto(web, window bool, view string, bySelf bool) bool {
 		// the new version didn't start and this one is back in its place
 		// (#894): it runs on, and says why
 		os.Remove(filepath.Join(settings.Dir(), updatedInAppFile))
+		unmarkQuietRestart()
 		updates.mu.Lock()
 		updates.wontStart(err)
 		updates.mu.Unlock()
