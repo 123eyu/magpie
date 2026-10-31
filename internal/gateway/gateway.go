@@ -2809,6 +2809,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// waited every request's whole thinking out.
 		hw.thinkingShown = !s.holdsThinking(c) || last
 		hw.ctx, hw.alive, hw.streams = r.Context(), kept, streams
+		if handsOver(streams, last, wantWhole, from, refusals) {
+			// reasoning that went through as it came, and a refusal after
+			// it with nothing yet said: the next candidate answers in the
+			// same stream (refusalHandover; yhwangl on X)
+			hw.over = &refusalHandover{proto: from, seq: -1}
+		}
 		report := cacheReport
 		if c.p.Account == nil || c.p.Account.Agent != "claude" {
 			report = nil
@@ -3189,6 +3195,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			break
 		}
 		hw.settle()
+		if hw.handedOver {
+			// its refusal came after its reasoning went to the agent: the
+			// next try's stream follows it as the same reply
+			w = spliceAfter(w, hw.over)
+		}
 		reasked += hw.reasked
 		if hw.passing {
 			clientResponseID = call.Usage.ResponseID
