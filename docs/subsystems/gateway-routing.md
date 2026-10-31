@@ -1367,6 +1367,28 @@ Covered by `TestImageMCPDrawsAndServesTheImage`, `TestImageMCPSaysWhenOff`,
 `TestImageMCPMakesMiniMaxVideos`,
 `TestImageMCPIsServed` and `image-mcp.test.cjs`.
 
+## Which of magpie's own MCP servers are on
+
+`GET /v1/magpie/mcp` (`OwnMCPPath`, [`own_mcp.go`](../../internal/gateway/own_mcp.go))
+lists the MCP servers above that are on now, as
+`{"servers":[{"name","title","path"}]}`, each named as its `initialize`
+names it, with its path on this gateway. It is for an app that gives a
+model the Library's servers and wants magpie's own beside them: the
+community chat page's "use all of magpie's MCP servers" read only
+library.json, so web search, image recognition and image generation never
+reached its chats (ferock on Discord). A server is listed while an agent
+mounting it would get working tools: `magpie-web-search` while
+plugins/search serves and something searches (`canSearch`, so Off in
+Settings › Models › Web search with no search API leaves it out),
+`magpie-vision` while a model sees (`seer`, not Off), `magpie-image` while
+a model draws (`drawer`, not Off), and `magpie-tools` while plugins/tools
+serves and a plugin that is on gives a tool (`plugin.ToolsOn`; a note that
+can't be read lists it, and its `tools/list` tells). The list holds no
+secret, so a read-only gateway key may read it (`readOnlyRoutes`); the route is otherwise guarded as every `/v1/magpie/*` route is, and a caller
+mounts each path with the same key it called with. `OwnMCPServers` is the
+fixed list `magpie tool` walks; this one follows the switches. Covered by
+`TestOwnMCPNoneWhenNothingIsOn` and `TestOwnMCPLists*WhileOn`.
+
 ## Side models magpie picks: allowance first
 
 When magpie picks the model itself (`AutoVision` for image recognition,
