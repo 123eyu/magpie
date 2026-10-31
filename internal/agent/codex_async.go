@@ -59,7 +59,9 @@ type CodexReader struct {
 
 // codexReaders are the Codexes that read the config at at: the CLI on
 // PATH, the desktop app's own (its bundled codex-cli on a Mac; the Store
-// app's on Windows, whose version magpie can't read), the editor
+// app's on Windows, whose version magpie can't read; on Linux the
+// package's resources/codex, which says its version as the CLI does:
+// codex-cli 0.166.0-alpha.5.1 in chatgpt 26.1027), the editor
 // extension's, or a WSL distro's CLI. A var so tests can name them.
 var codexReaders = func(at place) []CodexReader {
 	if at.spell != nil {
@@ -81,6 +83,10 @@ var codexReaders = func(at place) []CodexReader {
 	case "windows":
 		if storeAppVersion(windowsStorePackages(), app.store, app.publisher) != "" {
 			out = append(out, CodexReader{Kind: "app"})
+		}
+	case "linux":
+		if dir := app.linuxDir(); dir != "" {
+			out = append(out, CodexReader{Kind: "app", Version: installedVersion(filepath.Join(dir, "resources", "codex"))})
 		}
 	}
 	if extensionHere(at.home, "openai.chatgpt") {

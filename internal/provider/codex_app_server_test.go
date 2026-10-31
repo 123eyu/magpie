@@ -500,6 +500,11 @@ func TestCodexOutUntil(t *testing.T) {
 // codexWindowsAppServer is the Windows Codex app's own app-server.
 const codexWindowsAppServer = `C:\Users\yeton\AppData\Local\OpenAI\Codex\bin\2993767bd1dfb009\codex.exe -c features.code_mode_host=true app-server --analytics-default-enabled -c plugins.codex-app-tools@openai-bundled.mcp_servers.codex_app.enabled=true`
 
+// codexLinuxAppServer is the Linux Codex app's own app-server, as the
+// official chatgpt 26.1027 deb ran it in the WSL distro magpie-desktop
+// (Ubuntu 24.04).
+const codexLinuxAppServer = "/usr/lib/chatgpt/resources/codex -c features.code_mode_host=true app-server --analytics-default-enabled -c plugins.codex-app-tools@openai-bundled.mcp_servers.codex_app.enabled=true"
+
 // Only the app's own app-server is restarted: another program's, started
 // from the app's bundled codex with --listen (Miyi Helper's, seen on the
 // owner's Mac), is that program's.
@@ -510,6 +515,7 @@ func TestCodexAppOwnServer(t *testing.T) {
 		// as Windows listed it on the Windows box: run from LOCALAPPDATA,
 		// not from its package (zhibukaixinyao on Discord)
 		codexWindowsAppServer,
+		codexLinuxAppServer,
 	} {
 		if !isCodexAppOwnServer(own) {
 			t.Errorf("the app's own app-server not taken: %s", own)
@@ -523,6 +529,8 @@ func TestCodexAppOwnServer(t *testing.T) {
 		"/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex app-server --listen=ws://127.0.0.1:4500",
 		"/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex -c forced_login_method=\"chatgpt\" exec-server --remote https://codex-cloud-environments.chatgpt.com/api",
 		"/usr/local/bin/codex app-server",
+		"/usr/lib/chatgpt/resources/codex app-server --listen stdio://",
+		"/usr/lib/chatgpt/resources/codex exec-server --remote x",
 	} {
 		if isCodexAppOwnServer(other) {
 			t.Errorf("taken for the app's own app-server: %s", other)
