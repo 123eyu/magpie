@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const installer = fileURLToPath(new URL("./public/install.sh", import.meta.url));
 
-function install(t, { termux = true, arch = "aarch64", override = false, prefixOnly = false, missing = false, corrupt = false, desktop = false, github = false, args = [], env: extra = {}, tamper = "" } = {}) {
+function install(t, { termux = true, arch = "aarch64", override = false, prefixOnly = false, missing = false, corrupt = false, desktop = false, github = false, args = [], env: extra = {}, tamper = "", libs = desktop, cli = !desktop, distro = "ID=ubuntu\nID_LIKE=debian\n", sessions = [], login = "" } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "magpie-install-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const tools = join(dir, "tools");
@@ -26,13 +26,34 @@ function install(t, { termux = true, arch = "aarch64", override = false, prefixO
   const file = termux ? `magpie-cli-android-${cpu}` : desktop ? `magpie-linux-${cpu}` : `magpie-cli-linux-${cpu}`;
   const assets = {};
   // A Linux asset is present even when Android's is missing: never use it.
-  for (const name of [file, `magpie-cli-linux-${cpu}`]) {
+  for (const name of new Set([file, `magpie-cli-linux-${cpu}`, `magpie-linux-${cpu}`])) {
     if (missing && name === file) continue;
     assets[name] = { url: github ? `https://github.com/yetone/magpie-releases/releases/download/vtest/${name}` : `https://download.invalid/${name}`, sha256: corrupt ? "0".repeat(64) : createHash("sha256").update(payload).digest("hex") };
   }
   const requests = join(dir, "requests");
   writeFileSync(join(tools, "uname"), `#!/bin/sh\ncase "$1" in -m) echo '${arch}';; -s) echo Linux;; esac\n`, { mode: 0o755 });
-  writeFileSync(join(tools, "ldconfig"), "#!/bin/sh\necho libwebkit2gtk-4.1.so.0\n", { mode: 0o755 });
+  // ldconfig -p as glibc prints it: the libraries the desktop app needs
+  // when libs, and another library always (a cache that was read)
+  const cache = ["libc.so.6", ...(libs ? ["libgtk-3.so.0", "libwebkit2gtk-4.1.so.0"] : [])]
+    .map((n) => `\t${n} (libc6,x86-64) => /usr/lib/x86_64-linux-gnu/${n}`).join("\n");
+  writeFileSync(join(tools, "ldconfig.txt"), cache + "\n");
+  writeFileSync(join(tools, "ldconfig"), `#!/bin/sh\ncat "${join(tools, "ldconfig.txt").replaceAll("\\", "/")}"\n`, { mode: 0o755 });
+  // logind: the graphical session this user is logged in to, if any
+  // (INSTALL_LOGIN "<id> <type>"); logind names a tty login when there is
+  // no graphical one
+  writeFileSync(join(tools, "loginctl"), `#!/bin/sh
+set -- "$@" "" "" "" "" ""
+id=\${INSTALL_LOGIN%% *} type=\${INSTALL_LOGIN#* }
+[ "$1 $3 $4 $5" = "show-user -p Display --value" ] && [ -n "$id" ] && echo "$id"
+[ "$1 $2 $3 $4 $5" = "show-session $id -p Type --value" ] && [ -n "$id" ] && echo "$type"
+exit 0
+`, { mode: 0o755 });
+  const dataDirs = join(dir, "data-dirs");
+  for (const s of sessions) {
+    mkdirSync(join(dataDirs, s.split("/")[0]), { recursive: true });
+    writeFileSync(join(dataDirs, s), "[Desktop Entry]\n");
+  }
+  writeFileSync(join(dir, "os-release"), distro);
   // xdg-mime as xdg-utils writes the default: one line in mimeapps.list
   writeFileSync(join(tools, "xdg-mime"), `#!/bin/sh
 [ "$1" = default ] || exit 0
@@ -56,7 +77,17 @@ else fs.writeFileSync(args[args.indexOf("-o") + 1], tamper && url.startsWith(tam
     PREFIX: termux ? prefix : "",
     TERMUX_VERSION: termux && !prefixOnly ? "test" : "",
     MAGPIE_BIN_DIR: override ? bin : "",
-    MAGPIE_CLI: desktop ? "" : "1",
+    MAGPIE_CLI: cli ? "1" : "",
+    // a headless shell unless a test gives it a desktop
+    DISPLAY: "",
+    WAYLAND_DISPLAY: "",
+    XDG_CURRENT_DESKTOP: "",
+    XDG_SESSION_DESKTOP: "",
+    DESKTOP_SESSION: "",
+    XDG_SESSION_TYPE: "",
+    XDG_DATA_DIRS: dataDirs,
+    INSTALL_LOGIN: login,
+    MAGPIE_OS_RELEASE: join(dir, "os-release"),
     PATH: tools + ":" + process.env.PATH,
     XDG_CONFIG_HOME: join(dir, "config"),
     XDG_DATA_HOME: join(dir, "share"),
@@ -291,4 +322,92 @@ test("--uninstall in Termux takes off PREFIX/bin/magpie", (t) => {
   assert.equal(u.status, 0, u.stderr);
   assert.equal(existsSync(join(r.bin, "magpie")), false);
   assert.match(u.stdout, /removed .*com\.termux\/files\/usr\/bin\/magpie/);
+});
+
+// shuhai on Discord: on a Linux desktop the script installed the terminal
+// build, with one line at the end about WebKitGTK. The build is chosen with
+// nothing asked: the desktop app when its libraries are there; on a
+// desktop without them, the terminal build and, said last, the command
+// that installs them on this distribution; --gui and --tui choose instead.
+function linux(t, opts) {
+  const r = install(t, { termux: false, cli: false, ...opts });
+  assert.equal(r.status, 0, r.stderr);
+  const gui = /magpie-linux-arm64/.test(r.requests);
+  assert.notEqual(gui, /magpie-cli-linux-arm64/.test(r.requests), r.requests);
+  assert.equal(existsSync(join(r.share, "applications/magpie.desktop")), gui);
+  return { ...r, gui };
+}
+const last = (r, n) => r.stdout.trimEnd().split("\n").slice(-n).join("\n");
+
+test("Linux with GTK 3 and WebKitGTK 4.1 gets the desktop app, with nothing to install", (t) => {
+  for (const env of [{ DISPLAY: ":0" }, { WAYLAND_DISPLAY: "wayland-0" }, {}]) {
+    const r = linux(t, { libs: true, env });
+    assert.ok(r.gui, JSON.stringify(env));
+    assert.doesNotMatch(r.stdout, /WebKitGTK|apt install/);
+  }
+});
+
+test("a desktop without WebKitGTK gets the terminal build and its distribution's command, said last", (t) => {
+  const desktops = [
+    { env: { DISPLAY: ":0" } },
+    { env: { WAYLAND_DISPLAY: "wayland-0" } },
+    { env: { XDG_CURRENT_DESKTOP: "XFCE" } },
+    { env: { XDG_SESSION_TYPE: "wayland" } },
+    // ssh into a computer whose user is logged in to its desktop
+    { login: "2 x11" },
+    { login: "c3 wayland" },
+    // or that has a desktop to log in to
+    { sessions: ["xsessions/xfce.desktop"] },
+    { sessions: ["wayland-sessions/gnome.desktop"] },
+  ];
+  for (const opts of desktops) {
+    const r = linux(t, { libs: false, ...opts });
+    assert.equal(r.gui, false, JSON.stringify(opts));
+    assert.match(r.stdout, /has a desktop, but the desktop app needs GTK 3 and WebKitGTK 4\.1/);
+    assert.match(last(r, 4), /sudo apt install libwebkit2gtk-4\.1-0/, JSON.stringify(opts));
+    assert.match(last(r, 4), /install\.sh \| sh -s -- --gui/);
+  }
+  for (const [distro, want] of [
+    ["ID=fedora\n", /sudo dnf install webkit2gtk4\.1/],
+    ['ID="linuxmint"\nID_LIKE="ubuntu debian"\n', /sudo apt install libwebkit2gtk-4\.1-0/],
+    ["ID=endeavouros\nID_LIKE=arch\n", /sudo pacman -S --needed webkit2gtk-4\.1/],
+    ['ID="opensuse-tumbleweed"\nID_LIKE="opensuse suse"\n', /sudo zypper install libwebkit2gtk-4_1-0/],
+    ["ID=nixos\n", /install WebKitGTK 4\.1 \(webkit2gtk 4\.1\) from your distribution/],
+  ]) {
+    const r = linux(t, { libs: false, distro, env: { DISPLAY: ":0" } });
+    assert.match(r.stdout, want, distro);
+  }
+});
+
+test("a headless Linux without WebKitGTK gets the terminal build and no desktop advice", (t) => {
+  // no login at all, or a tty login (an ssh shell's, on a server or in WSL)
+  for (const login of ["", "135 tty"]) {
+    const r = linux(t, { libs: false, login });
+    assert.equal(r.gui, false);
+    assert.match(r.stdout, /installed the terminal build/);
+    assert.doesNotMatch(r.stdout, /WebKitGTK|apt install|--gui/, login);
+  }
+});
+
+test("--gui installs the desktop app before its libraries, and says what installs them", (t) => {
+  const r = linux(t, { libs: false, args: ["--gui"] });
+  assert.ok(r.gui);
+  assert.match(last(r, 2), /aren't installed; it opens once they are/);
+  assert.match(last(r, 2), /sudo apt install libwebkit2gtk-4\.1-0/);
+  // the flag wins over MAGPIE_CLI=1
+  const over = linux(t, { libs: true, cli: true, args: ["--gui"] });
+  assert.ok(over.gui);
+  assert.doesNotMatch(over.stdout, /aren't installed/);
+});
+
+test("--tui and MAGPIE_CLI=1 install the terminal build on a desktop with WebKitGTK", (t) => {
+  for (const opts of [{ args: ["--tui"] }, { cli: true }]) {
+    const r = linux(t, { libs: true, env: { DISPLAY: ":0" }, ...opts });
+    assert.equal(r.gui, false, JSON.stringify(opts));
+    assert.doesNotMatch(r.stdout, /WebKitGTK/);
+  }
+  const help = install(t, { termux: false, args: ["--help"] });
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /--gui .*desktop app/);
+  assert.match(help.stdout, /--tui .*terminal build/);
 });

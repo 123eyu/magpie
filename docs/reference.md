@@ -2562,12 +2562,27 @@ with a link builder: <https://usemagpie.ai/docs/import>.
 
 Download the app for macOS, Windows or Linux from
 [usemagpie.ai](https://usemagpie.ai), or install it from a terminal (on
-Linux, the desktop app when WebKitGTK 4.1 is installed, the command
-otherwise):
+Linux, the desktop app when GTK 3 and WebKitGTK 4.1 are installed, the
+terminal build otherwise):
 
 ```sh
 curl -fsSL https://usemagpie.ai/install.sh | sh
 ```
+
+On Linux the installer asks nothing. A computer with a desktop (a
+graphical session, the user's graphical login when run over ssh, or a
+desktop installed in `xsessions` / `wayland-sessions`) but without the
+app's libraries gets the terminal build, and the installer ends with the
+command that installs them on that distribution (`sudo apt install
+libwebkit2gtk-4.1-0` on Debian and Ubuntu, `sudo dnf install
+webkit2gtk4.1` on Fedora, `sudo pacman -S --needed webkit2gtk-4.1` on
+Arch, `sudo zypper install libwebkit2gtk-4_1-0` on openSUSE); run it again
+afterwards for the app. `--gui` installs the app at once, before its
+libraries; `--tui` (or `MAGPIE_CLI=1`) installs the terminal build on a
+desktop too. The libraries are looked up with `ldconfig -p`, in `/sbin`
+as well, since a Debian user's `PATH` doesn't have it, and in the usual
+library folders where there is no cache. On musl (Alpine) it is always the
+terminal build.
 
 Behind a firewall, or without access to GitHub, both the installer and
 `magpie update` take `--proxy <url>` (http, https, socks5, socks5h; or
