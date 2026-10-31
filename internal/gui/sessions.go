@@ -709,7 +709,7 @@ func warmUp(steps ...func()) {
 	for _, step := range steps {
 		func() {
 			coldTurns.turn <- struct{}{}
-			defer func() { <-coldTurns.turn }()
+			defer coldTurnDone()
 			step()
 		}()
 	}
@@ -728,6 +728,14 @@ var coldTurns = struct {
 	over atomic.Bool
 }{turn: make(chan struct{}, 1)}
 
+// coldTurnDone ends a turn. What the request matching kept for a next
+// read goes with it: kept for scratchLinger, it sat under the next
+// turn's read of the history.
+func coldTurnDone() {
+	usage.ReleaseMatchScratch()
+	<-coldTurns.turn
+}
+
 // coldTurnMost is how long a page waits for its turn: a warm-up stuck on
 // one read never keeps the pages from answering.
 const coldTurnMost = 2 * time.Minute
@@ -744,7 +752,7 @@ func coldTurn(h http.HandlerFunc) http.HandlerFunc {
 			t := time.NewTimer(coldTurnMost)
 			select {
 			case coldTurns.turn <- struct{}{}:
-				defer func() { <-coldTurns.turn }()
+				defer coldTurnDone()
 			case <-t.C:
 			}
 			t.Stop()

@@ -1788,6 +1788,14 @@ func ReleaseScratch() {
 	releasePriced()
 }
 
+// ReleaseMatchScratch is ReleaseScratch keeping the priced blocks.
+func ReleaseMatchScratch() {
+	keptMatch.Store(nil)
+	keptPicks.Store(nil)
+	keptSeen.Store(nil)
+	releaseRows()
+}
+
 // scratchLinger is how long the matcher's scratch is kept once the last
 // pairing put it back. While an agent works every poll pairs again and
 // finds it kept; with nothing new to pair, a poll is answered from the
