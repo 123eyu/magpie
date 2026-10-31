@@ -20016,6 +20016,16 @@ async function renderSync(v) {
     row(t("Upload this computer's setup"), t("It replaces the file on the server. That file is kept in the sync folder first."),
       btn(t("Upload…"), () => askUpload(v.serverFile)));
   }
+  // agent fields set back here after a sync changed them (hayden4608)
+  if (v.on && v.agents !== false && v.own?.length) {
+    const fields = v.own.map((f) => t("{agent} {field}", { agent: f.agent, field: t(f.field) })).join(t(", "));
+    row(t("Kept on this computer"), t("{fields}: set back here after a sync changed them, so they stay as picked here.", { fields }),
+      btn(t("Follow the others"), async (e) => {
+        e.target.classList.add("busy");
+        renderSync(await api("davsync/follow", {}).catch((x) => ({ ...v, error: x.message })));
+        refreshAfterSync();
+      })).classList.add("wraps", "sync-own");
+  }
   if (v.notice) {
     const n = v.notice, r = el("div", "row pref sync-note");
     const lines = [];
