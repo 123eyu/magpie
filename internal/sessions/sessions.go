@@ -189,6 +189,8 @@ const All = 5000
 
 // state is what one file's parse has come to, enough to read on from Off.
 type state struct {
+	// the agent whose file it is, for its parseVersions
+	Agent                 string            `json:"agent,omitempty"`
 	Codex                 *codexUsageState  `json:"-"`
 	Claude                *claudeUsageState `json:"claude,omitempty"`
 	DBRevision            string            `json:"db_revision,omitempty"`
@@ -1055,11 +1057,22 @@ func CachePath() string { return filepath.Join(filepath.Dir(catalog.CachePath())
 // 27: Factory Droid's skills (its Skill tool and /<name> prompts).
 // 28: OpenCode 2's, Cline's and dsh's tool calls and skills.
 // 29: Claude Code's entrypoint (Entry), Desktop's Code tab apart.
+//
+// A change to how one agent's files are read raises that agent's
+// parseVersions instead: a raise of cacheVersion reads every file of every
+// agent again, minutes of CPU for a long history after each update (#2278).
 const cacheVersion = 29
 
+// parseVersions is cacheVersion for one agent's parses, 0 when not listed:
+// raised, the parses of that agent's files kept by an older magpie are read
+// again, and the rest stand.
+var parseVersions = map[string]int{}
+
 type cacheFile struct {
-	Version int               `json:"version"`
-	Zone    string            `json:"zone"` // the time zone its days are dates in
+	Version int    `json:"version"`
+	Zone    string `json:"zone"` // the time zone its days are dates in
+	// Parsers is parseVersions as the parses were made
+	Parsers map[string]int    `json:"parsers,omitempty"`
 	Files   map[string]*state `json:"files"`
 }
 
@@ -1095,7 +1108,7 @@ func loadCache() {
 // row are folded into the latest, and one is written saveGap after the
 // last at the soonest.
 func saveCache() {
-	snap := save{cacheFile{Version: cacheVersion, Zone: zone(), Files: savable()}, CachePath()}
+	snap := save{cacheFile{Version: cacheVersion, Zone: zone(), Parsers: parseVersions, Files: savable()}, CachePath()}
 	saving.Lock()
 	defer saving.Unlock()
 	saving.next = &snap
@@ -1220,6 +1233,7 @@ func writeCache(c *save) {
 func refresh(want, all []file) {
 	defer func() { trimSummaryRevisions(time.Now()) }()
 	var todo, waits []file
+	named := false
 	for _, f := range want {
 		if f.cold {
 			continue // in a stopped WSL distro: what was read of it stands
@@ -1239,6 +1253,13 @@ func refresh(want, all []file) {
 			// publish closed a nil channel (#2932)
 			parsing[f.path] = make(chan struct{})
 			todo = append(todo, f)
+		} else if s.Agent != f.agent && parsing[f.path] == nil {
+			// kept by a magpie that didn't name the agent: named now, so
+			// a raise of another agent's parseVersions keeps it
+			n := *s
+			n.Agent = f.agent
+			cache[f.path] = &n
+			named = true
 		}
 	}
 	if len(waits) > 0 {
@@ -1260,7 +1281,7 @@ func refresh(want, all []file) {
 	}
 	trimSummaryRevisions(time.Now())
 	if len(todo) == 0 {
-		if gone {
+		if gone || named {
 			saveCache()
 		}
 		return
@@ -1307,6 +1328,11 @@ func refresh(want, all []file) {
 				j.parsed = parseWith(j.f, j.old, calls)
 				end()
 				release()
+				if j.parsed.Agent != j.f.agent {
+					n := *j.parsed // a parser may hand back old, which readers hold
+					n.Agent = j.f.agent
+					j.parsed = &n
+				}
 				if (j.parsed.Claude != nil && !windows[j.f.path]) || (j.parsed.Claude == nil && !recentRevision(j.parsed.Mod, j.parsed.revisionWeight(), time.Now())) {
 					j.parsed = j.parsed.withoutRevisions()
 				}
