@@ -948,6 +948,38 @@ Covered by `TestReadTavilyUsage`, `TestSearchKeysTakeTurnsRoundRobin`,
 `TestSearchKeyNeverInFull`, `TestSearchAPIKeysTakeTurns` and
 `search-keys.test.cjs`.
 
+## A search API's asks in the request log
+
+Each ask of a search API with one key is a row of the request log
+(cybercaius on Discord: which search API a search used couldn't be seen).
+`logSearchAPI` in [`search_api.go`](../../internal/gateway/search_api.go)
+writes it after every `askSearchAPI` in `askSearchAPIKeys`, a refused key
+and the next one each a row: `Source` `search` (`usage.SourceSearch`),
+`Kind` `web_search`, the agent the search was for (`searchFor`'s
+`CallFor.Agent`, else `magpie`), the API's name as `Requested`, its host,
+the key as `searchKeyID` and masked (`provider.MaskSearchKey`), how long
+it took, and how it ended: 200, the API's status when it refused the key,
+the error, or "found nothing". `Provider` stays empty: `deepseek` is a
+provider's id as well as a search API's. The query is never kept: the
+error is cut to the transport's own error and host when Go's says the
+URL (an API asked by GET carries the query there), and the query, plain
+or escaped, is taken out of what the API said back.
+
+The rows ride the probes' lane (`IsProbe`): listed under the Web search
+purpose and found by the API's name in the search box, counted in no
+total, budget or provider share, and never exported (`observeLedger`), so
+telemetry, which reads no usage row, has nothing new to send. The Usage
+page's Requests tab badges one "Search API" with the host and masked key
+where the provider goes. A searcher model's request is a model row of its
+own, as before. A plan's own search service (Kimi Code's, WorkBuddy's:
+`ownSearch`, through `logOwnSearch`) is a row the same way, under the
+plan's provider id and name, badged "Web search". Not covered: the
+Routing page, which lists only requests through `serve`.
+
+Covered by `TestSearchAPIAsksAreLogged`, `TestSearchAPIFailureKeepsNoURL`,
+`TestOwnSearchIsLogged`, `TestWorkBuddyPluginSearches`,
+`TestSearchAPIRowsListedNotCounted` and `usage-ledger-search.test.cjs`.
+
 ## Web search as an MCP server
 
 `SearchMCPPath`, `/mcp/magpie/web-search`, serves the same `webSearch` a
