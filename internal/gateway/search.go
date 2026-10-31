@@ -1053,10 +1053,6 @@ const SearchAgent = "magpie-search/1"
 // and message of a failure.
 type round func(ctx context.Context, req *Request) (<-chan Event, int, string)
 
-// searchReply answers req through ask, running the searches its model
-// asks for and asking it again with what they found; the client sees one
-// reply. The first round's failure is a status, as another provider may
-// take over.
 // textCallRound is a round whose reply has the calls written into its
 // text made calls (textCallSee), as the replies of the routes without a
 // search have them (streamTranslated, forwardTranslated): every search
@@ -1089,11 +1085,19 @@ func textCallRound(tools []Tool, ask round) round {
 					t.event(ev)
 				}
 			}
+			// a round that ended without its stop still hands on the
+			// text held from a mark begun, as the routes without a
+			// search do at their reply's end
+			t.release()
 		}()
 		return out, status, msg
 	}
 }
 
+// searchReply answers req through ask, running the searches its model
+// asks for and asking it again with what they found; the client sees one
+// reply. The first round's failure is a status, as another provider may
+// take over.
 func (s *Server) searchReply(w http.ResponseWriter, r *http.Request, from provider.Protocol, name string, req *Request, usage *Usage, ask round) (int, string) {
 	ctx, cancel := context.WithCancel(context.WithValue(r.Context(), searchForKey{}, &CallFor{Agent: callerOf(r).agent, Model: unprefixed(req.Model)}))
 	defer cancel()

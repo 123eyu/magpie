@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -153,5 +154,28 @@ func TestTextWrittenCallSearchRouted(t *testing.T) {
 				t.Fatalf("call arguments %s: %s", call["input"], raw)
 			}
 		})
+	}
+}
+
+// A round whose events end without its stop (searchRounds takes such a
+// round as ended) still hands on the text textCallRound held from a mark
+// begun: it is the reply's, not lost with the channel (#4562 review).
+func TestTextCallRoundReleasesHeldAtEnd(t *testing.T) {
+	text := "Let me look.\n\n" + issueDSML[:40]
+	ask := func(ctx context.Context, req *Request) (<-chan Event, int, string) {
+		in := make(chan Event, 1)
+		in <- Event{Kind: KText, Text: text}
+		close(in)
+		return in, 200, ""
+	}
+	out, _, _ := textCallRound([]Tool{{Name: "Bash"}}, ask)(t.Context(), &Request{})
+	got := ""
+	for ev := range out {
+		if ev.Kind == KText {
+			got += ev.Text
+		}
+	}
+	if got != text {
+		t.Fatalf("a round ended without its stop handed on %q, not %q", got, text)
 	}
 }
