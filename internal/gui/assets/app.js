@@ -11580,6 +11580,24 @@ function renderModels(p) {
       same.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") same.blur(); else if (e.key === "Escape") { same.value = sameNow(); same.blur(); } };
       sameBox.append(el("span", "", t("Same as")), same);
       row.append(sameBox);
+      // the id it is listed by here, asked for by its own (zeewell on X)
+      const savedID = m.vendor ? m.id : "";
+      const idNow = () => prefs[id]?.id ?? savedID;
+      let idInput = null;
+      if (m.ids) {
+        const idBox = el("label", "msame mlocal");
+        idInput = input(idNow(), m.vendor || m.id);
+        idInput.title = t("The id magpie lists {id} by at this provider: agents, routing groups, the groups magpie finds, gateway keys and Usage all use it, and the provider is still asked for {own}. Empty: its own id", { id: m.id, own: m.vendor || m.id });
+        idInput.spellcheck = false;
+        idInput.onchange = () => {
+          const v = idInput.value.trim();
+          if (v === savedID) delete pref().id; else pref().id = v;
+          drawReset();
+        };
+        idInput.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") idInput.blur(); else if (e.key === "Escape") { idInput.value = idNow(); idInput.blur(); } };
+        idBox.append(el("span", "", t("Listed as")), idInput);
+        row.append(idBox);
+      }
       // its cost to the user, $ per million tokens, as Usage counts it
       // (#819): a box empty is its list price. The 1-hour cache write,
       // empty, is 2× input as Anthropic bills it, and only a Claude model
@@ -11781,7 +11799,7 @@ function renderModels(p) {
       const unsaved = el("span", "hint munsaved", t("unsaved"));
       unsaved.title = t("Made when the provider is saved; Cancel drops it");
       const reset = el("button", "text action", t("Restore default"));
-      reset.title = t("Its own name, every reasoning level it has, whether it sees images, the API it is asked on, the model it is the same as, and its list price");
+      reset.title = t("Its own name, every reasoning level it has, whether it sees images, the API it is asked on, the model it is the same as, its own id, and its list price");
       reset.onclick = () => {
         prefs[id] = {};
         if (draft.priceTyped) delete draft.priceTyped[id];
@@ -11796,6 +11814,8 @@ function renderModels(p) {
         if (m.api) prefs[id].api = "";
         if (m.same) prefs[id].same = "";
         same.value = sameNow();
+        if (savedID) prefs[id].id = "";
+        if (idInput) idInput.value = idNow();
         if (m.price) prefs[id].ownPrice = true;
         showPrice();
         if (apiSeg) { for (const b of apiSeg.querySelectorAll(".opt")) b.classList.toggle("on", b.dataset.api === apiNow()); slide(apiSeg, "api"); }
@@ -11807,7 +11827,7 @@ function renderModels(p) {
         unsaved.hidden = !prefs[id] && !draft.priceTyped?.[id];
         // staged back to its own already, there is nothing to restore
         const images = prefs[id]?.ownImages ? false : prefs[id]?.images !== undefined ? prefs[id].images !== !!m.ownImages : !!m.imageSet;
-        const custom = nameNow() !== "" || noneNow() || (prefs[id]?.efforts ? prefs[id].efforts.length > 0 : !!m.kept?.length) || images || apiNow() !== "" || sameNow() !== "" || priceNow() !== null || !!draft.priceTyped?.[id];
+        const custom = nameNow() !== "" || noneNow() || (prefs[id]?.efforts ? prefs[id].efforts.length > 0 : !!m.kept?.length) || images || apiNow() !== "" || sameNow() !== "" || idNow() !== "" || priceNow() !== null || !!draft.priceTyped?.[id];
         reset.hidden = !custom;
       };
       row.append(unsaved, reset);

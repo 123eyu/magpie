@@ -34,7 +34,8 @@ func (p Provider) Available() []catalog.Model {
 	if p.DecideOnly() {
 		return p.decideModels()
 	}
-	ms := p.available()
+	// by the ids the user lists them by (SetModelID)
+	ms := p.ids().list(p.available())
 	if p.Decides() {
 		// a gateway's Jev among its chat models, with its window and input
 		ms = slices.Clone(ms)
@@ -163,7 +164,18 @@ func (p Provider) liveByID(model string) []catalog.Model {
 	if !p.lists() {
 		return nil
 	}
-	return catalog.LiveByID(p.ID, model)
+	// a model listed by an id the user gave it is in the vendor's list
+	// under its own (SetModelID)
+	own := p.OwnModelID(model)
+	ms := catalog.LiveByID(p.ID, own)
+	if own == model {
+		return ms
+	}
+	out := slices.Clone(ms)
+	for i := range out {
+		out[i].ID = model
+	}
+	return out
 }
 
 // lists says whether the provider's fetched list is its own to read: not
@@ -294,7 +306,8 @@ func liveIDs(id string) map[string]bool {
 	for _, m := range ms {
 		out[m.ID] = true
 	}
-	return out
+	// picks are of the ids the user lists them by (SetModelID)
+	return modelIDsOf(id).ids(out)
 }
 
 // dropGonePicks takes out of the saved provider's picks those before had
@@ -1444,10 +1457,13 @@ func (p Provider) Serves(k KeyAccount, model string) bool { return p.Serving(mod
 // thousand keys (@NetRozee on X).
 func (p Provider) Serving(model string) func(KeyAccount) bool {
 	x, ok := p.keyLists()
-	if !ok {
+	if !ok || len(x.listed) == 0 {
+		// no key is listed to any model: every key serves it, and the
+		// model's own id needn't be looked up
 		return func(KeyAccount) bool { return true }
 	}
-	keys, found := x.of[model]
+	// the vendor's lists name the model by its own id (SetModelID)
+	keys, found := x.of[p.OwnModelID(model)]
 	return func(k KeyAccount) bool {
 		id := keyID(k.Key)
 		return !found || len(keys) == 0 || !x.listed[id] || keys[id]
@@ -1877,6 +1893,13 @@ var makerCatalogs = sync.OnceValue(func() []string {
 // auto-review through the Codex subscription costs nothing too, as OpenAI
 // serves it a ChatGPT sign-in (codexReviewFree).
 func (p Provider) ListPrice(model string) (catalog.Price, bool) {
+	if own := p.OwnModelID(model); own != model {
+		// a model listed by an id the user gave it is priced as the
+		// provider's own id of it first, then as the id it is listed by
+		if pr, ok := p.ListPrice(own); ok {
+			return pr, true
+		}
+	}
 	if pr, ok := p.remotePrice(model); ok {
 		return pr, true
 	}

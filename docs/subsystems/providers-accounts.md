@@ -198,6 +198,38 @@ it may be a variant's (`deepseek-v4.1-flash[fast]`), and a tagged id is
 never priced. `TestUserSameGivesTheSpecs`, `TestTaggedIDHasTheModelsSpecs`,
 `TestSameAsGivesAnUnlistedModelItsSpecs`.
 
+A model can also be listed by an id the user gives it at its provider
+(zeewell on X: a relay's `deepseek-v4.1-flash-1017` as
+`deepseek-v4.1-flash`, `grok-4.6@500k` as `grok-4.6`): the editor's
+Names & levels "Listed as" box beside Same as, `magpie model id
+<provider/model> <id>` (`--reset` takes it back, `magpie model ids` lists
+them), settings' `ModelIDs` (`"<pid>/<id>": "<own id>"`,
+`provider.SetModelID`, [`localid.go`](../../internal/provider/localid.go)).
+Same as only lends specs and joins found groups; this id is what magpie
+lists, picks, groups, finds groups by (`auto/<id>` with every other
+provider serving it), limits gateway keys to and records usage under,
+while the vendor is asked for its own id: `Settings.Wires()` turns each
+entry round into a wire name, so every place a `ModelWires` name goes out
+sends it, and an explicit `ModelWires` entry for the same id wins. Only a
+provider of the user's own takes one (`TakesModelIDs`); an account's or a
+plugin's requests are built from its own list's id, which no wire name
+reaches. One id is one model of a provider: the latest given it has it,
+and the one before is listed by its own id again (the CLI names it; the
+editor refuses two rows given one id in one save). A model of the
+provider's own id that another is listed by (`grok-4.6` beside
+`grok-4.6@500k`) is not listed while it is. Giving the id moves what the
+user set of the model (picks, contexts, fallbacks, routing groups'
+members and rules, the pickers' lists, every per-model setting, gateway
+keys' models through `provider.ModelMoved`) to it, but never over a value
+the user already has under the new id (`Settings.MoveModel`). Agents'
+files are not rewritten: an old `provider/<own id>` still resolves and is
+asked for as it is. A gateway key held to either id passes for both
+(`modelAllowed`). A group's `match` pattern is left as the user wrote it.
+Usage records the model by the listed id and `served` by the vendor's;
+the price is the own id's first (`ListPrice`). `TestModelIDListedAndAskedForByOwn`,
+`TestModelIDLatestWins`, `TestModelIDMovesTheUsersRefs`,
+`TestLocalModelIDOnEveryRoute`.
+
 ## Constraints and failure behavior
 
 An allowance deliberately not requested (a saved Claude account outside
