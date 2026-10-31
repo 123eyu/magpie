@@ -45,6 +45,18 @@
   // "scripts": requests naming only a library (context.go's scriptsAgent)
   const agentLabel = (id) => (id === "scripts" ? t("Scripts") : agentMeta(id)?.name || id || t("your agent"));
   const agentIcon = (id) => icon(agentMeta(id)?.icon || "generic");
+  // the lab a model id is from, by its name after the provider's; none when
+  // it isn't known, so a wrong logo never stands for it
+  const LABS = [[/claude/, "claude-color"], [/gpt|^o\d|codex/, "openai"], [/gemma/, "gemma-color"], [/gemini/, "gemini-color"],
+    [/deepseek/, "deepseek-color"], [/qwen|qwq/, "qwen-color"], [/kimi|moonshot/, "kimi"], [/glm/, "zhipu-color"], [/grok/, "grok"],
+    [/minimax|abab/, "minimax-color"], [/doubao|seed/, "doubao-color"], [/stral/, "mistral-color"], [/llama/, "meta-color"],
+    [/mimo/, "xiaomimimo"], [/^step/, "stepfun-color"], [/hunyuan/, "hunyuan-color"]];
+  const labIcon = (model) => {
+    const m = model.toLowerCase().split("/").pop();
+    const hit = LABS.find(([re]) => re.test(m));
+    return hit ? [icon(hit[1])] : [];
+  };
+
   // what an item of the prompt is called: a file's path or a tool's name
   // as it is; magpie's own names for the rest in the reader's language
   const ITEM_NAMES = {
@@ -761,7 +773,21 @@
         head.append(bar);
       }
       head.append(el("span", "grow"));
-      if (r.model) head.append(el("code", "ctx-model", r.model));
+      // whose request it is and the model it went to; in a narrow card the
+      // agent's name goes first, its icon stays
+      const route = el("span", "ctx-route");
+      if (r.agent) {
+        const who = el("span", "ctx-who");
+        who.append(agentIcon(r.agent), el("span", "ctx-who-n", agentLabel(r.agent)));
+        route.append(who);
+      }
+      if (r.model) {
+        const what = el("span", "ctx-what");
+        what.append(...labIcon(r.model), el("code", "ctx-model", r.model));
+        if (r.agent) route.append(el("span", "ctx-sep", "›"));
+        route.append(what);
+      }
+      head.append(route);
       head.append(st);
 
       // how full, and the cache
