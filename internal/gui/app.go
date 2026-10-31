@@ -573,6 +573,9 @@ func Run(version string, showMain bool, link string) error {
 	}
 	h.tray.SetMenu(menu)
 	h.tray.AttachWindow(h.panel).WindowOffset(6)
+	// before Wails removes the item as the app quits, which would forget
+	// where the user put the icon (trayshown_darwin.go; nothing elsewhere)
+	h.app.OnShutdown(func() { keepTrayPlace() })
 	// a Mac that handed the gateway to the new version (handover.go)
 	// leaves the menu bar to it while it finishes its requests: one bird
 	if runtime.GOOS == "darwin" {
