@@ -1002,9 +1002,29 @@ own, as before. A plan's own search service (Kimi Code's, WorkBuddy's:
 plan's provider id and name, badged "Web search". Not covered: the
 Routing page, which lists only requests through `serve`.
 
+A search a provider's model runs with its provider's own tool is a row
+the same way when its reply shows it (cybercaius on Discord: DeepSeek
+searched and Usage showed nothing). `searchTally` in
+[`search_native.go`](../../internal/gateway/search_native.go) counts
+Anthropic's `server_tool_use` blocks named `web_search` (DeepSeek's
+Anthropic API answers them too) and `usage.server_tool_use.web_search_requests`,
+and the Responses API's `web_search_call` items: what a stream named as
+it went (a block's start, an item done, by id), what a whole reply or the
+stream's end listed, and what the usage said are counted apart, and the
+most of them is the count. The usage sniffer of a relayed reply and both
+translated readers feed it (`Usage.searches`), and after the request's own
+row `logNativeSearches` writes one row a search, at most 20: `Source`
+`search`, `Kind` `web_search`, the request's agent, provider id, host and
+model, status 200, no query and no time of its own. An event is parsed for
+it only when it holds `server_tool_use` or `web_search_call`. A provider
+whose reply doesn't show its searches (a Chat API's model that searches
+inside, with nothing in the reply but text) has none to show, and
+DeepSeek's Chat API has no search tool at all.
+
 Covered by `TestSearchAPIAsksAreLogged`, `TestSearchAPIFailureKeepsNoURL`,
 `TestOwnSearchIsLogged`, `TestWorkBuddyPluginSearches`,
-`TestSearchAPIRowsListedNotCounted` and `usage-ledger-search.test.cjs`.
+`TestSearchAPIRowsListedNotCounted`, `TestOwnProviderSearchesAreLogged`,
+`TestSearchRowsListTheirPurpose` and `usage-ledger-search.test.cjs`.
 
 ## Web search as an MCP server
 

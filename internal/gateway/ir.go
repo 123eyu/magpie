@@ -419,6 +419,10 @@ type Usage struct {
 	// cacheUnknown: the reply said its vendor counts no cache tokens
 	// (a plugin's magpie_cache_unknown), so a CacheRead of 0 is not a miss
 	cacheUnknown bool
+	// searches: the web searches the reply says its model ran with its
+	// provider's own tool (searchTally), for the request log's Web search
+	// rows; told nowhere else
+	searches int
 
 	Reasoning int `json:"reasoning"`
 	// Served: the model the vendor's reply says answered, when it named
@@ -498,6 +502,7 @@ func (u *Usage) add(v Usage) {
 	}
 	u.cacheCreationReported = u.cacheCreationReported || v.cacheCreationReported
 	u.cacheUnknown = u.cacheUnknown || v.cacheUnknown
+	u.searches = max(u.searches, v.searches)
 	if v.Reasoning > 0 {
 		u.Reasoning = v.Reasoning
 	}
