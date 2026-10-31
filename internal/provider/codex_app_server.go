@@ -40,15 +40,22 @@ import (
 // sending to 127.0.0.1:3425 after Codex was disconnected (JiangLiuer222 on
 // X), so each such change restarts it the same way.
 //
+// A change to the model list alone never does: the app takes an
+// app-server's end as a crash and relaunches, and the list changes far
+// more often than the route (an effort picked in the app, a provider
+// renamed), which ended the app every few minutes (#4550). The app reads
+// a new list at its next launch, or on the Agents row's Restart.
+//
 // The app-server is ended as a clean exit (proc.End): the app reads any
 // other exit as a crash and shows it.
 
 // CodexAppRoute is set by the agent package: what in Codex's config the
-// app-server reads as it starts and magpie writes (its provider, base URL
-// and model list: route, compared, never parsed), and whether magpie is
-// Codex's provider for its used-up ChatGPT account (out, AppOut); known
-// false when Codex's config can't be read. Nothing the Codex app writes
-// itself (its model pick) is in route, or a pick would restart it.
+// app-server reads as it starts and magpie writes (its provider and base
+// URL: route, compared, never parsed), and whether magpie is Codex's
+// provider for its used-up ChatGPT account (out, AppOut); known false
+// when Codex's config can't be read. Nothing the Codex app writes itself
+// (its model or effort pick) and not the model list is in route, or a
+// pick would restart it.
 var CodexAppRoute func() (route string, out, known bool)
 
 // CodexNoAccount is set by the agent package: whether the provider Codex's
