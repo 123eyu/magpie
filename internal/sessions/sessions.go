@@ -2291,10 +2291,16 @@ func lastIndex(b, key []byte) int {
 		return len(b)
 	}
 	if len(b) > tail {
-		if i := bytes.LastIndex(b[len(b)-tail:], key); i >= 0 {
+		if i := forwardLast(b[len(b)-tail:], key); i >= 0 {
 			return len(b) - tail + i
 		}
 	}
+	return forwardLast(b, key)
+}
+
+// forwardLast is the last key in b, found by Index from each one before;
+// even a 1 KB tail took LastIndex ~1 µs.
+func forwardLast(b, key []byte) int {
 	last := -1
 	for off := 0; off < len(b); {
 		i := bytes.Index(b[off:], key)
