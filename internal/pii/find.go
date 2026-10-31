@@ -605,7 +605,10 @@ func cut(t string, size int) []span {
 		} else if i := strings.IndexByte(t[next:end-pieceOverlap/2], ' '); i >= 0 {
 			next += i + 1
 		} else {
-			for !utf8.RuneStart(t[next]) {
+			// to end at most: text that isn't UTF-8 can have no rune's
+			// start up to it, or to the text's end (a run of stray
+			// continuation bytes read past it and panicked, #4553)
+			for next < end && !utf8.RuneStart(t[next]) {
 				next++
 			}
 		}
