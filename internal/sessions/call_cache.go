@@ -9,10 +9,12 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/crc32"
 	"hash/fnv"
 	"io"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -295,6 +297,11 @@ func readCalls(f file) *callFile {
 		owned = true
 	}
 	if old != nil && old.Size == f.size && old.Mod == f.mod.UnixNano() {
+		if owned {
+			// a Claude session's calls a parse read along (callsRide) left
+			// their window on disk, not here
+			old = withCallRevisions(old)
+		}
 		callsMu.Lock()
 		if generation == callGeneration {
 			keepCalls(f.path, old)
@@ -402,21 +409,26 @@ func readCalls(f file) *callFile {
 // Codex app packs or repacks every rollout (11,591 on 10-20) the start's
 // warm-up parsed each for the Sessions page and then read each again for
 // Requests' calls: ~48 GB decompressed twice. Reading both on one pass
-// leaves readCalls a shard on disk that is already up to date.
+// leaves readCalls a shard on disk that is already up to date. A Claude
+// session read from its start rides too: a first start scanned each again
+// for its calls, ~20 s of its CPU on 13 GB of them (#2278).
 type callsRide struct {
 	f          file
 	st         *callFile
 	generation uint64
 	lock       *sync.Mutex
 	sum, calls bool // what each reader's head said of the line being read
+	claude     bool
 }
 
 // callsAlong is a ride for f's calls when f is a packed Codex rollout whose
-// calls are to be read again, and nil otherwise. It holds the file's calls
-// lock until release, so a readCalls of the file meanwhile waits for what
-// the ride reads rather than read it again.
+// calls are to be read again, or a Claude session whose calls were never
+// read, and nil otherwise. It holds the file's calls lock until release, so
+// a readCalls of the file meanwhile waits for what the ride reads rather
+// than read it again.
 func callsAlong(f file) *callsRide {
-	if f.agent != "codex" || !packed(f.path) || f.cold || wslCold(f.path) {
+	claude := f.agent == "claude" || f.agent == "claude-desktop"
+	if !(f.agent == "codex" && packed(f.path)) && !claude || f.cold || wslCold(f.path) {
 		return nil
 	}
 	lock := callLock(f.path)
@@ -424,6 +436,14 @@ func callsAlong(f file) *callsRide {
 	callsMu.Lock()
 	old, generation := callCache[f.path], callGeneration
 	callsMu.Unlock()
+	if claude {
+		// calls read before are read on, or again, by readCalls as they were
+		if _, err := os.Stat(callCachePath(f.path)); old != nil || !errors.Is(err, fs.ErrNotExist) {
+			lock.Unlock()
+			return nil
+		}
+		return &callsRide{f: f, st: prepareCalls(f, nil, false), generation: generation, lock: lock, claude: true}
+	}
 	owned := false
 	if old == nil {
 		old = loadKept(f)
@@ -450,7 +470,11 @@ func (r *callsRide) ride(head func([]byte) bool, line func([]byte, int64, int64)
 			}
 			if r.calls {
 				r.st.At, r.st.End = start, end
-				codexCallLine(r.st, b)
+				if r.claude {
+					claudeCallLine(r.st, b)
+				} else {
+					codexCallLine(r.st, b)
+				}
 			}
 			return true
 		}
@@ -469,7 +493,17 @@ func (r *callsRide) finish(off int64, err error) {
 	st.Off, st.Size, st.Mod = off, f.size, f.mod.UnixNano()
 	st.ContentHash = prefixHash(f.path, off)
 	writeCalls(st, 0, false)
+	if r.claude {
+		if st.Claude != nil && !workingRevision(f.mod.UnixNano(), time.Now()) {
+			st = st.withoutRevisions()
+		}
+		writeCallRevisions(st)
+	}
 	st.dirty = nil
+	if r.claude {
+		// on disk only: a Sessions read keeps no calls (readCalls loads them)
+		return
+	}
 	callsMu.Lock()
 	if r.generation == callGeneration {
 		keepCalls(f.path, st)
