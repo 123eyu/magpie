@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http/httptest"
+	"runtime"
 	"testing"
 
 	"github.com/yetone/magpie/internal/sessions"
@@ -63,12 +64,26 @@ func TestAnswerBufferKeptForTheNext(t *testing.T) {
 		t.Fatalf("next buffer holds %d, room for %d: not the last answer's", b.Len(), b.Cap())
 	}
 	keepAnswer(b)
-	rows := []rowsBufRow{{Name: string(big)}}
-	writeJSONRows(httptest.NewRecorder(), httptest.NewRequest("GET", "/x", nil), "kept-test", rows, struct{}{})
-	answerBuffers.Lock()
-	n := len(answerBuffers.free)
-	answerBuffers.Unlock()
-	if n == 0 {
-		t.Fatal("writeJSONRows kept no buffer for the next answer")
+}
+
+// writeJSONRows holds no answer-sized buffer: the list goes out a row at a
+// time, and the whole answer was 25 MB of a warm start's live heap (#2278).
+func TestJSONRowsNotHeldWhole(t *testing.T) {
+	big := string(bytes.Repeat([]byte("x"), 64<<10))
+	rows := make([]rowsBufRow, 64)
+	for i := range rows {
+		rows[i] = rowsBufRow{Name: big, N: float64(i)}
+	}
+	w := httptest.NewRecorder()
+	writeJSONRows(w, httptest.NewRequest("GET", "/x", nil), "rows", rows, struct{}{}) // warm
+	var before, after runtime.MemStats
+	w = httptest.NewRecorder()
+	w.Body.Grow(len(rows)*len(big) + 1<<20) // the recorder's copy isn't magpie's
+	runtime.ReadMemStats(&before)
+	writeJSONRows(w, httptest.NewRequest("GET", "/x", nil), "rows", rows, struct{}{})
+	runtime.ReadMemStats(&after)
+	answer := uint64(w.Body.Len())
+	if got := after.TotalAlloc - before.TotalAlloc; got > answer/4 {
+		t.Fatalf("writeJSONRows allocated %d bytes for a %d-byte answer", got, answer)
 	}
 }
