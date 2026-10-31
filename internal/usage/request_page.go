@@ -67,12 +67,18 @@ type RequestPage struct {
 }
 
 type packedRow struct {
-	Time time.Time
+	// at is the row's time in unix ns, and loc its zone (Time): a
+	// time.Time was 24 of a row's bytes (#2278)
+	at  int64
+	loc *time.Location
 	// Varied are the strings of rowVaried, and Shape the chunk's Shapes
 	// entry that holds the row's other strings
-	Varied         [len(rowVaried)]uint32
-	Shape          uint32
-	Tokens         [6]int64
+	Varied [len(rowVaried)]uint32
+	Shape  uint32
+	// in 32 bits: no call reads or writes 2^31 tokens, and they were
+	// 48 of a row's bytes as int64s (#2278); one past it is kept as the
+	// most an int32 holds (tokensOf)
+	Tokens         [6]int32
 	Order, RouteID int64
 	Cost, Credits  float64
 	// the times of the call, in ms as in Record, kept in 32 bits (msOf):
@@ -89,6 +95,26 @@ type packedRow struct {
 // msOf is a time in ms as a packedRow keeps it: one past 24 days, which
 // no call takes, is kept as the longest it can be.
 func msOf(ms int64) int32 { return int32(max(min(ms, math.MaxInt32), math.MinInt32)) }
+
+// tokensOf is a token count as a packedRow keeps it.
+func tokensOf(n int64) int32 { return int32(max(min(n, math.MaxInt32), math.MinInt32)) }
+
+// Time is the row's time, in the zone it was written in.
+func (p *packedRow) Time() time.Time {
+	if p.loc == nil {
+		return time.Time{}
+	}
+	return time.Unix(0, p.at).In(p.loc)
+}
+
+// setTime keeps t as the row's time. The zero time stays zero.
+func (p *packedRow) setTime(t time.Time) {
+	if t.IsZero() {
+		p.at, p.loc = 0, nil
+		return
+	}
+	p.at, p.loc = t.UnixNano(), t.Location()
+}
 
 // rowHandedOn is the Flags bit of Record.HandedOn, rowReasoningHidden
 // Record.ReasoningHidden's: 64 is block_price.go's swapKnown, 256
@@ -243,7 +269,8 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 		c.Bytes += int64(len(s) + 48)
 		return id
 	}
-	p := packedRow{Time: r.Time, Tokens: [6]int64{int64(r.Input), int64(r.Output), int64(r.CacheRead), int64(r.CacheWrite), int64(r.Reasoning), int64(r.CacheWrite1h)}, Millis: msOf(r.Millis), TTFT: msOf(r.TTFT), FirstText: msOf(r.FirstText), FirstReasoning: msOf(r.FirstReasoning), Sent: msOf(r.Sent), Flow: msOf(r.Flow), Own: msOf(r.Own), Masking: int32(min(r.Masking, math.MaxInt32)), Retried: msOf(r.Retried), Queued: msOf(r.Queued), Order: order, RouteID: r.RouteID, Cost: r.Cost, Status: int32(r.Status), Tries: int32(r.Tries)}
+	p := packedRow{Tokens: [6]int32{tokensOf(int64(r.Input)), tokensOf(int64(r.Output)), tokensOf(int64(r.CacheRead)), tokensOf(int64(r.CacheWrite)), tokensOf(int64(r.Reasoning)), tokensOf(int64(r.CacheWrite1h))}, Millis: msOf(r.Millis), TTFT: msOf(r.TTFT), FirstText: msOf(r.FirstText), FirstReasoning: msOf(r.FirstReasoning), Sent: msOf(r.Sent), Flow: msOf(r.Flow), Own: msOf(r.Own), Masking: int32(min(r.Masking, math.MaxInt32)), Retried: msOf(r.Retried), Queued: msOf(r.Queued), Order: order, RouteID: r.RouteID, Cost: r.Cost, Status: int32(r.Status), Tries: int32(r.Tries)}
+	p.setTime(r.Time)
 	var t [rowTexts]uint32
 	for i, s := range rowText(&r) {
 		t[i] = intern(*s)
@@ -308,7 +335,7 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 }
 func (c *rowChunk) row(i int) Row {
 	p := &c.Rows[i]
-	r := Row{Record: Record{RouteID: p.RouteID, Time: p.Time, Input: int(p.Tokens[0]), Output: int(p.Tokens[1]), CacheRead: int(p.Tokens[2]), CacheWrite: int(p.Tokens[3]), CacheWrite1h: int(p.Tokens[5]), Reasoning: int(p.Tokens[4]), Millis: int64(p.Millis), TTFT: int64(p.TTFT), FirstText: int64(p.FirstText), FirstReasoning: int64(p.FirstReasoning), ReasoningHidden: p.Flags&rowReasoningHidden != 0, CacheUnknown: p.Flags&rowCacheUnknown != 0, Sent: int64(p.Sent), Flow: int64(p.Flow), Own: int64(p.Own), Masking: int64(p.Masking), Retried: int64(p.Retried), Queued: int64(p.Queued), Status: int(p.Status), Tries: int(p.Tries), HandedOn: p.Flags&rowHandedOn != 0, Rejected: p.Flags&4 != 0, SessionOfficialLogin: p.Flags&8 != 0}, Cost: p.Cost, Priced: p.Flags&1 != 0, Swapped: p.Flags&2 != 0, Routed: p.Flags&32 != 0}
+	r := Row{Record: Record{RouteID: p.RouteID, Time: p.Time(), Input: int(p.Tokens[0]), Output: int(p.Tokens[1]), CacheRead: int(p.Tokens[2]), CacheWrite: int(p.Tokens[3]), CacheWrite1h: int(p.Tokens[5]), Reasoning: int(p.Tokens[4]), Millis: int64(p.Millis), TTFT: int64(p.TTFT), FirstText: int64(p.FirstText), FirstReasoning: int64(p.FirstReasoning), ReasoningHidden: p.Flags&rowReasoningHidden != 0, CacheUnknown: p.Flags&rowCacheUnknown != 0, Sent: int64(p.Sent), Flow: int64(p.Flow), Own: int64(p.Own), Masking: int64(p.Masking), Retried: int64(p.Retried), Queued: int64(p.Queued), Status: int(p.Status), Tries: int(p.Tries), HandedOn: p.Flags&rowHandedOn != 0, Rejected: p.Flags&4 != 0, SessionOfficialLogin: p.Flags&8 != 0}, Cost: p.Cost, Priced: p.Flags&1 != 0, Swapped: p.Flags&2 != 0, Routed: p.Flags&32 != 0}
 	if p.Flags&rowCredits != 0 {
 		credits := p.Credits
 		r.Credits = &credits
@@ -381,7 +408,7 @@ type timedRef struct {
 	order int64
 }
 
-func timedOf(ref rowRef, p *packedRow) timedRef { return timedRef{ref, p.Time, p.Order} }
+func timedOf(ref rowRef, p *packedRow) timedRef { return timedRef{ref, p.Time(), p.Order} }
 
 func (a timedRef) newer(b timedRef) bool {
 	if !a.at.Equal(b.at) {
@@ -1686,7 +1713,9 @@ var matchKeySeeds = [2]maphash.Seed{maphash.MakeSeed(), maphash.MakeSeed()}
 // Codex that names cache_write_input_tokens beside a gateway record that
 // didn't, an older Codex that doesn't beside one that does; the sum is the
 // same either way.
-func matchTokens(t [6]int64) [3]int64 { return [3]int64{t[0] + t[3], t[1], t[2]} }
+func matchTokens(t [6]int32) [3]int64 {
+	return [3]int64{int64(t[0]) + int64(t[3]), int64(t[1]), int64(t[2])}
+}
 
 type matchEnd struct {
 	at    time.Time
@@ -1889,7 +1918,7 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip refSet, respon
 	// minutes of polls allocated while an agent worked (#2278).
 	matchable := func(gateway *rowChunk, i int) bool {
 		p := &gateway.Rows[i]
-		return !(p.Flags&4 != 0 || gateway.text(p, 1) == 0 && p.Status >= 400) && !p.Time.Before(gatewaySince)
+		return !(p.Flags&4 != 0 || gateway.text(p, 1) == 0 && p.Status >= 400) && !p.Time().Before(gatewaySince)
 	}
 	withID := 0
 	for _, gateway := range gateways {
@@ -1943,7 +1972,7 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip refSet, respon
 		for i := range open.Rows {
 			p := &open.Rows[i]
 			ref := rowRef{c, i}
-			if skip.has(ref) || reserved.has(ref) || p.Time.Before(since) {
+			if skip.has(ref) || reserved.has(ref) || p.Time().Before(since) {
 				continue
 			}
 			if open.text(p, 11) == 0 {
@@ -1995,7 +2024,7 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip refSet, respon
 			return matchKey{}, false
 		}
 		p := &gateway.Rows[i]
-		if (p.Flags&4 != 0 || gateway.text(p, 1) == 0 && p.Status >= 400) || p.Time.Before(gatewaySince) {
+		if (p.Flags&4 != 0 || gateway.text(p, 1) == 0 && p.Status >= 400) || p.Time().Before(gatewaySince) {
 			return matchKey{}, false
 		}
 		session := gateway.Strings[gateway.text(p, 14)]
@@ -2063,7 +2092,7 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip refSet, respon
 			g := &groups[ks[next]]
 			next++
 			p := &gateway.Rows[i]
-			ends[g.off+g.n] = matchEnd{p.Time.Add(time.Duration(p.Millis) * time.Millisecond), rowRef{gateway, i}}
+			ends[g.off+g.n] = matchEnd{p.Time().Add(time.Duration(p.Millis) * time.Millisecond), rowRef{gateway, i}}
 			g.n++
 		}
 	}
@@ -2086,7 +2115,7 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip refSet, respon
 		for j := range c.Rows {
 			p := &c.Rows[j]
 			ref := rowRef{chunk, j}
-			if skip.has(ref) || reserved.has(ref) || matched.has(ref) || p.Time.Before(since) {
+			if skip.has(ref) || reserved.has(ref) || matched.has(ref) || p.Time().Before(since) {
 				continue
 			}
 			failed := p.Flags&16 != 0
@@ -2094,9 +2123,9 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip refSet, respon
 				continue
 			}
 			key := matchKey{session: c.Strings[c.text(p, 13)], tokens: matchTokens(p.Tokens), failed: failed}
-			from, to := p.Time.Add(-2*time.Second), p.Time.Add(2*time.Second)
+			from, to := p.Time().Add(-2*time.Second), p.Time().Add(2*time.Second)
 			if c.Strings[c.text(p, 0)] == "agy" {
-				key.session, to = agyMatchSession, p.Time.Add(agyStepLongest)
+				key.session, to = agyMatchSession, p.Time().Add(agyStepLongest)
 			}
 			count, at := 0, int32(0)
 			// Without a local ID either gateway partition can match. With an ID,
@@ -2297,7 +2326,7 @@ func (ps *pairedRows) visitChunk(rows *chunkRows, c *rowChunk, r *Row, fn func(t
 	for i := range open.Rows {
 		pr := &open.Rows[i] // not a copy: a row is 216 bytes
 		ref := rowRef{c, i}
-		if pr.Time.Before(ps.since) || after(ps.until, pr.Time) || ps.skip.has(ref) || ps.matched.has(ref) {
+		if pr.Time().Before(ps.since) || after(ps.until, pr.Time()) || ps.skip.has(ref) || ps.matched.has(ref) {
 			continue
 		}
 		*r = open.row(i)

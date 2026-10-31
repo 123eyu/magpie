@@ -136,7 +136,7 @@ func chunkFirsts(sets [3][]*rowChunk) func(*rowChunk) time.Time {
 			var at time.Time
 			open := rows.of(read)
 			for i := range open.Rows {
-				if t := open.Rows[i].Time; at.IsZero() || t.Before(at) {
+				if t := open.Rows[i].Time(); at.IsZero() || t.Before(at) {
 					at = t
 				}
 			}

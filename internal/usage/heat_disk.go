@@ -157,7 +157,7 @@ func hashRows(h hash.Hash, c *rowChunk) {
 	shapes := map[uint32]int{}
 	for i := range c.Rows {
 		p := &c.Rows[i]
-		b = binary.AppendVarint(b, p.Time.UnixNano())
+		b = binary.AppendVarint(b, p.Time().UnixNano())
 		for _, v := range p.Varied {
 			text(v)
 		}
@@ -173,7 +173,7 @@ func hashRows(h hash.Hash, c *rowChunk) {
 			}
 		}
 		for _, t := range p.Tokens {
-			b = binary.AppendVarint(b, t)
+			b = binary.AppendVarint(b, int64(t))
 		}
 		b = binary.AppendVarint(b, p.Order)
 		b = binary.AppendVarint(b, p.RouteID)

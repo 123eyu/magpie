@@ -273,11 +273,11 @@ func heatBefore(cut time.Time, recent [3][]*rowChunk) heatSum {
 		var part heatSum
 		unpacked := rows.of(c)
 		for i := range unpacked.Rows {
-			if pr := &unpacked.Rows[i]; pr.Time.Before(cut) {
+			if pr := &unpacked.Rows[i]; pr.Time().Before(cut) {
 				part.n++
-				part.at += pr.Time.UnixNano()
+				part.at += pr.Time().UnixNano()
 				for _, t := range pr.Tokens {
-					part.tokens += t
+					part.tokens += int64(t)
 				}
 			}
 		}
