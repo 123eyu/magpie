@@ -200,6 +200,20 @@ The gateway's log says which (`claude: this run is -p: …`,
 `claudePrintWhy`), and the helper's own line when it becomes `-p` (below)
 is logged from the run's stderr (`lockedWriter`).
 
+The Claude Code provider page says under its accounts whether runs are
+the interactive mode (TUI) or `-p` (CLI), with why when every run is
+`-p`, and opens what tells the two apart (`claudeModeRow` in app.js, drawn by
+claudemode.js, which it loads with its first read).
+It reads `GET /api/claude/mode` (`gateway.ClaudeModeNow`) as the page
+opens, kept 30 seconds and dropped when the setting changes, not in
+`/api/providers`' polls. What decides it for every run on the machine is
+`claudeMachineWhy`, whose codes the page words: `off` (the setting),
+`broken` (failed to start lately), `wsl-home`, `missing` (no Claude Code
+found), `os` and `no-shim`. What only a request decides (safeguards and
+the rest above) the page names as still `-p`; the WSL folder Windows
+can't read is per account, so the page doesn't know it. A subscription
+with Only switch serves nothing through magpie and shows no row.
+
 A turn the interactive mode can't take ends the run, and the next starts
 anew: a turn with an image known by its URL, one that takes earlier turns
 back, an effort change. A run given up on (`letGo`) is not taken back, since the

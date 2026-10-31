@@ -2639,6 +2639,15 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .accts > :is(.keep-login, .switch-only, .pool-ends) + .acc { border-top: 1px solid var(--line-2); }
 .editor .accts .keep-login, .editor .accts .switch-only, .editor .accts .pool-ends { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 34px; padding: 6px 11px; font-size: 12px; border-top: 1px solid var(--line-2); }
 .editor .accts .keep-login .keep-as { max-width: 240px; }
+/* Claude Code's interactive mode or -p, with why (claudeModeRow) */
+.accts > .claude-mode + .acc { border-top: 1px solid var(--line-2); }
+.editor .accts .claude-mode { display: grid; gap: 4px; padding: 7px 11px; font-size: 12px; border-top: 1px solid var(--line-2); }
+.claude-mode .mode-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; }
+.claude-mode .mode-name { font-weight: 500; margin-right: auto; }
+.claude-mode .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.claude-mode .dot.on { background: var(--green); }
+.claude-mode .note { color: var(--fg-2); margin: 0; }
+.claude-mode .link { font-size: 12px; }
 .editor .accts .pool-ends .note { flex-basis: 100%; color: var(--fg-2); }
 .acc .n { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .acc .plan { color: var(--muted); font-size: 11px; padding: 1px 6px; border-radius: 5px; background: var(--pill); white-space: nowrap; }

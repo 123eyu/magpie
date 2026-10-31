@@ -13285,6 +13285,8 @@ function renderAccounts(a, p) {
     cb.onchange = () => accountAction("provider/switchonly", { id: p.id, switchOnly: cb.checked }, cb.checked ? on : off);
     list.append(el("div", "switch-only", only));
   }
+  // whether these accounts' runs are Claude Code's interactive mode or -p
+  if (p && a.agent === "claude" && !p.switchOnly) list.append(claudeModeRow());
   // how a pool ends at its caps (plugins#349)
   const capped = (l) => accountCapOf(p, l.user) || windowCapsOf(p, l.user);
   if (p && (ls.some(capped) || p.capStop || p.capCareful)) {
@@ -13315,6 +13317,22 @@ function renderAccounts(a, p) {
   }
   arrangeAccountRows(list, p);
   return list;
+}
+
+// claudeModeRow: TUI or claude -p, and why; /api/claude/mode kept 30s, the
+// row drawn by claudemode.js, loaded with its first read
+let claudeMode = null, claudeModeAt = 0, claudeModeRead = null;
+function claudeModeRow() {
+  const box = el("div", "claude-mode");
+  box.hidden = true;
+  const draw = () => window.claudeModeDraw(box, claudeMode);
+  if (claudeMode && Date.now() - claudeModeAt < 30000) draw();
+  else {
+    claudeModeRead ||= Promise.all([api("claude/mode"), import("./claudemode.js")]).then(([m]) => { claudeMode = m; claudeModeAt = Date.now(); })
+      .finally(() => { claudeModeRead = null; });
+    claudeModeRead.then(draw, () => box.remove());
+  }
+  return box;
 }
 
 // renderCodexDaemon: Codex's background app-server, on the account before a
@@ -21635,7 +21653,7 @@ function renderReplies(s, keep) {
     el("div", "sub wraps", t("A Claude subscription runs Claude Code as a person does, in its interactive mode, where the plan counts a request at about half of what -p uses. Off runs it as claude -p")));
   const uval = el("div", "val");
   uval.append(segs([["off", t("Off")], ["on", t("On")]], s.claudePrintMode ? "off" : "on",
-    (v) => savePrefs({ ...keep, claudePrintMode: v === "off" })));
+    (v) => { claudeMode = null; savePrefs({ ...keep, claudePrintMode: v === "off" }); }));
   u.append(uwho, uval);
   box.append(r, l, f, k, c, u);
 }

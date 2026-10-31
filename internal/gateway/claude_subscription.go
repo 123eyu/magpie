@@ -1087,20 +1087,17 @@ func claudePrintWhy(req *Request, binary claudeCLI, prompt []map[string]any) str
 		}
 	}
 	b, _ := json.Marshal(words)
+	if _, why := claudeMachineWhy(binary); why != "" {
+		return why
+	}
 	for _, c := range []struct {
 		is  bool
 		why string
 	}{
-		{!claudeTUIRuns, "no shim"},
-		{runtime.GOOS != "darwin" && runtime.GOOS != "linux" && runtime.GOOS != "windows", runtime.GOOS},
-		{binary.wsl != nil && binary.wsl.Home == "", "Claude Code in WSL, its home unknown"},
-		{binary.wsl == nil && binary.path == "", "no Claude Code path"},
 		{len(req.Safeguards) > 0, "safeguards"},
 		{req.clientCache != nil, "the client's cache marks"},
 		{len(req.Format.schema()) > 0, "a JSON schema"},
 		{urlImages(req.Messages) > 0, "an image known by its URL"},
-		{settings.Load().ClaudePrintMode, "the interactive mode is turned off"},
-		{tuiBroken(), "the interactive mode failed to start lately"},
 		{len(b) > tuiPromptMost, "a first message over 400KB"},
 	} {
 		if c.is {
@@ -1108,6 +1105,54 @@ func claudePrintWhy(req *Request, binary claudeCLI, prompt []map[string]any) str
 		}
 	}
 	return ""
+}
+
+// claudeMachineWhy is why every run on this machine is -p, whatever it
+// asks: a code for the provider page (ClaudeModeNow) and the log's words,
+// "" "" when runs can be the interactive mode.
+func claudeMachineWhy(binary claudeCLI) (code, why string) {
+	for _, c := range []struct {
+		is        bool
+		code, why string
+	}{
+		{!claudeTUIRuns, "no-shim", "no shim"},
+		{runtime.GOOS != "darwin" && runtime.GOOS != "linux" && runtime.GOOS != "windows", "os", runtime.GOOS},
+		{binary.wsl != nil && binary.wsl.Home == "", "wsl-home", "Claude Code in WSL, its home unknown"},
+		{binary.wsl == nil && binary.path == "", "missing", "no Claude Code path"},
+		{settings.Load().ClaudePrintMode, "off", "the interactive mode is turned off"},
+		{tuiBroken(), "broken", "the interactive mode failed to start lately"},
+	} {
+		if c.is {
+			return c.code, c.why
+		}
+	}
+	return "", ""
+}
+
+// ClaudeMode is how a Claude subscription's runs are made on this
+// machine, for the Claude Code provider page: TUI when Claude Code's
+// interactive mode, else -p, Why the code of claudeMachineWhy. A run can
+// still be -p for what only it asks (safeguards, a client's cache marks,
+// a JSON schema, an image known by its URL, a first message over 400KB).
+type ClaudeMode struct {
+	TUI    bool      `json:"tui"`
+	Why    string    `json:"why,omitempty"`
+	Broken time.Time `json:"broken,omitzero"` // since when, for "broken"
+	WSL    bool      `json:"wsl,omitempty"`   // Claude Code in WSL
+}
+
+// ClaudeModeNow is ClaudeMode as of now.
+func ClaudeModeNow() ClaudeMode {
+	binary, err := claudeBinary()
+	if err != nil {
+		return ClaudeMode{Why: "missing"}
+	}
+	code, _ := claudeMachineWhy(binary)
+	m := ClaudeMode{TUI: code == "", Why: code, WSL: binary.wsl != nil}
+	if code == "broken" {
+		m.Broken, _ = claudetui.BrokenSince()
+	}
+	return m
 }
 
 // safeguardBody is the safety-only form of the run's extra body.
