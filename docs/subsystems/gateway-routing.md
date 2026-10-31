@@ -639,7 +639,7 @@ Discord) gives a model whose provider searches the web by itself
 (`searchesFor`) magpie's search too: the searcher and the search APIs, in
 their usual order, as a model that can't search has. Settings › Models ›
 Web search shows it as "Models that search by themselves", Their own or
-magpie's, when magpie has anything to search with.
+magpie's; with nothing magpie can search with the row is dimmed and says where to add a search.
 [`magpieSearches`](../../internal/gateway/search.go) is the one check: on
 in Settings, magpie can search for this provider (`canSearchFor`), and the
 request isn't magpie's own searcher request (`searching`), which needs the
