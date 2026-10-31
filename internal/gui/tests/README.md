@@ -1021,8 +1021,12 @@ asked in the app's own dialog; Cancel and Escape post nothing and go back to
 the editor, Sign out posts login/forget and says so. With another account
 saved the one in use has no Sign out but Remove, which posts login/forget
 (vincentzhang1_55530 on Discord: magpie signs Codex in to another account
-first), and a signed_in refusal is said in the reader's language. No select, no left border, the page doesn't move; in
-English and Chinese.
+first), and a signed_in refusal is said in the reader's language. Claude Code
+signed in to one of two accounts has Remove too (StringKe, #4532); signed in to
+its only account it can be signed in to (the other a setup token) it has neither
+Remove nor Sign out and says why in zh, zh-TW, ja and de, and a signed_in_only
+refusal is said in the reader's language. No select, no left border, the page
+doesn't move; in English and Chinese.
 
 `nokey-editor.test.cjs` opens two local Ollama providers saved with no key,
 one from the preset and one custom, as /api/providers gives them: a click

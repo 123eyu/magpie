@@ -162,9 +162,12 @@ async function api(path, body, heads, signal) {
     if (data?.said) err.message = t(data.said, data); // an i18n.js key (api.go)
     // an account the agent is signed in to, refused removal while it has
     // another: said in the reader's language
-    if (data?.code === "signed_in") {
+    if (data?.code === "signed_in" || data?.code === "signed_in_only") {
       err.code = data.code;
-      err.message = t("{agent} is signed in to {user} now: sign it in to another of its accounts first (Use on that account), then remove this one", { agent: { codex: "Codex", claude: "Claude Code" }[data.agent] || data.agent, user: data.user });
+      const v = { agent: { codex: "Codex", claude: "Claude Code" }[data.agent] || data.agent, user: data.user };
+      err.message = data.code === "signed_in_only"
+        ? t("{agent} is signed in to {user}, the only account in magpie it can be signed in to, and magpie doesn't sign it out: add another account first, or sign out in {agent} itself, then remove this one", v)
+        : t("{agent} is signed in to {user} now: sign it in to another of its accounts first (Use on that account), then remove this one", v);
     }
     // a text Import can't add as a routing group (laincatx on X)
     if (data?.code === "share") {
@@ -13142,10 +13145,12 @@ function renderAccounts(a, p) {
         out.title = t("Signs Codex out of this account, as codex logout does");
         out.onclick = () => askSignOutLogin(a, l);
         line.append(out);
-      } else if (a.agent === "codex") {
-        // Codex is signed in to another of its accounts first, then this
-        // one goes (ForgetLogin), rather than Codex signed out
-        line.append(forgetOf(t("Codex is signed in to another of its accounts, and magpie forgets this one; the account itself is untouched")));
+      } else if (a.agent === "codex" || a.agent === "claude" && ls.some((o) => o !== l && !o.token)) {
+        // the agent is signed in to another of its accounts first, then
+        // this one goes (ForgetLogin), rather than Codex signed out or the
+        // removal refused (#4532); Claude Code's only one it can be signed
+        // in to has no Remove: magpie never signs it out
+        line.append(forgetOf(t("{agent} is signed in to another of its accounts, and magpie forgets this one; the account itself is untouched", { agent: a.agentName })));
       }
     } else {
       const forget = forgetOf(true);

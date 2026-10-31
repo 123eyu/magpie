@@ -1858,6 +1858,16 @@ agent off has every window under 90% again, it signs the agent back in to
 it. *Keep … signed in to* turns this off: the agent stays on the first
 account, or on the account you picked, whatever it has left. It changes nothing in the gateway's routing.
 
+Removing the account Codex or Claude Code is signed in to (its *Remove*,
+or `magpie accounts forget <codex|claude> <email|name>`) signs the agent
+in to another of its accounts first, as that one's *Use* would, then
+forgets this one; if that switch fails, nothing is removed. Codex's only
+account is signed out instead, as `codex logout` does. Claude Code is
+never signed out: when the account is the only one it can be signed in
+to (an account added by setup-token doesn't count), magpie keeps it and
+says so. Add another account first, or sign out in Claude Code itself,
+then remove it.
+
 With more than one Codex account on, magpie also sets `openai_base_url`
 in Codex's config.toml, so a request the signed-in account has no
 allowance for goes on to the others through the gateway. *Only switch
