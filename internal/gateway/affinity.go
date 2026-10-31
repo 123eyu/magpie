@@ -63,6 +63,14 @@ const (
 	// reasoning the first had sealed was refused there (leelantao on X:
 	// two Plus accounts' allowance spent 90% in a day).
 	chatGPTCold = time.Hour
+	// deepseekCold is how long DeepSeek's own API keeps a conversation's
+	// prefix cached without it being read. Its context caching guide
+	// (api-docs.deepseek.com/guides/kv_cache, read 10-31) says an unused
+	// cache is cleared "usually within a few hours to a few days", and a
+	// real Claude Code conversation on deepseek-v4-pro (10-31) read back
+	// 98–99% of its prompt after 7 and 26 minutes idle. Moving it to
+	// another DeepSeek key after five minutes sent it all again uncached.
+	deepseekCold = time.Hour
 	// cacheHour is how long Anthropic keeps what was written with
 	// cache_control's ttl "1h" (cache_creation's ephemeral_1h_input_tokens)
 	// without it being read, as Claude Code asks of a subscription (#2302)
@@ -74,10 +82,14 @@ const (
 )
 
 // coldAfter is how long p's vendor keeps a prompt cached without it being
-// read: cacheCold, or chatGPTCold for a ChatGPT account.
+// read: cacheCold, chatGPTCold for a ChatGPT account, or deepseekCold on
+// DeepSeek's own API.
 func coldAfter(p provider.Provider) time.Duration {
 	if p.Account != nil && p.Account.Agent == "codex" {
 		return chatGPTCold
+	}
+	if p.Host() == deepseekHost {
+		return deepseekCold
 	}
 	return cacheCold
 }
