@@ -356,3 +356,54 @@ func codexProviderCaps(path string) edit.Inline {
 	}
 	return out
 }
+
+// CodexAsyncHeldHere is the Codexes on this machine that would keep the
+// background compaction's threshold out of its config (one before
+// codexAsyncTableFrom, or of no known version), asked now rather than at
+// the last sync, which asks only while the setting is on.
+func CodexAsyncHeldHere(home string) []CodexReader {
+	return codexAsyncBlocked(codexReaders(here(tuneHome(home))))
+}
+
+// codexAsyncOwn names what the user has in Codex's config.toml that
+// comes before magpie's background compaction threshold, as codexAsyncSync
+// leaves it: the feature as a bare key of theirs (true at Codex's own 65%,
+// or false), their table spelled inline or as dotted keys, enabled = false
+// in it, or a threshold of their own. "" when magpie's threshold is what
+// Codex would read.
+func codexAsyncOwn(home string) string {
+	at := here(tuneHome(home))
+	path := filepath.Join(at.codexHome(), "config.toml")
+	feature, _, err := codexAsyncNow(path)
+	if err != nil || feature == nil {
+		return ""
+	}
+	var st codexAsyncStash
+	if raw := stashLoad()[at.key("codex.async")]; raw != "" {
+		json.Unmarshal([]byte(raw), &st)
+	}
+	bare := "features.async_compaction"
+	switch f := feature.(type) {
+	case bool:
+		if f && st.Bool {
+			return ""
+		}
+		return bare
+	case map[string]any:
+		if t, err := edit.GetTOMLTable(path, codexAsyncTable); err != nil || t == nil {
+			return bare
+		}
+		if e, has := f["enabled"]; has {
+			if on, _ := e.(bool); !on {
+				return codexAsyncTable + ".enabled"
+			}
+		}
+		if p, has := f[codexAsyncPercent]; has {
+			if n, _ := p.(int64); st.Percent == 0 || int64(st.Percent) != n {
+				return codexAsyncTable + "." + codexAsyncPercent
+			}
+		}
+		return ""
+	}
+	return bare
+}
