@@ -755,8 +755,14 @@ func codexOtherHomes() []string { return appdir.CodexHomes()[1:] }
 // other Codex folders, each with its folder as Home: one Codex keeps
 // signed in itself, as it does the one in ~/.codex. The one ~/.codex is
 // signed in to is that one's, wherever else it is too, and an account in
-// two other folders is the first's.
+// two other folders is the first's. A folder's sign-in the user removed
+// from magpie is passed over (codexSetAside); with that record unreadable,
+// which ones were removed is unknown, and none is read this time.
 func codexHomeLogins(live savedLogin, haveLive bool) []savedLogin {
+	aside, err := readCodexAside()
+	if err != nil {
+		return nil
+	}
 	var out []savedLogin
 	for _, home := range codexOtherHomes() {
 		l, ok := codexLoginIn(home)
@@ -764,6 +770,9 @@ func codexHomeLogins(live savedLogin, haveLive bool) []savedLogin {
 			continue
 		}
 		l.Home = home
+		if codexSetAside(l, aside) {
+			continue
+		}
 		out = append(out, l)
 	}
 	return out
@@ -1443,8 +1452,14 @@ func forgetLogin(agent, user string) (signedOut bool, err error) {
 	for _, l := range ls {
 		if l.Agent == agent && strings.EqualFold(l.User, user) {
 			if home := codexHeldIn(l); home != "" {
-				// it would be read again from there at the next look
-				return false, fmt.Errorf("%s is signed in to Codex in %s: sign it out there (CODEX_HOME=%s codex logout) to remove it", l.User, home, home)
+				// it would be read again from there at the next look: that
+				// folder's sign-in is set aside instead, its files left as
+				// they are (charliepu's .codex-db-backup-…, which no Codex
+				// runs in, refused with "codex logout")
+				in, _ := codexLoginIn(home)
+				if err := setCodexAside(home, in.Auth); err != nil {
+					return false, fmt.Errorf("removing %s, signed in to Codex in %s: %w", l.User, home, err)
+				}
 			}
 		}
 	}
