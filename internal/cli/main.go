@@ -121,6 +121,7 @@ const usage = `magpie — one place to pick every agent's model
   magpie heap [<file>]            a Go heap profile of the running magpie, with its memory numbers, for a report of it using too much memory
   magpie cpu [<file>] [--seconds N]   a Go CPU profile of the running magpie over 30s (5..120) while you use it, for a report of it using too much CPU
   magpie goroutines [<file>]      every goroutine of the running magpie, its stack and how long it waited, for a report of it stuck at something
+  magpie log [--path] [-n N] [-f]  where magpie's logs are, to send with a report: the app's (app.log), the service's; -n prints the app log's last N lines, -f follows it
   magpie gateway-key list|add <name> [--read-only]|rotate <id>|remove <id>   manage the keys clients use to call a shared gateway
   magpie gateway-key limit <id> [list|off|reset [n]|remove <n>|[add] day|week|month|<N>d|<N>h --tokens N --cost USD --cache-reads]   a key's own limits, and what it used
   magpie gateway-key models <id> [all|<provider>/<model>|<provider>/* ...]   the models a key may use, every one unless it names some
@@ -305,6 +306,11 @@ func run(args []string) error {
 	if len(args) > 0 && args[0] == "goroutines" {
 		// the running magpie's goroutines: asks it, and moves nothing here
 		return goroutinesCmd(args[1:])
+	}
+	if len(args) > 0 && (args[0] == "log" || args[0] == "logs") {
+		// where magpie's logs are, and the app log's last lines: reads
+		// files, and moves nothing
+		return logCmd(args[1:])
 	}
 	if len(args) == 2 && args[0] == agent.DryRunArg {
 		// an agent disconnected on a copy of its files under a temporary

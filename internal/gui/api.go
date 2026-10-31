@@ -31,6 +31,7 @@ import (
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/applog"
 	"github.com/yetone/magpie/internal/autostart"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/filememo"
@@ -397,6 +398,9 @@ type settingsJSON struct {
 	OnNetwork       bool     `json:"onNetwork,omitempty"`
 	// Dir is the data folder beside a portable magpie (#508)
 	Portable bool `json:"portable,omitempty"`
+	// Log is the log the desktop app writes (applog), as shown; "" for a
+	// magpie writing none (magpie web)
+	Log string `json:"log,omitempty"`
 	// WSL is whether there is WSL to look in for agents (Windows), for
 	// Settings' Detect agents in WSL (#1264)
 	WSL bool `json:"wsl,omitempty"`
@@ -709,6 +713,7 @@ func codexWindowUnder(st settings.Settings, model string) *codexRunWindow {
 func settingsState() settingsJSON {
 	s := settingsJSON{Settings: settings.Load(), Version: Version, Dir: tilde(settings.Dir()), Portable: settings.Portable() != "", Gateway: gateway.URL()}
 	s.AddrEnv = os.Getenv("MAGPIE_ADDR")
+	s.Log = tilde(applog.Current())
 	s.Builtins = builtinsState()
 	s.PanelKeys = panelKeysState()
 	s.JSRoutings = middleware.Routings()
@@ -2640,6 +2645,20 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	// the config folder only: the page names no path, so it can't open others
 	mux.HandleFunc("POST /api/settings/reveal", func(rw http.ResponseWriter, r *http.Request) {
 		if err := w.OpenFolder(settings.Dir()); err != nil {
+			fail(rw, err)
+			return
+		}
+		rw.WriteHeader(http.StatusNoContent)
+	})
+	// the app's log folder (applog), from Settings › About's Log row; the
+	// page names no path here either
+	mux.HandleFunc("POST /api/settings/log/reveal", func(rw http.ResponseWriter, r *http.Request) {
+		path := applog.Current()
+		if path == "" {
+			fail(rw, errors.New("this magpie writes no log file"))
+			return
+		}
+		if err := w.OpenFolder(filepath.Dir(path)); err != nil {
 			fail(rw, err)
 			return
 		}
