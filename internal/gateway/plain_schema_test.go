@@ -55,6 +55,40 @@ func TestPlainSchemaResolvesPointerIntoProperties(t *testing.T) {
 	}
 }
 
+// A self-reference is judged by whole pointer segments: a ref to
+// "#/properties/a" inside /properties/ab is a ref to a sibling, resolved
+// whole, not stopped at its type. And a pointer that names nothing where
+// it points still finds its last segment among $defs, as it did before
+// pointers were walked (#4561 review).
+func TestPlainSchemaSelfRefBySegment(t *testing.T) {
+	in := `{"type":"object",
+	"$defs":{"Mode":{"type":"string","enum":["x","y"]}},
+	"properties":{
+		"a":{"type":"object","properties":{"n":{"type":"integer"}}},
+		"ab":{"type":"object","properties":{
+			"inner":{"$ref":"#/properties/a"},
+			"mode":{"$ref":"#/components/schemas/Mode"}
+		}}
+	}}`
+	want := `{"type":"object",
+	"properties":{
+		"a":{"type":"object","properties":{"n":{"type":"integer"}}},
+		"ab":{"type":"object","properties":{
+			"inner":{"type":"object","properties":{"n":{"type":"integer"}}},
+			"mode":{"type":"string","enum":["x","y"]}
+		}}
+	}}`
+	var got, exp any
+	if err := json.Unmarshal(plainSchema(json.RawMessage(in)), &got); err != nil {
+		t.Fatal(err)
+	}
+	json.Unmarshal([]byte(want), &exp)
+	if !reflect.DeepEqual(got, exp) {
+		b, _ := json.Marshal(got)
+		t.Errorf("got %s", b)
+	}
+}
+
 // Antigravity refuses a function declaration over any keyword outside its
 // schema subset (#187: exclusiveMinimum from zcode's and dsh's tools).
 func TestPlainSchemaKeepsOnlyWhatAntigravityTakes(t *testing.T) {

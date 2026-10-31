@@ -841,7 +841,11 @@ func plainSchema(raw json.RawMessage) json.RawMessage {
 					return nil, false
 				}
 				if cur == nil {
-					return nil, false
+					// named nowhere the pointer says: its last
+					// segment as a $defs or definitions name, as
+					// before pointers were walked
+					d, ok := defs[ref[strings.LastIndex(ref, "/")+1:]]
+					return d, ok
 				}
 			}
 			return cur, true
@@ -870,7 +874,10 @@ func plainSchema(raw json.RawMessage) json.RawMessage {
 	// self-reference
 	selfRef := func(ref, path string) bool {
 		if strings.HasPrefix(ref, "#") {
-			return strings.HasPrefix(path, ref[1:])
+			// whole segments: "#/properties/a" is no container of
+			// /properties/ab
+			r := ref[1:]
+			return r == "" || path == r || strings.HasPrefix(path, r+"/")
 		}
 		return false
 	}
