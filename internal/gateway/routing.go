@@ -1156,8 +1156,10 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	// and none to tell from: the account rests, narrowed once read (#2036)
 	unread := why == failQuota && c.p.Account != nil && len(allowances(c.p.Account.UsageAgent())[c.p.Account.User]) == 0
 	// a model the key's plan doesn't serve rests alone, counted by itself
-	// (#1235): the key's other models are still served
-	unserved := why == failOther && (modelRefused(status, body) || codeAssistModelMissing(c.p, status, body))
+	// (#1235): the key's other models are still served. So does a ZCode
+	// trial entry zcode.z.ai's firewall blocked (zcodeTrialBlocked): the
+	// account's GLM Coding Plan goes to another host
+	unserved := why == failOther && (modelRefused(status, body) || codeAssistModelMissing(c.p, status, body) || zcodeTrialBlocked(c, status, body))
 	r := Rest{Why: why, Status: status, By: "cooldown"}
 	// out of allowance or credit for as long as magpie guessed: the vendor
 	// named no time, nor did the user (asksAt)
