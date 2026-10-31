@@ -1858,9 +1858,13 @@ nothing of yet (see below) is read first. When every other account is
 past that share too, magpie moves the agent to the one with the most room
 left, if it has at least a point more than the account it is on; else the
 agent stays. `magpie accounts switch claude next` (or `codex next`) does
-the same by hand: the next ticked account after the one the agent is on,
-in their order and wrapping round, that has room, or the one with the most
-room left when none has. Once the account it moved the
+the same by hand: the next account after the one the agent is on, in
+their order and wrapping round, that has room, or the one with the most
+room left when none has. It takes accounts that aren't ticked too, as
+*Use* and `switch <email|name>` do, so an account Claude Code or Codex
+signed itself in to (which starts unticked) is in the rotation; the
+ticks still decide where the gateway's requests go and which accounts
+the automatic switch moves to. Once the account it moved the
 agent off has every window under 90% again, it signs the agent back in to
 it. *Keep … signed in to* turns this off: the agent stays on the first
 account, or on the account you picked, whatever it has left. It changes nothing in the gateway's routing.

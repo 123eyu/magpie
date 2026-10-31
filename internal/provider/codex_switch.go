@@ -342,11 +342,18 @@ func roomLeft(q SubscriptionQuota, share float64, caps WindowCaps, now time.Time
 }
 
 // NextInOrder is the account `magpie accounts switch <agent> next` signs
-// agent in to: of its other accounts that are on in magpie, taken in their
-// order from the one after the account it is on, the first whose allowance
-// is known and has room; when none has, the one with the most room left
-// (roomLeft), and over says so. A saved Claude account not read yet is read
-// then, as NextLogin's spares are.
+// agent in to: of its other accounts the agent can be signed in to, taken
+// in their order from the one after the account it is on, the first whose
+// allowance is known and has room; when none has, the one with the most
+// room left (roomLeft), and over says so. A saved Claude account not read
+// yet is read then, as NextLogin's spares are.
+//
+// An account off in magpie is taken too, as switching to it by name or
+// from the accounts list is: on/off is whether the gateway's requests go
+// to it, not whether the agent may be signed in to it. An account the
+// agent signed itself in to (Claude Code's /login, codex login) starts
+// off, and next passed over it (StringKe, #4532). The automatic switch
+// (NextLogin) still takes only accounts that are on.
 func NextInOrder(ctx context.Context, agent string) (to string, over bool, err error) {
 	if !slices.Contains(loginAgents, agent) {
 		return "", false, fmt.Errorf("next switches Claude Code's and Codex's accounts; name the %s account to switch to", agent)
@@ -356,12 +363,12 @@ func NextInOrder(ctx context.Context, agent string) (to string, over bool, err e
 	var order []Login
 	for i := range ls {
 		l := ls[(at+1+i)%len(ls)]
-		if !l.Active && l.On && l.Lapsed == "" && l.home == "" && !l.Token {
+		if !l.Active && l.Lapsed == "" && switchable(l) {
 			order = append(order, l)
 		}
 	}
 	if len(order) == 0 {
-		return "", false, fmt.Errorf("%s has no other account that is on in magpie to switch to", agent)
+		return "", false, fmt.Errorf("%s has no other account in magpie to switch to", agent)
 	}
 	users := make([]string, 0, len(order))
 	for _, l := range order {

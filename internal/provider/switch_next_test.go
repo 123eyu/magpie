@@ -14,6 +14,20 @@ import (
 // wrapping round, then that account.
 func threeAccounts(t *testing.T, agent string) []string {
 	t.Helper()
+	users := pickUpThree(t, agent)
+	for _, u := range users {
+		if err := SetLoginOn(agent, u, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return users
+}
+
+// pickUpThree has agent sign itself in to three accounts in turn in a
+// sandbox HOME, magpie picking each up, and answers them as threeAccounts
+// does, on or off as magpie left them.
+func pickUpThree(t *testing.T, agent string) []string {
+	t.Helper()
 	if agent == "codex" {
 		home := signIn(t) // me@example.com
 		rememberLogins(true)
@@ -34,11 +48,7 @@ func threeAccounts(t *testing.T, agent string) []string {
 	}
 	var users []string
 	for i := range ls {
-		l := ls[(at+1+i)%3]
-		if err := SetLoginOn(agent, l.User, true); err != nil {
-			t.Fatal(err)
-		}
-		users = append(users, l.User)
+		users = append(users, ls[(at+1+i)%3].User)
 	}
 	return users
 }
@@ -97,7 +107,7 @@ func TestNextLoginTakesTheMostRoomWhenAllArePast(t *testing.T) {
 // `magpie accounts switch <agent> next` takes the accounts in order from
 // the one after the account the agent is on, wrapping round: the first
 // with room, else the one with the most room left, said to be past its
-// line; one off in magpie is never taken.
+// line. One off in magpie is taken as one on is (#4532).
 func TestNextInOrder(t *testing.T) {
 	for _, agent := range []string{"codex", "claude"} {
 		t.Run(agent, func(t *testing.T) {
@@ -115,7 +125,8 @@ func TestNextInOrder(t *testing.T) {
 				{"the first spent, the second has room", []float64{99, 10, 10}, 0, u[1], false},
 				{"every one past, the second has the most", []float64{99.5, 98.5, 10}, 0, u[1], true},
 				{"every one past, the first has the most", []float64{98.5, 100, 10}, 0, u[0], true},
-				{"the first off", []float64{10, 10, 10}, 1, u[1], false},
+				{"the first off", []float64{10, 10, 10}, 1, u[0], false},
+				{"the second off, the first spent", []float64{99, 10, 10}, 2, u[1], false},
 			} {
 				LoginUsageVia(usedAt(agent, map[string]float64{u[0]: c.used[0], u[1]: c.used[1], on: c.used[2]}))
 				if c.off > 0 {
@@ -142,5 +153,37 @@ func TestNextInOrder(t *testing.T) {
 	}
 	if _, _, err := NextInOrder(context.Background(), "gemini"); err == nil {
 		t.Error("next for Gemini CLI: want an error")
+	}
+}
+
+// StringKe (#4532): an account the agent signed itself in to (Claude
+// Code's /login, codex login) starts off in magpie, and `switch next`
+// passed over it, or said there was no other account when every one came
+// that way. next takes the accounts the agent can be signed in to, on or
+// off, as switching by name does; a lapsed one stays out.
+func TestNextTakesAccountsThatAreOff(t *testing.T) {
+	for _, agent := range []string{"codex", "claude"} {
+		t.Run(agent, func(t *testing.T) {
+			u := pickUpThree(t, agent)
+			for _, l := range Logins(agent) {
+				if l.On && !l.Active {
+					t.Fatalf("%s, which %s signed in to itself, is on: the case this test is about is gone", l.User, agent)
+				}
+			}
+			t.Cleanup(func() { LoginUsageVia(nil) })
+			LoginUsageVia(usedAt(agent, map[string]float64{u[0]: 10, u[1]: 10, u[2]: 10}))
+			if to, over, err := NextInOrder(context.Background(), agent); err != nil || over || !strings.EqualFold(to, u[0]) {
+				t.Fatalf("next: got %q over=%v err=%v, want %q", to, over, err, u[0])
+			}
+			LoginUsageVia(usedAt(agent, map[string]float64{u[0]: 99, u[1]: 10, u[2]: 10}))
+			if to, _, err := NextInOrder(context.Background(), agent); err != nil || !strings.EqualFold(to, u[1]) {
+				t.Fatalf("next with the first spent: got %q err=%v, want %q", to, err, u[1])
+			}
+			// the automatic switch still takes only accounts that are on
+			LoginUsageVia(usedAt(agent, map[string]float64{u[0]: 10, u[1]: 10, u[2]: 100}))
+			if from, to, _, ok := NextLogin(context.Background(), agent); ok {
+				t.Errorf("automatic switch moved %q→%q to an account that is off", from, to)
+			}
+		})
 	}
 }
