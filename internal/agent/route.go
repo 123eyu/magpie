@@ -107,7 +107,7 @@ var builtOptions stampedLists[Option]
 // buildVia is viaMagpie built afresh.
 func buildVia(agent, prefix string) []Option {
 	var out, groups []Option
-	shown, _ := provider.CatalogFor(agent)
+	agent, shown := catalogShown(agent)
 	// each provider's models the newest release first, unless the user put
 	// the agent's models in an order of their own (elis_pina on X: a model
 	// added late listed before the newer ones). CatalogFor itself stays in
@@ -191,7 +191,7 @@ func buildVia(agent, prefix string) []Option {
 // by, by id: provider.Labels, which follows the Provider in model names
 // setting, where an Option's Label is the name alone for magpie's picker.
 func listLabels(agent string) map[string]string {
-	shown, _ := provider.CatalogFor(agent)
+	agent, shown := catalogShown(agent)
 	labels := provider.LabelsFor(agent, shown)
 	out := make(map[string]string, len(shown))
 	for i, e := range shown {
@@ -371,7 +371,7 @@ func buildModels(agent string) []catalog.Model {
 	// dsh's round at every start built them for each of hundreds
 	defer provider.Hold()()
 	var out []catalog.Model
-	shown, _ := provider.CatalogFor(agent)
+	agent, shown := catalogShown(agent)
 	labels := provider.LabelsFor(agent, shown)
 	// a model magpie describes images to takes them (provider.Described)
 	seen := describedNow()

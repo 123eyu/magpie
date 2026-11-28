@@ -1315,7 +1315,7 @@ func claudeIn(at place) *Agent {
 		sameAs := func(v string, o Option) bool {
 			return claudeSameModel(v, o.Value) || claudeSameModel(v, spell(o.Value))
 		}
-		via := viaMagpieShared("claude", "")
+		via := viaMagpieShared(at.list("claude"), "")
 		// a tier's row is named as its model's would be, the tier first
 		for _, t := range tierWords {
 			v := env(tierEnv(t))
@@ -1360,7 +1360,7 @@ func claudeIn(at place) *Agent {
 		}
 		mark1M := claude1M()
 		var refs []string
-		for _, o := range viaMagpieShared("claude", "") {
+		for _, o := range viaMagpieShared(at.list("claude"), "") {
 			refs = append(refs, mark1M(o.Value))
 		}
 		return refs

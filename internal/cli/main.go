@@ -197,6 +197,9 @@ const usage = `magpie — one place to pick every agent's model
   magpie statusline [<provider|account>]   one line for Claude Code's status line: the session's model and each account's windows
   magpie sync                     refresh the model catalog and vendor model lists
   magpie agents                   list every supported agent
+  magpie agent config <agent> --gateway <url> (--key-env <NAME>|--key <key>|-) [--model <m>] [--models <a,b>] [--version <v>] [--json]
+                                  an agent's config files for a computer magpie isn't on (codex, claude, opencode, dsh),
+                                  printed with their paths under its HOME; nothing is written here
   magpie settings [list|get <key>|set <key> <value>|reset <key>] [--json]
                                   every setting the window's Settings page saves, read and set as it saves them (magpie settings help)
   magpie update [check] [--proxy <url>] [--mirror <prefix>] [--addr host:port] [--force]
@@ -674,7 +677,12 @@ func run(args []string) error {
 		shown, hidden := settings.Arrange(settings.Load(), agent.Detected(), func(a *agent.Agent) string { return a.ID })
 		return list(append(shown, hidden...), true, len(shown))
 	case "agents":
+		if len(args) > 1 {
+			return agentConfigCmd(args[1:])
+		}
 		return list(agent.All(), false, -1)
+	case "agent":
+		return agentConfigCmd(args[1:])
 	case "sync":
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()

@@ -141,6 +141,7 @@
     <a href="#volume">What is kept</a>
     <a href="#env">Environment</a>
     <a href="#share">Gateway keys and other machines</a>
+    <a href="#agent-config">Agents’ config files</a>
     <a href="#compose">Docker Compose on a NAS</a>
     <a href="#ops">Health, terminal, updates</a>
     <a href="#k8s">Kubernetes</a>
@@ -267,6 +268,22 @@ curl -fsSL -H "Authorization: Bearer $MAGPIE_KEY" http://192.168.1.20:3425/v1/ma
     <div class="callout"><b>Over the internet, prefer a VPN</b> such as Tailscale or WireGuard to opening 3425. A reverse proxy or tunnel in front of the container is the network too: its clients need a gateway key like any other machine’s.</div>
 
     <p id="statusline"><b>Claude Code’s status line, with Claude Code outside the container.</b> The status line square can’t reach another machine’s <code>~/.claude/settings.json</code>, and the command it writes names a binary in the container. The gateway answers the same line itself: on the machine Claude Code runs on, set <code>statusLine</code> in <code>~/.claude/settings.json</code> to <code>{"type": "command", "command": "curl -fsS -m 1 -H 'Authorization: Bearer sk-magpie-key-…' --data-binary @- http://&lt;host&gt;:3425/v1/magpie/statusline || true"}</code>, with the host or address that reaches the container and a gateway key (a read-only key is enough). A key held to a budget, models or accounts gets the line once its owner turns on <span class="ui">Quotas</span> for it, with only the accounts it may use. Add <code>?format=json</code> for the same as JSON (the line, the model, and each account’s windows with <code>used</code> and <code>resetsAt</code>), for a status line that draws its own. Claude Code runs it on every message and passes its session on stdin, which adds the model the session went to. The same command is shown in the browser UI under <span class="ui">Settings</span> → <span class="ui">About</span>.</p>
+
+    <h2 id="agent-config"><a class="anchor" href="#agent-config">Agents’ config files</a></h2>
+    <p>The container has no agents to wire, so magpie makes their files for the machines they run on. <code>magpie agent config</code> prints the files magpie would write for <code>codex</code>, <code>claude-code</code>, <code>opencode</code> or <code>dsh</code>, each with its path under that machine’s HOME, pointed at the address you give and with the models you give (the whole catalog otherwise). Nothing is written in the container. Name the variable the gateway key is in there with <code>--key-env</code>: Codex, Claude Code, OpenCode and dsh then read the key from it, and it isn’t in the files. Any other agent is answered unsupported.</p>
+    <div class="code">
+      <span class="lang">Shell</span>
+      <button class="copy" data-copy="ex-agent-config">Copy</button>
+      <pre id="ex-agent-config">docker exec magpie magpie agent config codex --gateway http://192.168.1.20:3425 --key-env MAGPIE_KEY --json</pre>
+    </div>
+    <p>A script on another machine asks the gateway itself, with a gateway key that has no budget, model or account limit: <code>POST /v1/magpie/agent-config</code> with the same values as JSON. It answers <code>{"files":[{"path","content","mode"}]}</code>, 422 for an agent it can’t make files for, and never a web page or a request without a key.</p>
+    <div class="code">
+      <span class="lang">Shell</span>
+      <button class="copy" data-copy="ex-agent-config-http">Copy</button>
+      <pre id="ex-agent-config-http">curl -s http://192.168.1.20:3425/v1/magpie/agent-config \
+  -H "Authorization: Bearer $MAGPIE_KEY" \
+  -d '{"agent":"opencode","gateway":"http://192.168.1.20:3425","key_env":"MAGPIE_KEY"}'</pre>
+    </div>
 
     <h2 id="compose"><a class="anchor" href="#compose">Docker Compose on a NAS</a></h2>
     <div class="code">

@@ -10980,6 +10980,22 @@ Settings → Network and sharing → Share on local network isn’t needed in th
 
 **Claude Code’s status line, with Claude Code outside the container.** The status line square can’t reach another machine’s `~/.claude/settings.json`, and the command it writes names a binary in the container. The gateway answers the same line itself: on the machine Claude Code runs on, set `statusLine` in `~/.claude/settings.json` to `{"type": "command", "command": "curl -fsS -m 1 -H 'Authorization: Bearer sk-magpie-key-…' --data-binary @- http://<host>:3425/v1/magpie/statusline || true"}`, with the host or address that reaches the container and a gateway key (a read-only key is enough). A key held to a budget, models or accounts gets the line once its owner turns on Quotas for it, with only the accounts it may use. Add `?format=json` for the same as JSON (the line, the model, and each account’s windows with `used` and `resetsAt`), for a status line that draws its own. Claude Code runs it on every message and passes its session on stdin, which adds the model the session went to. The same command is shown in the browser UI under Settings → About.
 
+## Agents’ config files
+
+The container has no agents to wire, so magpie makes their files for the machines they run on. `magpie agent config` prints the files magpie would write for `codex`, `claude-code`, `opencode` or `dsh`, each with its path under that machine’s HOME, pointed at the address you give and with the models you give (the whole catalog otherwise). Nothing is written in the container. Name the variable the gateway key is in there with `--key-env`: Codex, Claude Code, OpenCode and dsh then read the key from it, and it isn’t in the files. Any other agent is answered unsupported.
+
+```
+docker exec magpie magpie agent config codex --gateway http://192.168.1.20:3425 --key-env MAGPIE_KEY --json
+```
+
+A script on another machine asks the gateway itself, with a gateway key that has no budget, model or account limit: `POST /v1/magpie/agent-config` with the same values as JSON. It answers `{"files":[{"path","content","mode"}]}`, 422 for an agent it can’t make files for, and never a web page or a request without a key.
+
+```
+curl -s http://192.168.1.20:3425/v1/magpie/agent-config \
+  -H "Authorization: Bearer $MAGPIE_KEY" \
+  -d '{"agent":"opencode","gateway":"http://192.168.1.20:3425","key_env":"MAGPIE_KEY"}'
+```
+
 ## Docker Compose on a NAS
 
 ```

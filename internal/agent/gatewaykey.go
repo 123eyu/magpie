@@ -17,6 +17,9 @@ import (
 // it is on loopback, it is the WSL key (gateway.WSLKey), sharing or not
 // (zaidu259434 on X: Codex in WSL failed with sharing off).
 func keyAt(gw string) string {
+	if k := genKeyAt(gw); k != "" {
+		return k // a headless generation's own address (gen.go)
+	}
 	if onAnotherMachine(gw) {
 		if gateway.OnWSLNet(gw) {
 			if k := gateway.WSLKey(); k != "" {

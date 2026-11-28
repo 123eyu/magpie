@@ -106,7 +106,11 @@ func dshAt(at place) *Agent {
 	if dir == "" {
 		dir = at.join(".dsh")
 	}
-	if at.spell != nil {
+	if at.gen {
+		// files made for another computer (gen.go): its models are the
+		// generation's, and nothing of it is kept past it
+		dshApps.Store(filepath.Clean(dir), at.list("dsh"))
+	} else if at.spell != nil {
 		// read by the distro's dsh, whose version its probe found
 		dshDistros.Store(filepath.Clean(dir), at.version)
 	}
@@ -136,7 +140,7 @@ func dshAt(at place) *Agent {
 		}
 		return ""
 	}
-	a := dshOn(at, dir, "dsh", fresh, lead)
+	a := dshOn(at, dir, at.list("dsh"), fresh, lead)
 	a.ID, a.Name, a.Icon, a.Aliases = "dsh", "DeepSeek Harness", "deepseek-color", []string{"deepseek-harness"}
 	a.UA = []string{"deepseek-harness"}
 	a.Bin = "dsh"
@@ -298,7 +302,7 @@ func dshOn(at place, dir, list string, fresh, lead func() string) *Agent {
 			},
 		}},
 	}
-	if list == "dsh" {
+	if genBase(list) == "dsh" {
 		a.Fields = append(a.Fields, dshCompactField(func() bool { return !at.cold && joined() }, list))
 	}
 	a.through = func(prefix string) error { return dshThrough(at, dir, prefix, fresh) }
@@ -365,7 +369,7 @@ func dshListFor(path string) string {
 
 // DshAppHome is whether dir is the home of an app that runs a dsh of its
 // own there (DS Bot's): that home is the app's, not dsh's (#5624).
-func DshAppHome(dir string) bool { return dshListFor(dir) != "dsh" }
+func DshAppHome(dir string) bool { return genBase(dshListFor(dir)) != "dsh" }
 
 // dshProfiles are the profiles' patch lists (dsh 0.1.5 on), web's first.
 func dshProfiles(dir string) []string {
@@ -2485,7 +2489,7 @@ func dshBundledVersion(app desktopApp) string {
 // read fails its whole config, where a Gemini on the Chat route is only
 // translated.
 func dshSpeaksGemini(path string) bool {
-	if path == "" || dshListFor(path) != "dsh" {
+	if path == "" || genBase(dshListFor(path)) != "dsh" {
 		return false
 	}
 	p := filepath.Clean(path)

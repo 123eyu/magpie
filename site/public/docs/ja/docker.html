@@ -141,6 +141,7 @@
     <a href="#volume">保存されるもの</a>
     <a href="#env">環境変数</a>
     <a href="#share">ゲートウェイキーとほかのマシン</a>
+    <a href="#agent-config">エージェントの設定ファイル</a>
     <a href="#compose">NAS で Docker Compose</a>
     <a href="#ops">ヘルスチェック・ターミナル・更新</a>
     <a href="#k8s">Kubernetes</a>
@@ -267,6 +268,22 @@ curl -fsSL -H "Authorization: Bearer $MAGPIE_KEY" http://192.168.1.20:3425/v1/ma
     <div class="callout"><b>インターネット越しなら VPN を</b>（Tailscale や WireGuard など）。3425 を開けるより安全です。コンテナの前に置くリバースプロキシやトンネルもネットワークです。そのクライアントにも、ほかのマシンと同じくゲートウェイキーが必要です。</div>
 
     <p id="statusline"><b>Claude Code がコンテナの外にあるときのステータスライン。</b>ステータスラインのスイッチは別のマシンの <code>~/.claude/settings.json</code> に書けず、書かれるコマンドもコンテナ内のプログラムを指します。ゲートウェイが同じ行を返します。Claude Code が動くマシンで、<code>~/.claude/settings.json</code> の <code>statusLine</code> を <code>{"type": "command", "command": "curl -fsS -m 1 -H 'Authorization: Bearer sk-magpie-key-…' --data-binary @- http://&lt;host&gt;:3425/v1/magpie/statusline || true"}</code> に設定し、アドレスをコンテナに届くホストに替え、ゲートウェイキー（読み取り専用で可）を付けます。予算、モデル、アカウントで制限されたキーは、持ち主がそのキーの<span class="ui">残量</span>をオンにすると、使えるアカウントだけの行を受け取ります。<code>?format=json</code> を付けると同じ内容を JSON で返します（行、モデル、各アカウントの窓ごとの <code>used</code> と <code>resetsAt</code>）。自前で描くステータスラインに使えます。Claude Code は毎回これを実行し、stdin でセッションを渡すので、そのセッションが向かったモデルも付きます。ブラウザ UI の<span class="ui">設定</span> → <span class="ui">概要</span>にも同じコマンドが表示されます。</p>
+
+    <h2 id="agent-config"><a class="anchor" href="#agent-config">エージェントの設定ファイル</a></h2>
+    <p>コンテナには接続するエージェントがないので、magpie はエージェントが動くマシン向けにファイルを作ります。<code>magpie agent config</code> は、magpie が <code>codex</code>、<code>claude-code</code>、<code>opencode</code>、<code>dsh</code> に書くファイルを、そのマシンの HOME からのパスとともに表示します。向き先は指定したアドレス、モデルは指定したもの（指定がなければカタログ全体）です。コンテナには何も書きません。<code>--key-env</code> でそのマシンのゲートウェイキーが入った環境変数の名前を渡すと、Codex、Claude Code、OpenCode、dsh はそこからキーを読み、ファイルにキーは入りません。ほかのエージェントは未対応と返します。</p>
+    <div class="code">
+      <span class="lang">Shell</span>
+      <button class="copy" data-copy="ex-agent-config">コピー</button>
+      <pre id="ex-agent-config">docker exec magpie magpie agent config codex --gateway http://192.168.1.20:3425 --key-env MAGPIE_KEY --json</pre>
+    </div>
+    <p>ほかのマシンのスクリプトは、予算・モデル・アカウントの制限がないゲートウェイキーでゲートウェイに直接たずねられます。同じ値を JSON で <code>POST /v1/magpie/agent-config</code> に送ると <code>{"files":[{"path","content","mode"}]}</code> が返り、作れないエージェントは 422 です。Web ページとキーのないリクエストには答えません。</p>
+    <div class="code">
+      <span class="lang">Shell</span>
+      <button class="copy" data-copy="ex-agent-config-http">コピー</button>
+      <pre id="ex-agent-config-http">curl -s http://192.168.1.20:3425/v1/magpie/agent-config \
+  -H "Authorization: Bearer $MAGPIE_KEY" \
+  -d '{"agent":"opencode","gateway":"http://192.168.1.20:3425","key_env":"MAGPIE_KEY"}'</pre>
+    </div>
 
     <h2 id="compose"><a class="anchor" href="#compose">NAS で Docker Compose</a></h2>
     <div class="code">

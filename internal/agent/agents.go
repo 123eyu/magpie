@@ -1275,7 +1275,7 @@ func openCodeLike(at place, id, name, icon, bin, dir, auth string, ua []string, 
 			break
 		}
 	}
-	block := func() any { return magpieProviderJSONAt("opencode", id, at.gw()) }
+	block := func() any { return magpieProviderJSONAt("opencode", at.list(id), at.gw()) }
 	// the file as the agent reads it: in OpenCode 2's words for an
 	// OpenCode 2, asked each time, as an update may have come since
 	file := func() ocFile { return openCodeFileAt(at, path, id, block) }
@@ -1396,7 +1396,7 @@ func openCodeRefAt(at place, path, id, v string) (string, error) {
 		return openCodeJoin(own+"/"+ref, variant), nil
 	}
 	v = openCodeJoin(v, variant)
-	block := func() any { return magpieProviderJSONAt("opencode", id, at.gw()) }
+	block := func() any { return magpieProviderJSONAt("opencode", at.list(id), at.gw()) }
 	return v, openCodeFileAt(at, path, id, block).sync(true)
 }
 

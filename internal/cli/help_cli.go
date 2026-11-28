@@ -56,6 +56,10 @@ func helpFor(args []string) string {
 		return "  " + libraryUsage
 	case "plugin", "plugins":
 		return pluginUsage
+	case "agent", "agents":
+		if cmd == "agent" || len(args) > 1 && args[1] == "config" {
+			return agentConfigUsage
+		}
 	case "quota", "quotas":
 		return quotaUsage
 	case "statusline":

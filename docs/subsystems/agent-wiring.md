@@ -498,3 +498,49 @@ are added), its model list came from the gateway, and a chat went through
 it, counted as Cherry Studio's. A link that arrives while its first-run
 welcome page is up shows no dialog; after "set up later" it does.
 `magpie cherrystudio add` opens the link; the TUI leaves the row out.
+
+## Files for another computer
+
+`agent.Generate` (`internal/agent/gen.go`, #7002) makes an agent's files
+for a computer magpie isn't on, from the same `connect` that wires a local
+agent, so no format has a second copy. `magpie agent config` and the
+gateway's `POST /v1/magpie/agent-config` (`internal/gateway/agent_config.go`,
+through the `gateway.AgentConfig` hook) both call it.
+
+- **A place of its own.** One generation runs at a time (`genMu`). It
+  builds a `place` with `gen` set whose HOME is a temporary folder named
+  `magpie-gen-…`, a base `http://magpie-gen-<tok>.invalid:1` and a sentinel
+  key, connects the agent there, reads the files back and removes the
+  folder. The base and key are then swapped for the request's gateway and
+  key, or for the agent's reference to `key_env`. A file that still names
+  this magpie's own address, a key of its own, the temporary HOME or a
+  link refuses the whole answer (`genClean`), so nothing of this computer
+  leaks out.
+- **Nothing written here.** The agent id carries `@gen:<tok>`; stash and
+  applied records whose key holds that mark or `magpie-gen-` (dsh stashes
+  by file path, `dshStashKey`) live in memory for the run only
+  (`isGenKey`, `genMem`), and `connectRemote` is skipped.
+- **Models.** `place.list` adds the run's mark to the agent a list is asked
+  for; `catalogShown` cuts the list to `models` when they are given.
+  `genClaudeKept` sets Claude Code's tier models back to the main model
+  when they aren't among them.
+- **Supported.** `genKinds`: codex, claude (claude-code), opencode, dsh.
+  Any other agent is `UnsupportedError` (422 `agent_config_unsupported`
+  with the list); a bad value is `GenInputError` (400).
+- **Key by reference.** Codex `env_key`, Claude Code an `apiKeyHelper`
+  printing the variable, OpenCode `{env:NAME}`, dsh `apiKeyEnv`.
+- **Known divergence.** Claude Code's `model` is the tier alias
+  (`"sonnet"`) only on this computer's own file (`mainWord`); generated
+  files keep the model's id, as a remote place's do. Codex's catalog file
+  is referenced relative to `~/.codex`.
+- **The route.** It needs a gateway key from loopback too, refuses any
+  `Origin` or `Sec-Fetch-*` header, a loopback request under a name that
+  isn't this computer's, another machine while magpie isn't shared and a
+  held key. Its body is capped at 64 KiB.
+
+Verification: `TestGenerateIsTheAdapters` compares each agent's files with
+what `connect` writes into a sandbox HOME (address, key, Codex's catalog
+path and Claude's alias normalised) and checks HOME and magpie's config dir
+are unchanged; `TestGenerateKeyFromVariable`, `TestGenerateModels`,
+`TestGenerateRefuses`, `TestGenerateJSON`, `TestAgentConfigGuards` and
+`TestAgentConfigCommand`.

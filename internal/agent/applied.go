@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -47,6 +48,7 @@ func appliedLoad() map[string]applied {
 	if b, err := os.ReadFile(appliedPath()); err == nil {
 		json.Unmarshal(b, &out)
 	}
+	genAppliedInto(out)
 	return out
 }
 
@@ -55,6 +57,11 @@ func appliedLoad() map[string]applied {
 // file is copied aside first, and one that can't be copied isn't written
 // over (#2263).
 func appliedSave(m map[string]applied) {
+	// a generation's record (gen.go) stays in memory, never in the file
+	if genAppliedHeld() {
+		m = maps.Clone(m)
+		maps.DeleteFunc(m, func(id string, _ applied) bool { return isGenKey(id) })
+	}
 	if err := lastgood.KeepUnparsed(appliedPath(), lastgood.Into[map[string]applied]); err != nil {
 		log.Printf("applied.json wasn't written over: %v", err)
 		return
@@ -69,6 +76,9 @@ func appliedSave(m map[string]applied) {
 // drift asks it, for every agent a poll lists, so the file is parsed once
 // a change and the map is shared: callers only read it.
 func appliedOf(id string) applied {
+	if isGenKey(id) {
+		return genAppliedOf(id)
+	}
 	appliedMu.Lock()
 	defer appliedMu.Unlock()
 	m, _ := filememo.Read("applied", appliedPath(), func(b []byte) (map[string]applied, error) {
@@ -82,6 +92,10 @@ func appliedOf(id string) applied {
 // record keeps what a field reads after magpie set it; a field put back to
 // the agent's default is magpie's no longer.
 func record(id, key, v string) {
+	if isGenKey(id) {
+		genRecord(id, key, v)
+		return
+	}
 	appliedMu.Lock()
 	defer appliedMu.Unlock()
 	m := appliedLoad()
@@ -772,9 +786,12 @@ func (a *Agent) connect() (Connection, error) {
 			return Connection{How: "joined"}, err
 		}
 	}
-	// the models the Remote magpie's same agent is on (remote_picks.go)
-	if c, ok, err := a.connectRemote(); ok || err != nil {
-		return c, err
+	// the models the Remote magpie's same agent is on (remote_picks.go);
+	// not for files made for another computer (gen.go)
+	if !isGenKey(a.ID) {
+		if c, ok, err := a.connectRemote(); ok || err != nil {
+			return c, err
+		}
 	}
 	// the field magpie is picked in: the one listing magpie's models (for
 	// Gemini CLI its model, its first field being how it signs in), else one

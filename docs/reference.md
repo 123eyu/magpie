@@ -4050,6 +4050,37 @@ key. See [Connecting anything else](#connecting-anything-else) for the
 protocol-specific base URLs. Keep `3425` behind a firewall or VPN and do not
 expose it publicly without gateway-key authentication.
 
+`magpie agent config` makes those agents' files for you, from the same code
+that wires an agent on magpie's own computer, without writing anything there
+or needing the agent installed (#7002). Give it the agent (`codex`,
+`claude-code`, `opencode` or `dsh`; any other is answered unsupported),
+magpie's address as that computer reaches it and the gateway key, or better
+the name of the variable that holds it there: Codex reads it through
+`env_key`, Claude Code through an `apiKeyHelper` that prints it, OpenCode
+through `{env:NAME}` and dsh through `apiKeyEnv`, so the key isn't written in
+the files. `--model` is the model the agent starts on and `--models` the only
+models its lists hold (magpie's catalog otherwise). Each file comes with its
+path under the agent's HOME:
+
+```sh
+magpie agent config codex --gateway http://nas.lan:3425 --key-env MAGPIE_KEY --json
+```
+
+A script on another machine asks the gateway itself with a gateway key that
+isn't held to a budget, models or accounts. The route answers no web page
+(any `Origin` or `Sec-Fetch-*` header), no request without a key (from the
+NAS too) and another machine only while magpie is shared:
+
+```sh
+curl -s http://nas.lan:3425/v1/magpie/agent-config \
+  -H "Authorization: Bearer $MAGPIE_KEY" \
+  -d '{"agent":"opencode","gateway":"http://nas.lan:3425","key_env":"MAGPIE_KEY","models":["deepseek/deepseek-chat"]}'
+# {"agent":"opencode","model":"deepseek/deepseek-chat","files":[{"path":".config/opencode/opencode.json","content":"…","mode":"0644"}],"notes":[…]}
+```
+
+An agent magpie can't make files for yet is answered 422 with
+`agent_config_unsupported` and the list it can; a bad value 400.
+
 Such a page is in **gateway mode**: it shows Sessions, Library, Providers,
 Routing, Gateway, Usage, Masking, Plugins and Settings, with no Agents tab.
 The Library has its MCP servers, with the MCP router: other
@@ -4249,6 +4280,8 @@ magpie https                    # https:// for other computers: on, off, import 
 magpie mtls                     # other computers need a client certificate magpie issued: on, off, issue <device>, revoke <device>, list
 magpie daemon install           # run magpie serve as a service (systemd, launchd); --web, --lan, --addr serve the page too; --tls-cert/--tls-key, --no-tls
 magpie ls                       # list every agent and its current settings
+magpie agent config codex --gateway http://nas.lan:3425 --key-env MAGPIE_KEY   # an agent's files for another computer, printed, nothing written here
+magpie agent config claude-code --gateway http://nas.lan:3425 --key - --model a/m --models a/m,b/n --json   # the key from stdin; --help lists the agents
 magpie claude opus              # set a model (agent names accept prefixes: cc, oc, gem …)
 magpie codex gpt-5.6-sol
 magpie codex effort high        # other fields

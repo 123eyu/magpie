@@ -295,9 +295,10 @@ func codexIn(at place) *Agent {
 	}
 	// the catalog as the config names it: relative to config.toml on
 	// Windows, where a C:\ path is no file to the same Codex reading it
-	// from WSL (#816); Codex reads a relative one from its home
+	// from WSL (#816); Codex reads a relative one from its home. So do
+	// files made for another computer (gen.go), whose home isn't known
 	catalogRef := at.native(catalogPath)
-	if at.spell == nil && runtime.GOOS == "windows" {
+	if (at.spell == nil && runtime.GOOS == "windows") || at.gen {
 		catalogRef = filepath.Base(catalogPath)
 	}
 	// ownCatalog: the config names magpie's catalog, by any spelling
@@ -327,7 +328,7 @@ func codexIn(at place) *Agent {
 	// Codex takes on a switch to it. The models Codex used are among the
 	// first 100, which is all the Codex app reads (codexcat.Fit).
 	list := func() []byte {
-		return codexcat.CatalogUsed(magpieModels("codex"), get("model_reasoning_effort"), usage.CodexUsed())
+		return codexcat.CatalogUsed(magpieModels(at.list("codex")), get("model_reasoning_effort"), usage.CodexUsed())
 	}
 	ownList := func() []byte {
 		cur, _ := edit.Read(catalogPath)

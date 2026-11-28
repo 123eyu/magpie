@@ -141,6 +141,7 @@
     <a href="#volume">保存了什么</a>
     <a href="#env">环境变量</a>
     <a href="#share">网关密钥与其他机器</a>
+    <a href="#agent-config">Agent 的配置文件</a>
     <a href="#compose">在 NAS 上用 Docker Compose</a>
     <a href="#ops">健康检查、终端与更新</a>
     <a href="#k8s">Kubernetes</a>
@@ -267,6 +268,22 @@ curl -fsSL -H "Authorization: Bearer $MAGPIE_KEY" http://192.168.1.20:3425/v1/ma
     <div class="callout"><b>跨互联网访问时，优先用 VPN</b>（如 Tailscale 或 WireGuard），不要直接开放 3425。容器前面的反向代理或隧道也算网络：它的客户端和其他机器一样需要网关密钥。</div>
 
     <p id="statusline"><b>Claude Code 在容器外时的状态栏。</b>状态栏开关无法写入另一台机器的 <code>~/.claude/settings.json</code>，它写下的命令也指向容器里的程序。网关自己就能给出同一行：在运行 Claude Code 的机器上，把 <code>~/.claude/settings.json</code> 的 <code>statusLine</code> 设为 <code>{"type": "command", "command": "curl -fsS -m 1 -H 'Authorization: Bearer sk-magpie-key-…' --data-binary @- http://&lt;host&gt;:3425/v1/magpie/statusline || true"}</code>，地址换成能访问容器的主机，并带上网关密钥（只读密钥即可）。受预算、模型或账号限制的密钥，在主人为它打开<span class="ui">额度</span>后才能拿到这一行，且只含它可用的账号。加上 <code>?format=json</code> 则以 JSON 返回同样的内容（这一行、模型，以及每个账号各窗口的 <code>used</code> 和 <code>resetsAt</code>），供自己绘制的状态栏使用。Claude Code 每条消息都会运行它，并通过 stdin 传入会话，由此加上该会话所走的模型。浏览器界面的<span class="ui">设置</span> → <span class="ui">关于</span>里也显示这条命令。</p>
+
+    <h2 id="agent-config"><a class="anchor" href="#agent-config">Agent 的配置文件</a></h2>
+    <p>容器里没有要接入的 Agent，所以 magpie 为它们所在的机器生成配置文件。<code>magpie agent config</code> 打印 magpie 会为 <code>codex</code>、<code>claude-code</code>、<code>opencode</code> 或 <code>dsh</code> 写下的文件，每个都带着它在那台机器 HOME 下的路径，指向你给的地址，模型用你给的（不给就是整个目录）。容器里什么都不写。用 <code>--key-env</code> 写出那台机器上存网关密钥的环境变量名：Codex、Claude Code、OpenCode 和 dsh 会从它读取密钥，文件里不含密钥。其他 Agent 返回不支持。</p>
+    <div class="code">
+      <span class="lang">Shell</span>
+      <button class="copy" data-copy="ex-agent-config">复制</button>
+      <pre id="ex-agent-config">docker exec magpie magpie agent config codex --gateway http://192.168.1.20:3425 --key-env MAGPIE_KEY --json</pre>
+    </div>
+    <p>其他机器上的脚本可以直接问网关，用一把没有预算、模型或账号限制的网关密钥：以 JSON 发同样的值到 <code>POST /v1/magpie/agent-config</code>。它返回 <code>{"files":[{"path","content","mode"}]}</code>，不能生成的 Agent 返回 422；网页和不带密钥的请求一律拒绝。</p>
+    <div class="code">
+      <span class="lang">Shell</span>
+      <button class="copy" data-copy="ex-agent-config-http">复制</button>
+      <pre id="ex-agent-config-http">curl -s http://192.168.1.20:3425/v1/magpie/agent-config \
+  -H "Authorization: Bearer $MAGPIE_KEY" \
+  -d '{"agent":"opencode","gateway":"http://192.168.1.20:3425","key_env":"MAGPIE_KEY"}'</pre>
+    </div>
 
     <h2 id="compose"><a class="anchor" href="#compose">在 NAS 上用 Docker Compose</a></h2>
     <div class="code">

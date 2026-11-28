@@ -37,6 +37,7 @@ func stashLoad() map[string]string {
 	if m == nil {
 		m = map[string]string{}
 	}
+	genStashInto(m)
 	return m
 }
 
@@ -45,7 +46,15 @@ func stashLoad() map[string]string {
 // times, and a fresh read and parse for each was 35 MB of what twenty
 // polls allocated.
 func stashShared() map[string]string {
-	return stashRead(filememo.Read[map[string]string])
+	m := stashRead(filememo.Read[map[string]string])
+	if genStashHeld() {
+		m = maps.Clone(m)
+		if m == nil {
+			m = map[string]string{}
+		}
+		genStashInto(m)
+	}
+	return m
 }
 
 func stashRead(read func(kind, path string, parse func([]byte) (map[string]string, error)) (map[string]string, error)) map[string]string {
@@ -60,6 +69,11 @@ func stashRead(read func(kind, path string, parse func([]byte) (map[string]strin
 // stashWrite writes m as the stash, a file there that doesn't parse kept
 // aside first. The caller holds stashMu.
 func stashWrite(m map[string]string) error {
+	// a generation's values (gen.go) are never written: they live in
+	// memory for the run, and stash.json is left as it was
+	if m = withoutGen(m); maps.Equal(m, stashRead(filememo.ReadNow[map[string]string])) && genStashHeld() {
+		return nil
+	}
 	b, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err
@@ -86,6 +100,9 @@ func stashWrite(m map[string]string) error {
 }
 
 func stash(kv map[string]string) {
+	if kv = genStash(kv); len(kv) == 0 {
+		return
+	}
 	stashMu.Lock()
 	defer stashMu.Unlock()
 	m := stashLoad()
@@ -101,6 +118,9 @@ func stash(kv map[string]string) {
 
 // forget drops stashed values without restoring them.
 func forget(keys ...string) {
+	if keys = genForget(keys); len(keys) == 0 {
+		return
+	}
 	stashMu.Lock()
 	defer stashMu.Unlock()
 	m := stashLoad()
@@ -111,6 +131,9 @@ func forget(keys ...string) {
 }
 
 func unstash(key string) string {
+	if isGenKey(key) {
+		return genUnstash(key)
+	}
 	stashMu.Lock()
 	defer stashMu.Unlock()
 	m := stashLoad()
@@ -142,7 +165,7 @@ func peek(keys ...string) map[string]string {
 // replaces them has gone through, each only while it is still the one
 // peeked: a value written since, here or by another magpie, stays stashed.
 func forgetValues(peeked map[string]string) {
-	if len(peeked) == 0 {
+	if peeked = genForgetValues(peeked); len(peeked) == 0 {
 		return
 	}
 	stashMu.Lock()

@@ -73,6 +73,9 @@ type place struct {
 	// wsl is the distro of an agent there, for one magpie runs there
 	// itself (Claude Science's daemon); nil on this machine
 	wsl *distro
+	// gen: a place made for a headless generation (gen.go), whose files
+	// go to another computer
+	gen bool
 }
 
 func here(home string) place { return place{home: home} }
