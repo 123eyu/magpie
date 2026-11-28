@@ -115,7 +115,7 @@ for (const [ename, engine] of [["chromium", chromium], ["webkit", webkit]]) {
           const bodyPx = await pixel(page, ".cc-front canvas", 500, 20);
           assert.ok(bodyPx[0] < 40 && bodyPx[3] === 255, `the body isn't black metal: ${bodyPx}`);
           // the picture: GitHub's in grey (the fake is red), X's a letter
-          const face = await pixel(page, ".cc-front canvas", 64 + 59, 178 + 30);
+          const face = await pixel(page, ".cc-front canvas", 64 + 22, 176 + 12);
           if (who.github) assert.ok(face[0] === face[1] && face[1] === face[2] && face[0] > 60, `the picture isn't drawn in grey: ${face}`);
           else assert.ok(face[0] < 40, `a missing picture isn't left dark: ${face}`);
           // everything credited is listed as text

@@ -8,9 +8,9 @@
 .cc-stage[hidden] { display: none; }
 @keyframes cc-in { from { opacity: 0; transform: translateY(10px) scale(.97); } }
 .cc-card {
-  /* at rest the card sits a little turned, so its edge and depth show;
-     a mouse tilts it from there (card.js) */
-  --rx: 7deg; --ry: -9deg; --mx: 50%; --my: 50%; --t: 2px;
+  /* at rest the card faces the screen; a mouse tilts it, and its edge
+     shows as it tilts or turns (card.js) */
+  --rx: 0deg; --ry: 0deg; --mx: 50%; --my: 50%; --t: 2px;
   position: relative; width: min(500px, 100%); aspect-ratio: 1000 / 631;
   padding: 0; border: 0; background: none; cursor: pointer; color: inherit;
   border-radius: 3.8% / 6.02%;
@@ -35,7 +35,7 @@
 .cc-flip { position: absolute; inset: 0; transform-style: preserve-3d; }
 .cc-face, .cc-edge { position: absolute; inset: 0; border-radius: 3.8% / 6.02%; }
 .cc-face {
-  overflow: hidden; background: #121214;
+  overflow: hidden; background: #0d0d0f;
   -webkit-backface-visibility: hidden; backface-visibility: hidden;
   /* the bevel: a lit top rim, a darker bottom one */
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), inset 0 -1px 0 rgba(0, 0, 0, .5);
