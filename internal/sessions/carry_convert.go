@@ -108,7 +108,14 @@ var (
 	thereAt = map[string]there{}
 )
 
-func lookOK(name string) bool { _, err := proc.Look(name); return err == nil }
+// lookOK says whether a command is installed, found as the Agents page
+// finds an agent's (agent's binAt): on magpie's PATH, else in a folder a
+// user's tools are installed in (nvm, fnm, mise, bun, pnpm, Volta, npm's
+// prefix), else, on Windows, on the PATH the registry has now
+// (proc.FindTool). magpie's own PATH alone misses a Pi installed under a
+// Node manager its PATH doesn't reach, and its sessions lost Resume while
+// the Agents page listed Pi (eachgo on Discord).
+func lookOK(name string) bool { return proc.FindTool(name) != "" }
 func dirOK(dir string) bool   { st, err := os.Stat(dir); return err == nil && st.IsDir() }
 
 // carried keeps the session made from a file's bytes for a target.

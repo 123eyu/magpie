@@ -30,9 +30,13 @@ var cliOf = map[string]string{
 // cliGone says whether an agent's command is not installed on this
 // computer. An agent with no command of its own (an app) is never gone.
 // A var so tests can say; a test run answers false.
-var cliGone = func(agent string) bool {
+var cliGone = func(agent string) bool { return !testing.Testing() && cliMissing(agent) }
+
+// cliMissing is cliGone as this computer answers it: the command is found
+// nowhere a terminal or the Agents page would find it (lookOK).
+func cliMissing(agent string) bool {
 	bin := cliOf[agent]
-	return bin != "" && !testing.Testing() && !lookOK(bin)
+	return bin != "" && !lookOK(bin)
 }
 
 // Forgettable says whether magpie can stop listing an agent's sessions: its

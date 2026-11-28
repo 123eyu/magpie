@@ -401,12 +401,15 @@ Implementation: [`internal/sessions/gateway_delete.go`](../../internal/sessions/
 `Restore` in [`internal/sessions/manage.go`](../../internal/sessions/manage.go), and
 [`internal/gui/sessions_manage.go`](../../internal/gui/sessions_manage.go).
 An agent whose sessions magpie cannot delete (OpenCode, Cline, Kimi, Hermes:
-rows in the agent's own database or store) and whose command is no longer on
-PATH (`cliGone`) is forgettable (_SekiBetu_ on X): its rows get Delete, which
+rows in the agent's own database or store) and whose command is found nowhere
+(`cliGone`: not on PATH, in a user's tool folders or, on Windows, on the
+registry's PATH, as `proc.FindTool` and the Agents page look) is forgettable (_SekiBetu_ on X): its rows get Delete, which
 only hides them through the same hidden list (`sessions.Forget`, trash note
 marked `forgot`; the agent's own files are not touched), and no Resume
-(`resumeFor`). Restore unhides. With the command installed nothing changes.
-Tests: `TestUninstalledAgentSessionsAreForgotten`,
+(`resumeFor`), for any agent with a command (Pi too). Restore unhides. With
+the command installed nothing changes: a Pi in a Node manager's folder that
+magpie's PATH doesn't reach keeps its Resume (eachgo on Discord).
+Tests: `TestUninstalledAgentSessionsAreForgotten`, `TestCLIFoundOffPath`,
 `TestManageDeleteOfAnUninstalledAgentTakesItOffTheList`, `sessions-forget.test.cjs`.
 Grok Build's sessions are deletable too (#3003 asked; #4595 had them listed
 with no Delete): a session is its folder, so `sessions.Delete` moves the whole

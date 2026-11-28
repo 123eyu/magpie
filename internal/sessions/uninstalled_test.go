@@ -1,8 +1,12 @@
 package sessions
 
 import (
+	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
+
+	"github.com/yetone/magpie/internal/proc"
 )
 
 // _SekiBetu_ on X: OpenCode uninstalled, its sessions stayed listed with a
@@ -71,5 +75,59 @@ func TestUninstalledAgentSessionsAreForgotten(t *testing.T) {
 	}
 	if !has() {
 		t.Fatal("a restored session is not in the Usage list")
+	}
+}
+
+// eachgo on Discord: Pi's rows on the Sessions page lost Resume. Pi was
+// installed, in a folder a user's tools go in (a Node manager's, bun's)
+// that magpie's own PATH didn't reach, so the Agents page found it and the
+// sessions took its command for gone. Found as the Agents page finds it,
+// Pi keeps its Resume; with no pi anywhere it has none.
+func TestCLIFoundOffPath(t *testing.T) {
+	inZone(t, 0)
+	setupMore(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
+	for _, v := range []string{"BUN_INSTALL", "NVM_DIR", "FNM_DIR", "MISE_DATA_DIR"} {
+		t.Setenv(v, "")
+	}
+	t.Setenv("PATH", t.TempDir())
+	proc.Forget()
+	t.Cleanup(proc.Forget)
+	old := cliGone
+	cliGone = cliMissing
+	t.Cleanup(func() { cliGone = old })
+
+	if !cliMissing("pi") {
+		t.Fatal("pi found with none installed")
+	}
+	if r := resumeFor("", "pi", piFirst, "/work/pi", ""); r != "" {
+		t.Fatalf("resume offered with no pi: %q", r)
+	}
+
+	bin, name := filepath.Join(home, ".bun", "bin"), "pi"
+	if runtime.GOOS == "windows" {
+		name = "pi.cmd"
+	}
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	proc.Forget()
+	if cliMissing("pi") {
+		t.Fatal("pi in ~/.bun/bin, off PATH, taken for uninstalled")
+	}
+	if p := find(t, List(0), "pi", piFirst); p.Resume == "" {
+		t.Fatal("Pi's session has no Resume with pi installed off PATH")
+	}
+	for _, m := range ListAgent("pi") {
+		if m.ID == piFirst && m.Resume == "" {
+			t.Fatal("the Sessions page's Pi row has no Resume with pi installed off PATH")
+		}
 	}
 }
