@@ -254,12 +254,18 @@ func TestHubCodeOff(t *testing.T) {
 // is ended at its memory or its time, with the script's process when it
 // has to, and takes neither magpie's memory nor the request with it.
 func TestHubCodeBuiltinsEndWithTheirProcess(t *testing.T) {
-	was := hubCodeWait
-	t.Cleanup(func() { hubCodeWait = was })
+	was, wasHeap := hubCodeWait, hubCodeHeap
+	t.Cleanup(func() { hubCodeWait, hubCodeHeap = was, wasHeap })
+	// The script runs in this test binary. moejs's "x".repeat(1 << 20)
+	// appends one byte at a time, which under -race makes 20 MB a second
+	// on an idle Mac, against 400 without it: 512 MB took 26s there, and
+	// over 30s on macOS CI (#8099). A cap of 64 MB is the same cap,
+	// reached in about 3s.
+	hubCodeHeap = 64 << 20
 	_, run := codeHub(t, nil)
-	// A case about memory gets a time it can't reach first: on an idle
-	// Mac the loops pass 512 MB in about a second, and a busy one took
-	// over 2s. A case about time gets 2s.
+	// A case about memory gets a time it can't reach first, and its reply
+	// saying memory is what shows the cap ended it, however long the
+	// machine took to get there. A case about time gets 2s.
 	const memory, timed = 30 * time.Second, 2 * time.Second
 	for _, c := range []struct {
 		code, want string
@@ -286,7 +292,9 @@ func TestHubCodeBuiltinsEndWithTheirProcess(t *testing.T) {
 		case <-time.After(c.wait + 20*time.Second):
 			t.Fatalf("%s still running after %s", code, time.Since(start))
 		}
-		if took := time.Since(start); took > 10*time.Second {
+		// past its time, the gateway ends the helper at the time and its
+		// grace: well before 10s
+		if took := time.Since(start); c.wait == timed && took > 10*time.Second {
 			t.Fatalf("%s took %s", code, took)
 		}
 		if grew := int64(hubHeapNow()) - int64(before); grew > 256<<20 {
