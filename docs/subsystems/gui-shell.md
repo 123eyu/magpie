@@ -638,8 +638,29 @@ on later loads while the browser draws it, so `desktopFonts.available`
 keeps applying it. Until 10-28 the rows were
 gated on a boot `fonts` flag, so a nogui server had none, and what
 "flashed and vanished" on a refresh was Text size: the rows a tab never
-shows (Text size, the tray click, Open at login, the menu bar's
-allowances) are `.app-only`, which `body.web` hides before the first paint.
+shows (the tray click, Open at login, the menu bar's allowances) are
+`.app-only`, which `body.web` hides before the first paint.
+
+A tab has Text size too (WeltAn_X on X), and like its fonts it is the
+browser's own: kept in `localStorage` as `magpie.textSize`, never posted to
+`/api/settings/text-size`, and the app's saved size (which boot.js still
+carries) is not applied. Ctrl/Cmd + − 0 stay the browser's zoom. A page
+can't set its tab's zoom, so
+[`webzoom.js`](../../internal/gui/assets/webzoom.js), loaded right after
+`compat.js` and before anything measures, sets CSS `zoom` on the root.
+CSS zoom alone left two sizes of pixel: the page lays out in unzoomed CSS
+pixels, while rects, pointer coordinates, `innerWidth`/`innerHeight`,
+`elementFromPoint`, media queries and `vw`/`vh` are in the zoomed ones, so
+a menu put at its anchor's rect opened that far off and the sidebar kept
+the width of the whole tab. `webzoom.js` reports all of those in layout
+pixels, as a zoomed window does: it divides rects and mouse/touch
+coordinates, multiplies `devicePixelRatio`, rewrites each stylesheet
+`@media` width to the zoomed value and each `vw`/`vh` length as
+`calc(… / var(--wz))`, wraps `matchMedia` for px queries so long-lived lists
+fire `change` when the zoom changes, and dispatches `resize`. In the app's
+windows it returns at once. `web-text-size.test.cjs` covers a tab: the row
+in every language, a menu at its anchor at 150%, the sidebar following the
+zoomed width, and no sideways overflow at 840px and 420px.
 
 `settings.UIFont` and `settings.CodeFont` keep the family, style name,
 OpenType weight, CSS slope and width percentage. A missing choice keeps the

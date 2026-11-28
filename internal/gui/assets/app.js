@@ -19777,10 +19777,14 @@ const TEXT_SIZES = [100, 110, 115, 120, 125, 150];
 const textSizeKeys = () => /^Mac/.test(navigator.platform) ? "⌘+ ⌘− ⌘0" : "Ctrl+ Ctrl− Ctrl+0";
 // --zoom is the text size for what is placed against the window's own
 // drawing, which does not grow with the page: the Mac's traffic lights.
+// A browser tab has no such drawing; its size is this browser's own,
+// kept here and zoomed by webzoom.js (WeltAn_X on X).
 function applyZoom(n) {
   document.documentElement.style.setProperty("--zoom", web ? 1 : (n || 100) / 100);
+  if (web) window.webZoom?.(n);
 }
-let textSize = window.bootPrefs?.textSize || 100;
+let textSize = (web ? kept("textSize", 100) : window.bootPrefs?.textSize) || 100;
+if (web && !TEXT_SIZES.includes(textSize)) applyZoom(textSize = 100);
 // A new text size lays every page out anew: what was clicked (the size's
 // own button) isn't held where it was, nor any room kept for it, or the
 // page zoomed out at its foot was given a blank as tall as it shrank
@@ -19790,10 +19794,11 @@ function newTextSize() {
   for (const v of document.querySelectorAll(".view")) setRoom(v, 0);
 }
 async function setTextSize(n) {
-  if (web || n === textSize) return;
+  if (n === textSize) return;
   textSize = n;
   newTextSize();
   applyZoom(n);
+  if (web) return void (keep("textSize", n), view === "settings" && renderSettings());
   try {
     prefs = await writingPrefs(api("settings/text-size", { size: n }));
     state.settings = prefs;
@@ -20051,7 +20056,7 @@ function applyPrefs(s, rate) {
     if (mode === "panel" && panelTab === "stats" && panelUse) renderPanelUse();
   }
   applyPrefs.painted = true;
-  if (!prefsBusy && (s.textSize || 100) !== textSize) { textSize = s.textSize || 100; newTextSize(); applyZoom(textSize); }
+  if (!web && !prefsBusy && (s.textSize || 100) !== textSize) { textSize = s.textSize || 100; newTextSize(); applyZoom(textSize); }
   const was = locale;
   setLocale(s.lang);
   if (was !== locale && mode === "window") queueMicrotask(() => { if (!sideNav()) slide($("#nav"), "nav"); navSubs(); renderSideGw(); renderSideToggle(); });
@@ -20427,11 +20432,10 @@ function renderSettings() {
   // Network and sharing's Advanced: what this magpie is called
   window.instanceName ? instanceName(s, keep) : import("./instancename.js").then(() => instanceName(s, keep), () => {});
   window.renderNavPages ? renderNavPages() : import("./navpages.js").then(() => renderNavPages(), () => {});
-  // a browser tab has its own zoom, and magpie leaves it to it
-  $("#textSizeRow").hidden = web;
-  // the keys that do it too, in the choices' tooltip
-  $("#textSizeSegs").title = t("Everything in magpie's windows, larger; {keys} too", { keys: textSizeKeys() });
-  $("#textSizeSegs").replaceChildren(segs(TEXT_SIZES.map((n) => [n, n + "%"]), s.textSize || 100, (n) => setTextSize(n)));
+  // the keys that do it too, in the choices' tooltip; a browser tab's
+  // keys are its own zoom's, and its size is this browser's alone
+  $("#textSizeSegs").title = web ? t("Everything on this page, larger, in this browser only") : t("Everything in magpie's windows, larger; {keys} too", { keys: textSizeKeys() });
+  $("#textSizeSegs").replaceChildren(segs(TEXT_SIZES.map((n) => [n, n + "%"]), web ? textSize : s.textSize || 100, (n) => setTextSize(n)));
   $("#traySegs").replaceChildren(segs(TRAYS.map(([id, name]) => [id, t(name)]), s.tray || "panel", (tray) => savePrefs({ ...keep, tray })));
   renderPanelKey(s);
   // the Dock is the Mac's; the tray and the login item the app's

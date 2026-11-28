@@ -341,7 +341,9 @@ for (const [engine, runtime] of engines) {
   // rows never showed, and Text size painted until the settings hid it.
   // The tab's rows show whatever the server can read, with System default
   // when the browser draws none of its families, and stay through every
-  // later settings read; the app's own rows never paint at all.
+  // later settings read; the app's own rows never paint at all. Text size
+  // is a tab's row too since WeltAn_X on X (this browser's own size), so it
+  // shows and stays as the font rows do.
   for (const lang of ["en", "zh"]) test(`${engine} ${lang}: a browser tab's font rows show on a nogui magpie and nothing flashes`, async () => {
     const browser = await runtime.launch();
     try {
@@ -352,13 +354,13 @@ for (const [engine, runtime] of engines) {
         await page.evaluate(() => new Promise(r => setTimeout(r, 500)));
         const frames = await page.evaluate(() => window.__frames);
         assert(frames.length > 5, "frames were watched: " + frames.length);
-        for (const row of ["uiFontRow", "codeFontRow"]) {
+        for (const row of ["uiFontRow", "codeFontRow", "textSizeRow"]) {
           assert.equal(await page.locator("#" + row).isVisible(), true, row + " shows in a browser tab");
           const first = frames.findIndex(f => f[row]);
           assert(first >= 0, row + " never painted");
           assert(frames.slice(first).every(f => f[row]), row + " painted and then went: " + frames.map(f => +f[row]).join(""));
         }
-        for (const row of ["textSizeRow", "loginRow", "trayUsageRow", "tray"]) {
+        for (const row of ["loginRow", "trayUsageRow", "tray"]) {
           assert(!frames.some(f => f[row]), row + " is the app's and painted in a browser tab: " + frames.map(f => +f[row]).join(""));
         }
         const shown = await page.evaluate(() => fontList.map(f => f.name));

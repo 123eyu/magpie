@@ -979,6 +979,18 @@ leaves no `.view-room` and no blank under the page, nor scrolls it beyond
 the browser's own fit (#911). English and Chinese, light and dark;
 ARTIFACT_DIR gets screenshots at 100% and 150%.
 
+`web-text-size.test.cjs` checks the same row in a browser tab (`magpie
+web`, WeltAn_X on X), where the size is the browser's own: shown in all five
+languages with its tooltip, at 100% though the app's is 150%; a pick zooms
+the root (webzoom.js), is kept in localStorage and applied again before
+app.js on a reload, never posts to /api/settings/text-size, and Ctrl/Cmd
++ − 0 are left to the browser. At 150% the language menu opens at its
+anchor and inside a 1200px and a 420px tab, and a point read on the page
+finds what is drawn there; at 125% a 1200px tab loses the sidebar (960 CSS
+pixels, under 1024) and gets it back at 100%; at 150% no view runs off to
+the side at 840px or 420px. English and Chinese for those, light and dark;
+`MAGPIE_ASSETS` selects older assets, ARTIFACT_DIR gets screenshots.
+
 `settings-groups.test.cjs` puts the Settings page's warm-ups and check-in
 under a tab per service (#124): Codex, Claude Code and WorkBuddy tabs where a
 heading would be, in the Usage part after its list, Codex's picked to
