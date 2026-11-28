@@ -33,7 +33,10 @@
 //
 // Used by credits-cli.mjs (the release notes' thanks line, and
 // public/contributors.json at deploy) and by worker.js (the contributors
-// page). It imports nothing, so the worker can bundle it.
+// page). It imports only cards.js (a card's title), so the worker can
+// bundle it.
+
+import { titleOf } from "./cards.js";
 
 export const MAINTAINERS = ["yetone"];
 export const MAGPIE = "yetone/magpie";
@@ -612,10 +615,13 @@ export function renderWall(data, lang) {
       : `<span class="cw-av" aria-hidden="true">${esc(initial(p.name))}</span>`;
     const items = [];
     for (const r of p.releases || []) for (const t of r.what || []) items.push({ v: r.v, what: [t] });
+    // their card's title (cards.js titleOf), from the same lines
+    const lines = items.map((x) => ({ t: x.what[0] }));
+    const title = titleOf({ id: ids[i], lines, ...role(lines) }, lang);
     const head = items.slice(0, SHOWN).map(line).join("");
     const rest = items.slice(SHOWN);
     const more = rest.length ? `<details><summary>${esc(w.more(rest.length))}</summary><ul>${rest.map(line).join("")}</ul></details>` : "";
-    return `<tr id="${esc(ids[i])}"${also.length ? ` data-k="${esc(also.join(" "))}"` : ""}><td><div class="cw-who">${pic}<div><b>${name}</b>${via}</div></div></td><td><ul>${head}</ul>${more}</td></tr>`;
+    return `<tr id="${esc(ids[i])}"${also.length ? ` data-k="${esc(also.join(" "))}"` : ""}><td><div class="cw-who">${pic}<div><b>${name}</b>${title ? `<br><span class="cw-t">${esc(title)}</span>` : ""}${via}</div></div></td><td><ul>${head}</ul>${more}</td></tr>`;
   });
   // The rows go in parts of PART, each its own table (same columns, fixed
   // layout) under content-visibility: auto, so the browser lays out, paints
@@ -628,7 +634,7 @@ export function renderWall(data, lang) {
     let h = 0;
     for (const p of people.slice(i, i + PART)) {
       const n = (p.releases || []).reduce((s, r) => s + (r.what || []).length, 0);
-      h += 24 + Math.max(40, Math.min(n, SHOWN) * 46 + (n > SHOWN ? 22 : 0));
+      h += 24 + Math.max(58, Math.min(n, SHOWN) * 46 + (n > SHOWN ? 22 : 0));
     }
     const head = i ? "" : `<thead><tr><th>${esc(w.name)}</th><th>${esc(w.led)}</th></tr></thead>`;
     parts.push(`<div class="cw-part" style="--h:${h}px"><table class="cw"><colgroup><col class="cw-c1"><col></colgroup>${head}<tbody>${rows.slice(i, i + PART).join("")}</tbody></table></div>`);

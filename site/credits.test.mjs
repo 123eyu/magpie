@@ -330,6 +330,13 @@ test("the page shows what each person's reports led to, newest first", () => {
   assert.match(html, /a &amp; b/);
   assert.match(html, /releases\/tag\/v0\.1\.1/);
   assert.match(html, /新的在前/);
+  // each row has its card's title under the name, in the page's language
+  assert.match(html, /<b><a [^>]+>&lt;b&gt;x&lt;\/b&gt;<\/a><\/b><br><span class="cw-t">[^<]+<\/span><br><span class="cw-via">/);
+  const gw = { people: [{ name: "g", github: "g", releases: Array.from({ length: 12 }, (_, i) => ({ v: `0.1.${i}`, what: [`gateway: fix ${i}`] })) }] };
+  const t = (lang) => renderWall(gw, lang).match(/<span class="cw-t">([^<]+)<\/span>/)[1];
+  assert.match(t("en"), /^Chief Gateway /);
+  assert.match(t("zh"), /^首席网关/);
+  assert.match(t("ja"), /^首席ゲートウェイ/);
   assert.match(renderWall({}, "ja"), /一覧/);
   const many = renderWall({ people: [{ name: "n", releases: [1, 2, 3, 4, 5].map((i) => ({ v: `0.1.${i}`, what: ["w"] })) }] }, "en");
   assert.match(many, /<summary>2 more<\/summary>/);
