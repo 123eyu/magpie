@@ -541,7 +541,7 @@ test("an alias line joins an X account to a login only while that login's profil
     rmSync(dir, { recursive: true, force: true });
   }
   // the checked-in list: each line is an X handle and a GitHub login
-  assert.deepEqual(aliases(), [{ x: "ZhouYimingsjtu", login: "dreamfarer-space" }, { x: "elis_pina", login: "LoveEcho1145" }]);
+  assert.deepEqual(aliases(), [{ x: "ZhouYimingsjtu", login: "dreamfarer-space" }, { x: "elis_pina", login: "LoveEcho1145" }, { x: "zysicyj", login: "zysicyj" }]);
 });
 
 // public/wall.js, the page's finder: a classic script that also exports
