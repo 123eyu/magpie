@@ -272,10 +272,10 @@ func SetModels(id string, models []string) error {
 		return err
 	}
 	ms := normalModels(models)
-	if slices.Equal(ms, normalModels(p.Models)) && !p.ServesNone() && !p.BestInFamily {
+	if slices.Equal(ms, normalModels(p.Models)) && !p.ServesNone() && !p.BestInFamily && !p.FreeOnly {
 		return nil
 	}
-	p.Models, p.NoModels, p.BestInFamily = ms, false, false
+	p.Models, p.NoModels, p.BestInFamily, p.FreeOnly = ms, false, false, false
 	return Save(*p)
 }
 

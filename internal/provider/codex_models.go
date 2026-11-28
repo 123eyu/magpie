@@ -899,7 +899,8 @@ func buildCodexListTag(kind string) string {
 // (Provider.Off): its picks are kept for when it is switched on again and
 // are not a narrowing now. Usage only narrows the visible native list to
 // none, as it does the general catalog; codexModels keeps hidden jobs. Best
-// in family narrows it to the newest of each family the account lists.
+// in family narrows it to the newest of each family the account lists, Free
+// only to the models it lists free.
 func CodexNativePicked() (map[string]bool, bool) {
 	p, ok := find(All(), "codex")
 	if !ok || p.Off {
@@ -916,6 +917,17 @@ func CodexNativePicked() (map[string]bool, bool) {
 		}
 		// with no list known, the account's own is left whole
 		return keep, len(keep) > 0
+	}
+	if len(p.Models) == 0 && p.FreeOnly {
+		// Free only: the models the account lists free, none when it lists
+		// none free, as Exposed has it; with no list known, the account's
+		// own is left whole
+		avail := p.Available()
+		keep := map[string]bool{}
+		for _, m := range p.FreeOf(settings.Shared(), avail) {
+			keep[m.ID] = true
+		}
+		return keep, len(avail) > 0
 	}
 	if len(p.Models) == 0 {
 		return nil, false

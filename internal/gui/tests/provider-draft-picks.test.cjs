@@ -1,11 +1,12 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // The provider editor's model picks are a draft until Save (#578, #614:
-// Sun1090 clicked Free only, closed the editor without saving, and found
-// it applied; Select none and Save came back as 24 models ticked). With no
+// Sun1090 picked the free models with the old Free only button, closed
+// the editor without saving, and found it applied; Select none and Save came back as 24 models ticked). With no
 // pick saved the editor opens with none ticked, the vendor's first 24 drawn
 // as served: it took those served for picks, drew them ticked, and the next
-// Save wrote them as picks. Free only then Cancel or Escape writes nothing
-// and the editor opens as it was; Free only and Save writes the free ones;
+// Save wrote them as picks. Picking the free ones then Cancel or Escape
+// writes nothing and the editor opens as it was; picking them and Save
+// writes the free ones;
 // Select none and Save writes none with noModels, and the editor opens with
 // none ticked and none served (#1818: Select none came back as the vendor's
 // first 24 served). In every language, Chromium and WebKit.
@@ -59,11 +60,11 @@ function serve(lang, saves) {
 }
 
 const words = {
-  en: { free: "Free only", none: "Select none", save: "Save", cancel: "Cancel" },
-  zh: { free: "只选免费", none: "全不选", save: "保存", cancel: "取消" },
-  "zh-TW": { free: "只選免費", none: "全不選", save: "儲存", cancel: "取消" },
-  ja: { free: "無料のみ", none: "選択をすべて解除", save: "保存", cancel: "キャンセル" },
-  de: { free: "Nur kostenlose", none: "Keine auswählen", save: "Speichern", cancel: "Abbrechen" },
+  en: { none: "Select none", save: "Save", cancel: "Cancel" },
+  zh: { none: "全不选", save: "保存", cancel: "取消" },
+  "zh-TW": { none: "全不選", save: "儲存", cancel: "取消" },
+  ja: { none: "選択をすべて解除", save: "保存", cancel: "キャンセル" },
+  de: { none: "Keine auswählen", save: "Speichern", cancel: "Abbrechen" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -94,33 +95,36 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const picked = () => editor.locator(".mchips .mchip.on").evaluateAll((cs) => cs.map((c) => c.firstChild.textContent));
       const served = () => editor.locator(".mchips .mchip.auto").count();
       const button = (name) => editor.getByRole("button", { name, exact: true });
+      // the free ones picked by hand, a click on each
+      const pickFree = async () => { for (const id of free) await editor.locator(".mchips .mchip", { hasText: id }).click(); };
 
       // none saved: none ticked, the first 24 drawn as served
       await open();
       assert.deepEqual(await picked(), [], "opened with no pick saved");
       assert.equal(await served(), 24);
 
-      // Free only, then Cancel: nothing written, opened again as it was
-      await button(w.free).click();
+      // the free ones picked, then Cancel: nothing written, opened again as
+      // it was
+      await pickFree();
       assert.deepEqual(await picked(), [...free]);
       await button(w.cancel).click();
       await page.locator("dialog.action-confirm[open] button").last().click();
       await editor.waitFor({ state: "detached" });
       await open();
-      assert.deepEqual(await picked(), [], "Free only undone by Cancel");
+      assert.deepEqual(await picked(), [], "the picks undone by Cancel");
       assert.equal(await served(), 24);
 
-      // Free only, then Escape: the same
-      await button(w.free).click();
+      // picked, then Escape: the same
+      await pickFree();
       await page.keyboard.press("Escape");
       await page.locator("dialog.action-confirm[open] button").last().click();
       await editor.waitFor({ state: "detached" });
       await open();
-      assert.deepEqual(await picked(), [], "Free only undone by Escape");
+      assert.deepEqual(await picked(), [], "the picks undone by Escape");
       assert.deepEqual(saves, []);
 
-      // Free only and Save writes the free ones
-      await button(w.free).click();
+      // picked and Save writes the free ones
+      await pickFree();
       await button(w.save).click();
       await editor.waitFor({ state: "detached" });
       assert.deepEqual(saves, [[...free]]);

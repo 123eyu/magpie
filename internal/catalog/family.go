@@ -176,3 +176,23 @@ func BestInFamily(ms []Model) []Model {
 	}
 	return out
 }
+
+// NamedFree says one of names says free as a word of its own (OpenRouter's
+// "deepseek/deepseek-r1:free", "openrouter/free", OpenCode Zen's
+// "-free" ones), not inside another ("freedom"): what the editor's FREE
+// badge reads off a name (namedFree in app.js), in any case.
+func NamedFree(names ...string) bool {
+	for _, n := range names {
+		for i := 0; i+4 <= len(n); i++ {
+			if !strings.EqualFold(n[i:i+4], "free") {
+				continue
+			}
+			if (i == 0 || !asciiLetter(n[i-1])) && (i+4 == len(n) || !asciiLetter(n[i+4])) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func asciiLetter(c byte) bool { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' }

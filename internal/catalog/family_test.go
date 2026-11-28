@@ -167,3 +167,26 @@ func TestBestInFamily(t *testing.T) {
 		}
 	}
 }
+
+// NamedFree reads "free" as a word of its own in an id or a name, as the
+// editor's namedFree does: OpenRouter's :free, a "Free" tier, not
+// "freedom" or "carefree".
+func TestNamedFree(t *testing.T) {
+	for _, c := range []struct {
+		names []string
+		want  bool
+	}{
+		{[]string{"qwen/qwen3.8-27b:free"}, true},
+		{[]string{"cline-free/deepseek-v4.1-flash"}, true},
+		{[]string{"x", "GPT-6 (Free)"}, true},
+		{[]string{"FREE"}, true},
+		{[]string{"freedom-7b"}, false},
+		{[]string{"carefree"}, false},
+		{[]string{"openai/gpt-6", ""}, false},
+		{nil, false},
+	} {
+		if got := NamedFree(c.names...); got != c.want {
+			t.Errorf("NamedFree(%q) = %v, want %v", c.names, got, c.want)
+		}
+	}
+}

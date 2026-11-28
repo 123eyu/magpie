@@ -22,7 +22,7 @@ import (
 // field of Provider that is in neither it nor the fields that sync.
 var settingFields = []string{
 	// models
-	"ListOff", "Models", "NoModels", "BestInFamily", "PickedFrom", "Delisted", "DelistedAt",
+	"ListOff", "Models", "NoModels", "BestInFamily", "FreeOnly", "PickedFrom", "Delisted", "DelistedAt",
 	"RefreshEvery", "AutoInclude", "Unlisted", "HiddenDrawers", "HiddenVideomakers", "Contexts", "Family",
 	"AccountModels", "AccountModelsAll",
 	// on or off

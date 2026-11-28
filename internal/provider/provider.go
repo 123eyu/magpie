@@ -725,6 +725,15 @@ type Provider struct {
 	// pick or Select none clears it (normalize); a file without it reads as
 	// the vendor's list, as before.
 	BestInFamily bool `json:"bestInFamily,omitempty"`
+	// FreeOnly is the editor's Free only (niuniu_8964 on X): with no
+	// Models picked, of the vendor's list only the models it marks free are
+	// served (ListsFree: the editor's FREE badge), every one of them, so a
+	// model OpenRouter lists as :free later is served, and one it stops
+	// giving away leaves, with nothing saved; its list is fetched again
+	// every LiveFilterEvery unless the user set a RefreshEvery. A pick,
+	// Select none or Best in family clears it (normalize); a file without
+	// it reads as the vendor's list, as before.
+	FreeOnly bool `json:"freeOnly,omitempty"`
 	// PickedFrom are the models the vendor listed when Models were saved: one
 	// listed since is served beside picks that held every one listed then
 	// (withNewlyListed), and one listed then and left unpicked stays out.
@@ -1209,7 +1218,7 @@ func accountSettings(a, pk Provider) Provider {
 	a.PickedFrom, a.Delisted, a.DelistedAt = pk.PickedFrom, pk.Delisted, pk.DelistedAt
 	a.Models, a.Unlisted, a.Off, a.Fallback, a.Routing, a.Affinity, a.KeepLogin, a.KeepLoginAs, a.Contexts, a.Family = pk.Models, pk.Unlisted, pk.Off, pk.Fallback, pk.Routing, pk.Affinity, pk.KeepLogin, pk.KeepLoginAs, pk.Contexts, pk.Family
 	a.SwitchOnly, a.RestartApp, a.AutoSwitch = pk.SwitchOnly, pk.RestartApp, pk.AutoSwitch
-	a.Sink, a.NoModels, a.BestInFamily = pk.Sink, pk.NoModels, pk.BestInFamily
+	a.Sink, a.NoModels, a.BestInFamily, a.FreeOnly = pk.Sink, pk.NoModels, pk.BestInFamily, pk.FreeOnly
 	a.NativeCompaction = pk.NativeCompaction
 	a.PromptAsWritten = pk.PromptAsWritten
 	// a deferred tool a tool search loaded goes where it was loaded, set
@@ -2047,6 +2056,10 @@ func normalize(p Provider) Provider {
 	}
 	if len(p.Models) > 0 || p.NoModels {
 		p.BestInFamily = false // nor Best in family
+		p.FreeOnly = false     // nor Free only
+	}
+	if p.BestInFamily {
+		p.FreeOnly = false // one way of following the list at a time
 	}
 	p.ZhipuTeam = p.ZhipuTeam.normal()
 	p.Vertex = p.Vertex.Normal()

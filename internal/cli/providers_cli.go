@@ -94,7 +94,8 @@ const providerUsage = `usage:
   magpie provider models <id> [ids…]      fetch the vendor's model list, or choose which models to expose:
                                           ids… replace the list, +id adds one, -id takes one out, all: the default,
                                           none: serve none of them, its balance and usage still shown,
-                                          best: only the newest of each family it lists (Opus 5.6 replaces 5.5 once listed)
+                                          best: only the newest of each family it lists (Opus 5.6 replaces 5.5 once listed),
+                                          free: only those it lists free, as they change (both fetch its list every 6h)
   magpie provider refresh <id>            fetch the vendor's model list again (as the app's Fetch models)
   magpie provider refresh-every <id> [6h|1d|off]
                                           have the gateway (magpie serve, the app) fetch the list again by itself
@@ -515,6 +516,8 @@ func notExposed(p provider.Provider) ([]string, string) {
 	why := "not picked"
 	if len(p.Models) == 0 && p.BestInFamily {
 		why = "best in family: an older one of its family"
+	} else if len(p.Models) == 0 && p.FreeOnly {
+		why = "free only: not listed free"
 	} else if len(p.Models) == 0 {
 		why = fmt.Sprintf("none picked, so only the first %d", len(shown))
 	}
@@ -825,18 +828,19 @@ func providerCmd(args []string) error {
 			before := *p
 			// none: no model served at all, the provider kept for its
 			// balance and usage (#1818); best: the newest of each family
-			// the vendor lists (Best in family); all is the vendor's list
-			// again
+			// the vendor lists (Best in family); free: the models it lists
+			// free (Free only); all is the vendor's list again
 			none := len(rest) == 2 && rest[1] == "none"
 			best := len(rest) == 2 && rest[1] == "best"
+			free := len(rest) == 2 && rest[1] == "free"
 			picks, err := editPicks(*p, rest[1:])
-			if none || best {
+			if none || best || free {
 				picks, err = nil, nil
 			}
 			if err != nil {
 				return err
 			}
-			p.Models, p.NoModels, p.BestInFamily = picks, none, best
+			p.Models, p.NoModels, p.BestInFamily, p.FreeOnly = picks, none, best, free
 			if err := provider.Save(*p); err != nil {
 				return err
 			}

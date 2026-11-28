@@ -1838,8 +1838,8 @@ const pickWait = time.Hour
 
 // Exposed lists the models magpie offers to agents for this provider: the
 // user's picks; else the preset's; else everything, when that is few, the
-// newest of each family only under Best in family; none after Select none
-// (ServesNone).
+// newest of each family only under Best in family, every free one only
+// under Free only; none after Select none (ServesNone).
 func (p Provider) Exposed() []catalog.Model {
 	if p.ServesNone() || p.waitsForPicks() {
 		return nil
@@ -1909,6 +1909,11 @@ func (p Provider) ExposedOf(avail []catalog.Model) []catalog.Model {
 	if p.BestInFamily {
 		avail = catalog.BestInFamily(avail)
 	}
+	// Free only: every model the list marks free, none of them cut at
+	// manyModels, as the picks the editor's Free only button made weren't
+	if p.FreeOnly {
+		return p.FreeOf(settings.Shared(), avail)
+	}
 	// another magpie's list is already the models its user exposed
 	if len(avail) <= manyModels || p.IsRemoteMagpie() {
 		return avail
@@ -1931,6 +1936,33 @@ func (p Provider) servable(avail []catalog.Model) []catalog.Model {
 // whichever mode is on, so the editor can draw them before it is saved.
 func (p Provider) NewestInFamily(avail []catalog.Model) []catalog.Model {
 	return catalog.BestInFamily(p.servable(avail))
+}
+
+// FreeOf is the models of avail p marks free (ListsFree): what Free only
+// serves of the vendor's list, in its order.
+func (p Provider) FreeOf(s settings.Settings, avail []catalog.Model) []catalog.Model {
+	r := p.Pricer()
+	out := make([]catalog.Model, 0, len(avail))
+	for _, m := range avail {
+		if r.ListsFree(s, m) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// ListsFree says m is free on the Pricer's provider as the editor's FREE
+// badge says it (namedFree in app.js): its vendor's word (catalog.Model's
+// Free), a name that says free (catalog.NamedFree: OpenRouter's :free), or
+// a $0 price there (Prices' PricedFree, the user's own price first). The
+// cheap reads come first: a price is looked up only for a model neither
+// says free.
+func (r Pricer) ListsFree(s settings.Settings, m catalog.Model) bool {
+	if m.Free || catalog.NamedFree(m.ID, m.Name) {
+		return true
+	}
+	_, _, free := r.Prices(s, m.ID)
+	return free
 }
 
 // Listing is a provider's models as the Providers page draws them: the

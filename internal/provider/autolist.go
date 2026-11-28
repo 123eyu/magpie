@@ -79,22 +79,45 @@ func ParseRefreshEvery(s string) (time.Duration, error) {
 // asks it only when told, as before.
 const RemoteMagpieEvery = "10m"
 
+// LiveFilterEvery is how often, as RefreshEvery writes it, the gateway
+// fetches the list of a provider whose served models follow it by a rule,
+// Free only or Best in family, when its user set no RefreshEvery: the rule
+// is kept on the list as last fetched, and a list fetched once, when the
+// provider was added, never had a model OpenRouter made free since
+// (niuniu_8964 on X). A vendor's list changes over days; four times a day
+// is one small request each time. "off" (magpie provider refresh-every
+// <id> off) asks it only when told, as before.
+const LiveFilterEvery = "6h"
+
 // RefreshSchedule is the schedule the provider's list is fetched on, as
-// written: its user's, or a Remote magpie's default (RemoteMagpieEvery)
-// when its user set none; "" for only when asked.
+// written: its user's, or else a Remote magpie's default
+// (RemoteMagpieEvery) or a live filter's (LiveFilterEvery); "" for only
+// when asked.
 func (p Provider) RefreshSchedule() string {
 	if !p.ownList() {
 		return ""
 	}
-	if strings.TrimSpace(p.RefreshEvery) == "" && p.IsRemoteMagpie() {
-		return RemoteMagpieEvery
+	if strings.TrimSpace(p.RefreshEvery) == "" {
+		switch {
+		case p.IsRemoteMagpie():
+			return RemoteMagpieEvery
+		case p.followsByRule():
+			return LiveFilterEvery
+		}
 	}
 	return p.RefreshEvery
 }
 
+// followsByRule says the models p serves are the vendor's list narrowed
+// by a rule, Free only or Best in family, with none picked.
+func (p Provider) followsByRule() bool {
+	return len(p.Models) == 0 && !p.NoModels && (p.FreeOnly || p.BestInFamily)
+}
+
 // RefreshInterval is how often the gateway fetches the provider's list by
 // itself: 0 for only when asked, and for one RefreshEvery can't be read.
-// A Remote magpie with none set is fetched every RemoteMagpieEvery.
+// A Remote magpie with none set is fetched every RemoteMagpieEvery, one
+// under Free only or Best in family every LiveFilterEvery.
 func (p Provider) RefreshInterval() time.Duration {
 	if !p.ownList() {
 		return 0
@@ -135,8 +158,9 @@ func SetRefreshEvery(id, every string) error {
 	p.RefreshEvery = ""
 	if d > 0 {
 		p.RefreshEvery = strings.ToLower(strings.TrimSpace(every))
-	} else if p.IsRemoteMagpie() {
-		// kept as said: none set is RemoteMagpieEvery for a Remote magpie
+	} else if p.IsRemoteMagpie() || p.followsByRule() {
+		// kept as said: none set is RemoteMagpieEvery for a Remote magpie,
+		// LiveFilterEvery under Free only or Best in family
 		p.RefreshEvery = "off"
 	}
 	return Save(*p)
@@ -237,7 +261,7 @@ func takeMatching(id string, isNew func(string) bool) ([]string, error) {
 	q := &f.Providers[i]
 	// new ones first, as the vendor's list and withNewlyListed have them
 	q.Models = append(slices.Clone(taken), served...)
-	q.NoModels, q.BestInFamily = false, false
+	q.NoModels, q.BestInFamily, q.FreeOnly = false, false, false
 	// picked from the list as it is now: one it lists later and no rule
 	// matches stays out, unless the picks hold every model
 	q.PickedFrom = nil

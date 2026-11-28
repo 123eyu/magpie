@@ -45,6 +45,9 @@ func TestCodexBestInFamilyCatalog(t *testing.T) {
 		{"vendor list", provider.Provider{ID: "codex"}, all},
 		{"best in family", provider.Provider{ID: "codex", BestInFamily: true}, []string{"gpt-6.1-sol", "gpt-6-astra", "gpt-6-luna", "gpt-5.6-terra"}},
 		{"picked", provider.Provider{ID: "codex", Models: []string{"gpt-6-sol"}, BestInFamily: true}, []string{"gpt-6-sol"}},
+		// Free only: the account lists none free, so none of its own, as
+		// its general catalog has none (niuniu_8964 on X)
+		{"free only", provider.Provider{ID: "codex", FreeOnly: true}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := provider.Save(tc.p); err != nil {

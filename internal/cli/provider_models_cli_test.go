@@ -240,3 +240,65 @@ func TestProviderModelsBest(t *testing.T) {
 		}
 	}
 }
+
+// `magpie provider models <id> free` is the editor's Free only
+// (niuniu_8964 on X): the models the list marks free, as it changes; the
+// others are named as left out, and all, a pick or none turns it off.
+func TestProviderModelsFree(t *testing.T) {
+	groupsHome(t)
+	catalog.Changed = nil
+	if err := provider.Save(provider.Provider{ID: "or", Name: "OR", Key: "k", Chat: "http://127.0.0.1:1/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(catalog.LivePath("or")), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(catalog.LivePath("or"), []byte(`{"models":[{"id":"qwen/qwen3.8-27b:free"},{"id":"openai/gpt-6"},{"id":"deepseek/deepseek-v4:free"}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+	run := func(args ...string) (string, error) {
+		return stdoutOf(t, func() error { return providerCmd(append([]string{"provider", "models", "or"}, args...)) })
+	}
+	exposed := func() []string {
+		var out []string
+		for _, m := range mustFind(t, "or").Exposed() {
+			out = append(out, m.ID)
+		}
+		return out
+	}
+	if _, err := run("free"); err != nil {
+		t.Fatal(err)
+	}
+	if p := mustFind(t, "or"); !p.FreeOnly || p.Models != nil || p.NoModels || p.BestInFamily {
+		t.Fatalf("free saved %v noModels %v free %v", p.Models, p.NoModels, p.FreeOnly)
+	}
+	if want := []string{"qwen/qwen3.8-27b:free", "deepseek/deepseek-v4:free"}; !slices.Equal(exposed(), want) {
+		t.Fatalf("free exposes %v, want %v", exposed(), want)
+	}
+	out, err := stdoutOf(t, func() error { return providerCmd([]string{"provider", "or"}) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "openai/gpt-6") || !strings.Contains(out, "free only") || !strings.Contains(out, "every "+provider.LiveFilterEvery) {
+		t.Errorf("provider or said %q; want openai/gpt-6 left out by free only, and its list fetched every %s", out, provider.LiveFilterEvery)
+	}
+	if _, err := run("all"); err != nil {
+		t.Fatal(err)
+	}
+	if p := mustFind(t, "or"); p.FreeOnly || len(p.Exposed()) != 3 {
+		t.Fatalf("all after free: free %v exposing %d", p.FreeOnly, len(p.Exposed()))
+	}
+	for _, args := range [][]string{{"openai/gpt-6"}, {"none"}, {"best"}} {
+		if _, err := run("free"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := run(args...); err != nil {
+			t.Fatal(err)
+		}
+		if p := mustFind(t, "or"); p.FreeOnly {
+			t.Errorf("%v after free kept it", args)
+		}
+	}
+}

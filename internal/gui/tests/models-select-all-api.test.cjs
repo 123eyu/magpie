@@ -114,16 +114,30 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert(await editor.locator(".mchips .mchip.noapi").first().evaluate((e) => parseFloat(getComputedStyle(e).opacity) < 1), "not dimmed");
         assert.equal(await bulk(tr("Select all")).getAttribute("title"), tr(ALL_TIP));
 
-        // Free only: the free chat model, not the free Claude
-        await bulk(tr("Free only")).click();
+        // Free only serves the free chat model, not the free Claude
+        await editor.locator(".mserves .opt[data-serves=free]").click();
+        assert.deepEqual(await chipsOf(".auto"), ["ling-3.1-flash:free"]);
+        assert.deepEqual(await chipsOf(".on"), []);
+        // and a click on it picks just it, as the old Free only button did
+        await editor.locator(".mchips .mchip", { hasText: "ling-3.1-flash:free" }).click();
         assert.deepEqual(await chipsOf(".on"), ["ling-3.1-flash:free"]);
 
-        // Select all, the button scrolled into the editor's view first: the
-        // click moves nothing, and the Claude models are left
-        await editor.locator(".ebody").evaluate((b) => { b.scrollTop += b.querySelector(".mbulk").getBoundingClientRect().top - b.getBoundingClientRect().top - 8; });
+        // Select all, the button wheeled into the editor's view first, as a
+        // reader would (a scroll by code is not the reader's, and the click
+        // guard may put it back to where the chip was clicked): the click
+        // moves nothing, and the Claude models are left
+        const body = editor.locator(".ebody"), box = await body.boundingBox();
+        assert.equal(await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest(".mchips"), [box.x + 4, box.y + 4]), false, "the wheel would scroll the chips");
+        await page.mouse.move(box.x + 4, box.y + 4);
+        await page.mouse.wheel(0, await body.evaluate((b) => b.querySelector(".mbulk").getBoundingClientRect().top - b.getBoundingClientRect().top - 8));
+        // at rest: the same place for 10 frames running
+        const still = () => body.evaluate((b) => new Promise((ok) => { let last = NaN, same = 0; const f = () => { same = b.scrollTop === last ? same + 1 : 0; last = b.scrollTop; if (same >= 10) ok(); else requestAnimationFrame(f); }; requestAnimationFrame(f); }));
+        await still();
         const before = await scrolled();
         await bulk(tr("Select all")).click();
-        assert.equal(await scrolled(), before, "the click scrolled");
+        await still();
+        const after = await scrolled();
+        assert.equal(after, before, "the click scrolled");
         const want = [...CHAT, "plain-model", "ling-3.1-flash:free"].sort();
         assert.deepEqual(await chipsOf(".on"), want);
         assert.deepEqual(await save(), want);
