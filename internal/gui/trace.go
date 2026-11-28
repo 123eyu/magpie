@@ -315,6 +315,12 @@ func mainView(q url.Values) string {
 			}
 			view += "&q=" + url.QueryEscape(s)
 		}
+	case "providers":
+		// the panel's agent model list opening a provider it names as
+		// left out (agentleft.js): the window opens on its editor
+		if id := q.Get("edit"); id != "" && mainName.MatchString(id) {
+			view += "&edit=" + url.QueryEscape(id)
+		}
 	case "routing":
 		if id, err := strconv.ParseInt(q.Get("req"), 10, 64); err == nil && id > 0 {
 			view += "&req=" + strconv.FormatInt(id, 10)

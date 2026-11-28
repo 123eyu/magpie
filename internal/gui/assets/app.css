@@ -5444,6 +5444,14 @@ body.window .row.agent .who.with-models { flex-wrap: wrap; row-gap: 0; }
 .am-all:focus-visible { opacity: 1; }
 .am-all:hover { background: var(--accent-soft); }
 @media (hover: none) { .am-all { opacity: 1; } }
+/* a provider left out, serving only through routing groups (agentleft.js) */
+.am-rr.am-lo .am-ri { margin-right: 24px; color: var(--muted); }
+.am-g.am-lo .am-gh { gap: 8px; height: 30px; padding: 0 10px 0 28px; color: var(--muted); font-size: 12px; }
+.am-g.am-lo .am-gh > .ic { width: 14px; height: 14px; flex: none; }
+.am-g.am-lo .gn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-2); font-weight: 600; }
+.am-g.am-lo .c { flex: none; font-variant-numeric: tabular-nums; }
+.am-lo-d { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0 12px 8px 52px; color: var(--muted); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.am-lo-d .text.action { height: 24px; font-size: 11.5px; }
 .am-mr { display: flex; align-items: center; gap: 10px; width: calc(100% - 4px); height: 32px; margin: 0 2px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--fg); font: inherit; font-size: 13px; text-align: left; cursor: pointer; transition: background-color .12s; }
 .am-mr:hover { background: var(--pill); }
 /* under its group: the model's icon in the group icon's column, past the

@@ -61,3 +61,29 @@ func TestAddCopy(t *testing.T) {
 		t.Fatal("a copy of nothing")
 	}
 }
+
+// A copy is in no routing group, so "Only through routing groups" taken
+// from its original left it serving nothing, in no agent's list (Sec_211
+// on X: "0-onaiproxy 副本" missing from Codex's list with its original).
+func TestAddCopyIsListed(t *testing.T) {
+	isolate(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	if err := Save(Provider{ID: "relay", Name: "Relay", Chat: "http://127.0.0.1:1/v1", Key: "sk-1", Models: []string{"m"}, Unlisted: true}); err != nil {
+		t.Fatal(err)
+	}
+	id, err := AddCopy(Provider{Name: "Relay copy", Chat: "http://127.0.0.1:1/v1", Models: []string{"m"}}, "relay")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := Find(id)
+	if err != nil || c.Unlisted {
+		t.Fatalf("copy %s: %+v %v", id, c, err)
+	}
+	if !slices.ContainsFunc(Catalog(), func(e Entry) bool { return e.ID == id+"/m" }) {
+		t.Fatalf("%s/m not in the catalog", id)
+	}
+}

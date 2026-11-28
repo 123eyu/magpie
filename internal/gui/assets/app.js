@@ -3425,8 +3425,10 @@ async function openAgentModels(a, anchor, ev) {
   // magpie's (DeepSeek Harness's), which ownHidden leaves out (#1642)
   // joins: shown only its picks, it takes in the models ticked in a
   // provider's editor too (eiyuuzaki2333 on X)
-  let models, ordered = false, only = false, own = false, ownHidden = false, joins = false;
-  try { [{ models, ordered, only = false, own = false, ownHidden = false, joins = false }] = await Promise.all([api("agent-models/" + encodeURIComponent(a.id)), import("./agentjoin.js").catch(() => {}), import("./modelorder.js").catch(() => {})]); }
+  // left: providers it leaves out, serving only through routing groups,
+  // which it names (agentleft.js; Sec_211 on X)
+  let models, ordered = false, only = false, own = false, ownHidden = false, joins = false, left;
+  try { [{ models, ordered, only = false, own = false, ownHidden = false, joins = false, left = [] }] = await Promise.all([api("agent-models/" + encodeURIComponent(a.id)), import("./agentjoin.js").catch(() => {}), import("./modelorder.js").catch(() => {}), import("./agentleft.js").catch(() => {})]); }
   catch (e) {
     if (agentModelsLoading === loading) { loading.drop(); statusErr(e); }
     return;
@@ -3522,9 +3524,10 @@ async function openAgentModels(a, anchor, ev) {
   // its models alone, so a long list is one click away rather than a
   // scroll down past the others (蓝猫 on Discord); a search looks in all
   let railed = false, pick = "";
+  const to = (n) => { pick = n; q.value = ""; list.scrollTop = 0; draw(); }, lo = self.amLeft?.(left, a.name, to);
   const rail = el("div", "am-rail"), body = el("div", "am-body");
   const lay = () => {
-    railed = groups.length > 2 && innerWidth >= 600;
+    railed = groups.length + left.length > 2 && innerWidth >= 600;
     box.classList.toggle("railed", railed);
     if (railed) body.replaceChildren(rail, list);
     box.replaceChildren(head, tools, railed ? body : list, foot);
@@ -3548,7 +3551,7 @@ async function openAgentModels(a, anchor, ev) {
       b.setAttribute("aria-pressed", String(pick === name));
       b.append(lead, el("span", "rn", label), el("span", "c", `${on}/${ms.length}`));
       b.title = label;
-      b.onclick = () => { pick = name; q.value = ""; list.scrollTop = 0; draw(); };
+      b.onclick = () => to(name);
       const k = el("button", "am-rk" + (on === ms.length ? " on" : on ? " part" : ""));
       k.type = "button";
       k.setAttribute("role", "checkbox");
@@ -3572,6 +3575,7 @@ async function openAgentModels(a, anchor, ev) {
         draw();
       });
     }
+    if (!byMaker) lo?.rail(rail, pick);
     rail.scrollTop = top;
   };
   // under "Shown", one just turned off stays until the view changes
@@ -3797,6 +3801,7 @@ async function openAgentModels(a, anchor, ev) {
       }
       list.append(sec);
     }
+    if (!onlyShown) lo?.list(list, pick, words);
     if (!list.childNodes.length) list.append(el("div", "am-none", t("No matches.")));
     list.scrollTop = top;
     // anything else done in the list takes back a first click there

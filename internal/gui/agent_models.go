@@ -328,6 +328,100 @@ func agentModelList(a *agent.Agent) []agentModelJSON {
 	return out
 }
 
+// leftOutJSON is a provider none of whose models an agent's list has,
+// as they serve only through routing groups: set "Only through routing
+// groups" (Provider.Unlisted), or kept out by groups listing alone
+// (Group.Unlists). The list names it rather than leave it out without a
+// word (Sec_211 on X: a provider and its copy on the Providers page, with
+// 16 models each, were nowhere in Codex's list).
+type leftOutJSON struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Icon string `json:"icon,omitempty"`
+	// Models are its models' names
+	Models []string `json:"models"`
+	// Unlisted: its own "Only through routing groups"; else By are the
+	// groups listing alone that keep its models out
+	Unlisted bool     `json:"unlisted,omitempty"`
+	By       []string `json:"by,omitempty"`
+	// Via are the routing groups agents are listed, by name, its models
+	// are used through, the user's own first, then those magpie found (a
+	// model the same on several providers, named as the model); none when
+	// no such group has them
+	Via []string `json:"via"`
+}
+
+// agentLeftOut is every provider with models served only through routing
+// groups, none of them in agent's list (models), in the providers' order.
+func agentLeftOut(models []agentModelJSON) []leftOutJSON {
+	es := provider.Unlisted()
+	if len(es) == 0 {
+		return []leftOutJSON{}
+	}
+	// the providers some model of which the list has: a provider's id
+	// has no slash, so a model's "provider/model" starts with it
+	shown := map[string]bool{}
+	for _, m := range models {
+		if pid, _, ok := strings.Cut(m.ID, "/"); ok && m.Group != agent.RoutingGroups {
+			shown[pid] = true
+		}
+	}
+	// the groups agents are listed, by the "group/<id>" MemberGroups names
+	// them as: a group magpie found is listed as auto/<model> (Ref), so
+	// by its entry's Group; a hidden or turned off one isn't here
+	groups, _ := provider.CatalogGroups()
+	names := make(map[string]provider.Entry, len(groups))
+	for _, g := range groups {
+		names[provider.GroupPrefix+g.Group] = g
+	}
+	in, by := provider.MemberGroups(), provider.GroupKept()
+	named := map[string]bool{}
+	out := []leftOutJSON{}
+	at := map[string]int{}
+	for _, e := range es {
+		pid := e.Provider.ID
+		if shown[pid] {
+			continue
+		}
+		i, ok := at[pid]
+		if !ok {
+			i, at[pid] = len(out), len(out)
+			out = append(out, leftOutJSON{ID: pid, Name: e.Provider.Name, Icon: e.Provider.Icon, Models: []string{}, Unlisted: e.Provider.Unlisted, Via: []string{}})
+		}
+		l := &out[i]
+		l.Models = append(l.Models, cmp.Or(e.Name, e.Model))
+		for _, g := range in[e.ID] {
+			if ge, ok := names[g]; ok {
+				if n := cmp.Or(ge.Name, ge.Group); !slices.Contains(l.Via, n) {
+					l.Via = append(l.Via, n)
+					named[n] = ge.Named
+				}
+			}
+		}
+		if !l.Unlisted {
+			for _, n := range by[e.ID] {
+				if !slices.Contains(l.By, n) {
+					l.By = append(l.By, n)
+				}
+			}
+		}
+	}
+	// the user's own groups before those magpie found (one a model the
+	// same on several providers), which the list may name only in part
+	for i := range out {
+		slices.SortStableFunc(out[i].Via, func(a, b string) int {
+			switch {
+			case named[a] == named[b]:
+				return 0
+			case named[a]:
+				return -1
+			}
+			return 1
+		})
+	}
+	return out
+}
+
 func agentModelsAPI(mux *http.ServeMux) {
 	// a model the agent picks sent in its vendor's fast mode, or not (#954):
 	// for is the option's fastFor, the agent whose requests it goes on. Ultra
@@ -364,7 +458,10 @@ func agentModelsAPI(mux *http.ServeMux) {
 		// own: its pickers offer models of the agent's own beside
 		// magpie's, which ownHidden leaves out (#1642); joins: shown only
 		// its picks, it takes in a provider's too (provider.PicksJoin)
-		writeJSON(rw, map[string]any{"models": agentModelList(a), "ordered": len(provider.ModelOrder(a.ListsFor())) > 0, "only": only,
+		// left: the providers its list leaves out, as they serve only
+		// through routing groups, which the list names (agentLeftOut)
+		models := agentModelList(a)
+		writeJSON(rw, map[string]any{"models": models, "left": agentLeftOut(models), "ordered": len(provider.ModelOrder(a.ListsFor())) > 0, "only": only,
 			"joins": provider.PicksJoin(a.ListsFor()),
 			"own":   a.OwnModels(a.Values()), "ownHidden": provider.OwnModelsHidden(a.ListsFor())})
 	})

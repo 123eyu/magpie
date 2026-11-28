@@ -1750,7 +1750,10 @@ func AddCopy(p Provider, from string) (string, error) {
 	if p.Fallback == nil {
 		p.Fallback = slices.Clone(src.Fallback)
 	}
-	p.Unlisted = p.Unlisted || src.Unlisted
+	// "Only through routing groups" (Unlisted) is not from's: the copy is
+	// in none of the user's routing groups, so kept for them no agent's
+	// list had it (Sec_211 on X: "0-onaiproxy 副本" was missing
+	// from Codex's list with its original). Its own editor ticks it again.
 	if p.HiddenDrawers == nil {
 		p.HiddenDrawers = slices.Clone(src.HiddenDrawers)
 	}

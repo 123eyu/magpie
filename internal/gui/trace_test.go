@@ -49,6 +49,9 @@ func TestMainView(t *testing.T) {
 		{url.Values{"view": {"plugins"}, "q": {strings.Repeat("智", 100)}}, "plugins&q=" + strings.Repeat("%E6%99%BA", 100)},
 		{url.Values{"view": {"plugins"}, "q": {strings.Repeat("智", 101)}}, "plugins&q="},
 		{url.Values{"view": {"settings"}, "q": {"kiro"}}, "settings"},
+		{url.Values{"view": {"providers"}, "edit": {"0-onaiproxy-2"}}, "providers&edit=0-onaiproxy-2"},
+		{url.Values{"view": {"providers"}, "edit": {"x&view=settings"}}, "providers"},
+		{url.Values{"view": {"settings"}, "edit": {"relay"}}, "settings"},
 	} {
 		if got := mainView(c.q); got != c.want {
 			t.Errorf("%v: %q, want %q", c.q, got, c.want)
