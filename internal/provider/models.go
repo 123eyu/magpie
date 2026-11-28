@@ -2964,11 +2964,25 @@ var kimiCodeAPI = map[string]string{
 
 // MakerPrice is a model's list price as the first vendor among the presets
 // that makes the models it serves lists it; for a call whose provider has
-// gone since.
+// gone since, or never was one of magpie's (Claude Code's own session).
+// A Claude model no catalog lists is at Anthropic's price as it told
+// Claude Code (claudeCodePrice), as ListPrice prices it for the anthropic
+// provider: Anthropic makes it, so that is its maker's price, and a call
+// made from Claude Code itself is not left unpriced (hagimix on X).
 func MakerPrice(model string) (catalog.Price, bool) {
-	for _, m := range pricedNames(model) {
+	names := pricedNames(model)
+	for _, m := range names {
 		if pr, ok := makerListPrice(m); ok {
 			return agyScoped(model, pr), true
+		}
+	}
+	for _, m := range names {
+		// as a vendor spells it too: anthropic/claude-mythos-5-3
+		if i := strings.LastIndexByte(m, '/'); i >= 0 {
+			m = m[i+1:]
+		}
+		if pr, ok := claudeCodePrice(m); ok {
+			return pr, true
 		}
 	}
 	if f, ok := mythosFable(model); ok {
@@ -3639,6 +3653,11 @@ func PricedName(model string) string {
 	n := pricedNames(model)
 	for _, name := range n {
 		if _, ok := makerListPrice(name); ok {
+			return name
+		}
+	}
+	for _, name := range n {
+		if _, ok := claudeCodePrice(name); ok {
 			return name
 		}
 	}
