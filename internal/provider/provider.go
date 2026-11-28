@@ -699,6 +699,18 @@ type Provider struct {
 	// that lists them away from the base URL requests go to (Xiaomi MiMo's
 	// plans are served at their own hosts, the list at api.xiaomimimo.com).
 	ModelsURL string `json:"modelsURL,omitempty"`
+	// MediaURL, when set, is the root the vendor's images and videos APIs
+	// are under, for one that serves them away from its chat URL (a relay
+	// with chat at /v1 and Volcengine Ark's images and video tasks at /v3;
+	// chenxiang on Discord): <MediaURL>/images/generations, and
+	// <MediaURL>/contents/generations/tasks or <MediaURL>/videos. Empty,
+	// they are under the chat URL, as before (MediaBase).
+	MediaURL string `json:"mediaURL,omitempty"`
+	// MediaAPI is the format images and videos are asked in: "" for
+	// auto (Volcengine Ark's at an ark.*.volces.com host, else OpenAI's),
+	// MediaOpenAI or MediaArk as the user picked. A relay's host never
+	// makes it Ark.
+	MediaAPI string `json:"mediaAPI,omitempty"`
 	// ListOff is the editor's Fetch the model list unticked (axelburks on
 	// Discord): the vendor's list is never asked for, by a Fetch, a
 	// Refresh, a test or a schedule, and the models served are the ids the
@@ -2073,7 +2085,7 @@ func normalize(p Provider) Provider {
 		// BaseURL, with a key), with a Google token that no other address
 		// is to be sent: the URLs of a provider put in providers.json by
 		// hand are dropped. It has one key, or none.
-		p.Chat, p.Responses, p.Anthropic, p.Gemini, p.Decide = "", "", "", "", ""
+		p.Chat, p.Responses, p.Anthropic, p.Gemini, p.Decide, p.MediaURL = "", "", "", "", "", ""
 		p.Key = strings.TrimSpace(p.Key)
 		p.KeyName, p.Keys, p.KeyProtocol, p.KeyWeight, p.KeyPlan = "", nil, "", 0, ""
 		if p.Key == "" && p.Vertex != nil && p.Vertex.BaseURL != "" {
@@ -2084,7 +2096,7 @@ func normalize(p Provider) Provider {
 		}
 	}
 	p.remoteMagpieEndpoints()
-	for _, u := range []*string{&p.Chat, &p.Responses, &p.Anthropic, &p.Gemini, &p.Decide, &p.Website, &p.KeysURL} {
+	for _, u := range []*string{&p.Chat, &p.Responses, &p.Anthropic, &p.Gemini, &p.Decide, &p.MediaURL, &p.Website, &p.KeysURL} {
 		// a scheme already there stays (WithScheme), whatever its case; one
 		// saved twice by an older editor is one again
 		*u = strings.TrimRight(WithScheme(*u, "https"), "/")
@@ -2100,6 +2112,7 @@ func normalize(p Provider) Provider {
 		}
 	}
 	p.Gemini = GeminiBase(p.Gemini)
+	p.MediaAPI = MediaAPIOf(p.MediaAPI)
 	p.aiStudioNative()
 	// a pick whose URL is gone (cleared from the CLI) is no pick
 	if p.BaseAPI != "" && p.baseOf(p.BaseAPI) == "" {

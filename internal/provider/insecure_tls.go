@@ -87,11 +87,11 @@ func pinName(u string) string { return strings.ToLower(hostnameOf(strings.TrimSp
 
 // UncheckedHosts are the base URLs whose host's certificate is taken as it
 // is when the provider has InsecureTLS: its own endpoints (a Remote
-// magpie's other addresses too), never a models, balance or image URL
-// elsewhere.
+// magpie's other addresses too, and the images and videos URL it was given,
+// MediaURL), never a models, balance or image URL elsewhere.
 func (p Provider) UncheckedHosts() []string {
 	var out []string
-	for _, u := range append([]string{p.Chat, p.Responses, p.Anthropic, p.Gemini, p.Decide}, p.Addresses...) {
+	for _, u := range append([]string{p.Chat, p.Responses, p.Anthropic, p.Gemini, p.Decide, p.MediaURL}, p.Addresses...) {
 		if u != "" {
 			out = append(out, u)
 		}

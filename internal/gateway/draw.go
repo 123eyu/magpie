@@ -1748,7 +1748,7 @@ func (s *Server) drawImages(ctx context.Context, p provider.Provider, model stri
 	if isModelScope(p) {
 		return s.drawModelScope(ctx, p, model, d)
 	}
-	if isArk(p) {
+	if arkMedia(p) {
 		return s.drawArk(ctx, p, model, d)
 	}
 	if dashScopeDraws(p, model) {
@@ -1766,6 +1766,8 @@ func (s *Server) drawImages(ctx context.Context, p provider.Provider, model stri
 	if drawsCodex(p) || drawsGrok(p) {
 		base = strings.TrimRight(p.Base(provider.Responses), "/")
 	}
+	// the images API's own root, where the user gave one apart from chat
+	base = cmp.Or(p.MediaBase(), base)
 	var body []byte
 	var ct, url string
 	m := strings.ToLower(model)

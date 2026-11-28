@@ -151,7 +151,7 @@ func customVideomakersOf(p provider.Provider, avail func() []catalog.Model) []ca
 	for i := range out {
 		out[i].Provider = p.ID
 	}
-	if isArk(p) {
+	if arkMedia(p) {
 		// a Volcengine Ark key's Seedance models (pay-as-you-go, or one
 		// added by hand), those its list has and those the user picked, as
 		// Drawers takes a Seedream; Ark makes them at its own
@@ -181,11 +181,12 @@ func customVideomakersOf(p provider.Provider, avail func() []catalog.Model) []ca
 }
 
 // videoBase is the root of the OpenAI-shaped videos API of another magpie
-// or a provider set up with a base URL: its Chat base, or a Responses-only
+// or a provider set up with a base URL: the images and videos URL the user
+// gave it (provider.MediaBase), else its Chat base, or a Responses-only
 // relay's Responses base, under which it serves the images API too; a
 // plugin's fetch whatever API its chat is on (Provider.OpenAIBase).
 func videoBase(p provider.Provider) string {
-	return strings.TrimRight(cmp.Or(p.OpenAIBase(), p.Base(provider.Responses)), "/")
+	return cmp.Or(p.MediaBase(), strings.TrimRight(cmp.Or(p.OpenAIBase(), p.Base(provider.Responses)), "/"))
 }
 
 // filmsCustom is whether p makes model as its model list says
@@ -215,12 +216,12 @@ func arkFilms(p provider.Provider, model string) bool {
 	if p.Preset == "volcengine" && slices.ContainsFunc(p.PlanVideos(), func(m catalog.Model) bool { return m.ID == model }) {
 		return true
 	}
-	return isArk(p) && filmsCustom(p, model)
+	return arkMedia(p) && filmsCustom(p, model)
 }
 
-// arkTasks is where p, at Volcengine Ark, starts and is asked after a video.
+// arkTasks is where p, in Ark's format, starts and is asked after a video.
 func arkTasks(p provider.Provider) string {
-	return cmp.Or(strings.TrimRight(p.Base(provider.Responses), "/"), strings.TrimRight(p.Base(provider.Chat), "/")) + "/contents/generations/tasks"
+	return arkRoot(p) + "/contents/generations/tasks"
 }
 
 // keyMark is the mark of the key p sends with, in the id of a video it
@@ -1034,7 +1035,7 @@ func asOurs(b []byte, p provider.Provider, id string) (map[string]any, error) {
 // another magpie, or a provider whose model list marks video models, but
 // for xAI's own API (filmsXAI), which has none.
 func filmsOpenAI(p provider.Provider) bool {
-	return p.IsRemoteMagpie() || len(customVideomakers(p)) > 0 && !isArk(p) && !xaiHost(p)
+	return p.IsRemoteMagpie() || len(customVideomakers(p)) > 0 && !arkMedia(p) && !xaiHost(p)
 }
 
 // xaiHost is whether p is a provider set up with a key for xAI's own API.
@@ -1078,7 +1079,7 @@ func (s *Server) videoStatus(ctx context.Context, p provider.Provider, vendorID 
 	}
 	var st videoState
 	at := grokVideosRoot(p) + "/videos/" + url.PathEscape(vendorID)
-	ark := p.Preset == "volcengine" || isArk(p)
+	ark := p.Preset == "volcengine" || arkMedia(p)
 	if ark {
 		at = arkTasks(p) + "/" + url.PathEscape(vendorID)
 	}
@@ -1346,7 +1347,7 @@ func (s *Server) startVideo(ctx context.Context, r *http.Request, p provider.Pro
 		// an Ark key's video is a task of that key's account: its id names
 		// the key, as a plan's does, and it is asked after there; an xAI
 		// key's request likewise
-		onKey = isArk(p) || filmsXAI(p, model)
+		onKey = arkMedia(p) || filmsXAI(p, model)
 	} else if makesMiniMaxVideo(p, model) || makesDashScopeVideo(p, model) {
 		// on the first key a chat for the model would go to that the
 		// calling key may use, the next while one's plan doesn't make H3
@@ -1497,7 +1498,7 @@ func videoAsker(r *http.Request, p provider.Provider) (provider.Provider, string
 	if !held {
 		return p, ""
 	}
-	if !p.IsRemoteMagpie() && (filmsOpenAI(p) || filmsMiniMax(p) || filmsDashScope(p) || filmsWorkBuddy(p) || isArk(p) && len(customVideomakers(p)) > 0) {
+	if !p.IsRemoteMagpie() && (filmsOpenAI(p) || filmsMiniMax(p) || filmsDashScope(p) || filmsWorkBuddy(p) || arkMedia(p) && len(customVideomakers(p)) > 0) {
 		if p.Key == "" && p.Account == nil || accountAllowed(who, candidate{p: p}) {
 			return p, ""
 		}

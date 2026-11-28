@@ -10559,9 +10559,11 @@ function drawEditor(p, presetID) {
     };
     fillEndpoints();
     inner.append(eps);
-    const mu = input(draft.modelsURL, "https://…/v1/models", "url");
-    mu.oninput = () => { draft.modelsURL = mu.value; };
-    inner.append(...field(t("Models URL"), mu, t("Where the vendor lists its models, when that isn't under the base URL; asked with the key")));
+    // Models URL, and Image and video URL with its format, from moreurls.js
+    const mu = el("i");
+    mu.hidden = 1;
+    inner.append(mu);
+    import("./moreurls.js").then(() => mu.replaceWith(...moreURLFields(p)), () => {});
     const cat = input(draft.catalog, t("models.dev ids, e.g. openai, deepseek"));
     cat.oninput = () => { draft.catalog = cat.value; };
     inner.append(...field(t("Catalog"), cat, t("Display names, reasoning levels and list prices for the models; for a gateway that serves several vendors, list them all, first match wins")));
@@ -10667,7 +10669,7 @@ function drawEditor(p, presetID) {
     if (p?.takesListOff) body.listOff = !!draft.listOff;
     if (p) { body.fallback = draft.fallback; body.unlisted = draft.unlisted; body.hiddenDrawers = draft.hiddenDrawers; body.hiddenVideomakers = draft.hiddenVideomakers; body.noModels = noneChosen(); body.bestInFamily = bestChosen(); body.freeOnly = freeChosen(); body.modelPrefs = modelPrefsOfDraft(); Object.assign(body, routingOfDraft(p)); }
     body.searches = !!draft.searches && searchable();
-    for (const k of ["libraryMCP", "libraryShared", "connectAgents"]) if (draft[k] != null) body[k] = draft[k];
+    for (const k of ["libraryMCP", "libraryShared", "connectAgents", "mediaURL", "mediaAPI"]) if (draft[k] != null) body[k] = draft[k];
     body.pinUpstream = !!draft.pinUpstream;
     if (twoKeyHeaders()) body.authHeader = draft.authHeader || "";
     body.unredacted = !!draft.unredacted;

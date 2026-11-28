@@ -37,7 +37,7 @@ const providerUsage = `usage:
   magpie provider <id>                    show one provider and its models
   magpie provider add <preset> <key>      add a preset vendor   e.g. magpie provider add deepseek sk-…
                                           again, it adds another (deepseek-2); k=v pairs too: id, name, header.X-Foo
-  magpie provider add <name> k=v…         add a custom vendor   k: url, anthropic, responses, gemini, decide, key, models, catalog, icon, header.X-Foo, balance, balance.path, balance.method, balance.token, models.url, list, search, user-agent,
+  magpie provider add <name> k=v…         add a custom vendor   k: url, anthropic, responses, gemini, decide, key, models, catalog, icon, header.X-Foo, balance, balance.path, balance.method, balance.token, models.url, media.url, media.api, list, search, user-agent,
                                           access.key, access.secret (a Volcengine access key, or a Tencent Cloud SecretId and SecretKey, for its plan's windows;
                                           on Amazon Bedrock an AWS access key, which signs requests in place of an API key),
                                           access.token (a temporary AWS access key's session token)
@@ -202,6 +202,8 @@ const providerUsage = `usage:
                                    (a System One API, POST …/systemone: it routes groups, its models are never an agent's)
        magpie provider add anthropic sk-… id=anthropic-ws2 name="Anthropic WS2" header.anthropic-workspace-id=wrkspc_…
        magpie provider set my-relay models.url=https://relay.example.com/api/models catalog=
+       magpie provider set my-relay media.url=https://relay.example.com/v3 media.api=ark
+                                   (its images and videos at /v3 in Volcengine Ark's format, chat at its url)
        magpie provider set volcengine list=off models=ep-20261108-abcde
                                    (its model list is never asked for: only the models given by id are served)
        magpie provider set my-relay resolve.relay.example.com=10.0.0.5,dns:gw.corp.example
@@ -1359,6 +1361,17 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			p.SessionToken = v
 		case "models.url":
 			p.ModelsURL = v
+		case "media.url":
+			// where its images and videos APIs are, apart from chat
+			// (chenxiang on Discord: Ark's at /v3, chat at /v1)
+			p.MediaURL = v
+		case "media.api":
+			// the format they are asked in: auto, openai or ark
+			if a := provider.MediaAPIOf(v); a != "" || strings.EqualFold(strings.TrimSpace(v), "auto") || strings.TrimSpace(v) == "" {
+				p.MediaAPI = a
+			} else {
+				return fmt.Errorf("media.api=auto|openai|ark, not %q", v)
+			}
 		case "list":
 			// off: the vendor's model list is never asked for, and only
 			// the models given by id are served (axelburks on Discord)

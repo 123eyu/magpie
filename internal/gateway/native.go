@@ -40,7 +40,6 @@ package gateway
 
 import (
 	"bytes"
-	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -109,7 +108,7 @@ func (s *Server) native(w http.ResponseWriter, r *http.Request) {
 	}
 	// on the account or key its agent is set to use (agentHeld)
 	p := nativeAgentAccount(r, *found)
-	if !p.IsRemoteMagpie() && isArk(p) && nativeArkPath(r.Method, path) {
+	if !p.IsRemoteMagpie() && arkMedia(p) && nativeArkPath(r.Method, path) {
 		s.nativeArk(w, r, p, call, fail)
 		return
 	}
@@ -162,7 +161,7 @@ func (s *Server) nativeArk(w http.ResponseWriter, r *http.Request, p provider.Pr
 	w, done := restoring(w)
 	defer done()
 	ctx := s.metered(p.Via(r.Context()), p, "")
-	at := cmp.Or(strings.TrimRight(p.Base(provider.Responses), "/"), strings.TrimRight(p.Base(provider.Chat), "/")) + "/" + path
+	at := arkRoot(p) + "/" + path
 	if q := r.URL.RawQuery; q != "" {
 		at += "?" + q
 	}

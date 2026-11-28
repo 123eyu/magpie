@@ -30,14 +30,14 @@ func TestProviderSaveKeepsWhatTheEditorDoesntShow(t *testing.T) {
 			t.Fatalf("%d %s", w.Code, w.Body)
 		}
 	}
-	type kept struct{ Family, Website, KeysURL, BalanceURL, BalancePath, ModelsURL string }
+	type kept struct{ Family, Website, KeysURL, BalanceURL, BalancePath, ModelsURL, MediaURL, MediaAPI string }
 	keptOf := func(id string) kept {
 		t.Helper()
 		p, err := provider.Find(id)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return kept{p.Family, p.Website, p.KeysURL, p.BalanceURL, p.BalancePath, p.ModelsURL}
+		return kept{p.Family, p.Website, p.KeysURL, p.BalanceURL, p.BalancePath, p.ModelsURL, p.MediaURL, p.MediaAPI}
 	}
 
 	// a preset's provider: the editor sends its key, picks and settings,
@@ -53,6 +53,7 @@ func TestProviderSaveKeepsWhatTheEditorDoesntShow(t *testing.T) {
 	ds.BalanceURL = "https://my.example.com/balance"
 	ds.BalancePath = "data.left"
 	ds.ModelsURL = "https://my.example.com/v1/models"
+	ds.MediaURL, ds.MediaAPI = "https://my.example.com/v3", provider.MediaArk
 	if err := provider.Save(ds); err != nil {
 		t.Fatal(err)
 	}
@@ -63,10 +64,12 @@ func TestProviderSaveKeepsWhatTheEditorDoesntShow(t *testing.T) {
 	}
 
 	// a custom one: the editor sends its Balance and Models URLs, never
-	// its tag, website or key page
+	// its tag, website or key page, and its Image and video URL and
+	// format only once changed (moreurls.js)
 	post(`{"id":"relay","name":"Relay","key":"sk-r","chat":"http://127.0.0.1:1/v1","icon":"generic","new":true}`)
 	r, _ := provider.Find("relay")
 	r.Family, r.Website, r.KeysURL = "relays", "https://relay.example.com", "https://relay.example.com/keys"
+	r.MediaURL, r.MediaAPI = "https://relay.example.com/v3", provider.MediaArk
 	if err := provider.Save(*r); err != nil {
 		t.Fatal(err)
 	}
@@ -74,5 +77,16 @@ func TestProviderSaveKeepsWhatTheEditorDoesntShow(t *testing.T) {
 	post(`{"id":"relay","from":"relay","name":"Relay","key":"","chat":"http://127.0.0.1:1/v1","icon":"generic","balanceURL":"","balancePath":"","modelsURL":"","models":[],"headers":{}}`)
 	if got := keptOf("relay"); got != want {
 		t.Errorf("custom editor Save:\n got %+v\nwant %+v", got, want)
+	}
+	// the format changed alone: the URL stays; both sent empty: gone
+	post(`{"id":"relay","from":"relay","name":"Relay","key":"","chat":"http://127.0.0.1:1/v1","icon":"generic","mediaAPI":"openai","models":[],"headers":{}}`)
+	want.MediaAPI = provider.MediaOpenAI
+	if got := keptOf("relay"); got != want {
+		t.Errorf("format changed:\n got %+v\nwant %+v", got, want)
+	}
+	post(`{"id":"relay","from":"relay","name":"Relay","key":"","chat":"http://127.0.0.1:1/v1","icon":"generic","mediaURL":"","mediaAPI":"","models":[],"headers":{}}`)
+	want.MediaURL, want.MediaAPI = "", ""
+	if got := keptOf("relay"); got != want {
+		t.Errorf("both cleared:\n got %+v\nwant %+v", got, want)
 	}
 }

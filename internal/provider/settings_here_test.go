@@ -16,7 +16,7 @@ var (
 		"ID", "Name", "Was", "Gave", "Icon", "IconFrom", "Preset", "Catalog", "Website", "KeysURL", "IconURL",
 		"Hidden", "Quiet", "Tucked", "Forgot", "AccountNames",
 		"Key", "AccessKeyID", "SecretAccessKey", "SessionToken", "KeyName", "Keys", "KeyProtocol", "KeyWeight", "KeyPlan",
-		"Chat", "Responses", "Anthropic", "Gemini", "GeminiFilled", "Decide", "BaseAPI", "ModelsURL", "Addresses",
+		"Chat", "Responses", "Anthropic", "Gemini", "GeminiFilled", "Decide", "BaseAPI", "ModelsURL", "MediaURL", "MediaAPI", "Addresses",
 		"AuthHeader", "ClientCert", "ClientKey", "ServerCA", "ServerPin", "ZhipuTeam", "Vertex",
 	}
 	hereFields = []string{"KeepLogin", "KeepLoginAs", "SwitchOnly", "AutoSwitch", "RestartApp", "KeepSelf", "ThisDevice", "Account"}

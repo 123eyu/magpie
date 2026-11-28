@@ -313,6 +313,10 @@ type providerJSON struct {
 	// none (provider.TakesOwnBalance)
 	TakesOwnBalance bool   `json:"takesOwnBalance,omitempty"`
 	ModelsURL       string `json:"modelsURL,omitempty"`
+	// where its images and videos are asked, and in which format
+	// (provider.MediaURL, MediaAPI)
+	MediaURL string `json:"mediaURL,omitempty"`
+	MediaAPI string `json:"mediaAPI,omitempty"`
 	// its vendor's list is never asked for, and only the models added by
 	// id are served (provider.Provider.ListOff); TakesListOff: a key's
 	// provider, where it can be turned off
@@ -1068,7 +1072,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		ID: p.ID, Name: p.Name, Icon: p.Icon, IconFrom: p.IconFrom, Preset: p.Preset, Host: p.Host(),
 		Chat: p.Chat, Responses: p.Responses, Anthropic: p.Anthropic, Gemini: p.Gemini, Decide: p.Decide, BaseAPI: p.BaseAPI, ModelTest: p.ModelTest(), TestsAs: p.TestClients(), TestPicks: p.TestPicks(), DecideTest: p.AsksDecideModels(), MarksKinds: p.MarksKinds(),
 		Catalog: p.Catalog, Website: p.Website, KeysURL: p.KeysURL,
-		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountWindowAmounts: p.AccountWindowAmounts, AccountNames: p.AccountNames, Headers: p.Headers, ExtraBody: p.ExtraBody, ReplyHeaders: p.ReplyHeaders, PassHeaders: p.PassHeaders, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, CountFree: p.CountFree, Billing: p.Billing, BillingKind: p.BillingKind(), InsecureTLS: p.InsecureTLS, TakesInsecureTLS: p.TakesInsecureTLS(), HTTP1: p.HTTP1, ClientCert: tilde(p.ClientCert), ClientKey: tilde(p.ClientKey), ServerCA: tilde(p.ServerCA), TakesClientCert: p.TakesClientCert(), ServerPin: p.ServerPin, TakesServerPin: p.TakesServerPin(), Resolve: p.Resolve, TakesResolve: p.TakesResolve(), Addresses: p.Addresses, Socket: p.Socket, TakesSocket: p.TakesSocket(), LimitRestOff: p.LimitRestOff, UpstreamProviders: p.UpstreamProviders, ImageFilesOff: p.ImageFilesOff, TakesImageFiles: p.TakesImageFiles(), NativeCompaction: p.NativeCompaction, CarriesCompaction: p.CarriesCompaction(), PassUserAgent: !p.MagpieUserAgent, OwnClient: p.OwnClient(), PassErrors: p.PassErrors, TakesPassErrors: p.TakesPassErrors(), AuthHeader: p.AuthHeader, BothAuth: p.BothAuth(), BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, BalanceMethod: p.BalanceMethod, NoBalanceProbe: p.NoBalanceProbe, ModelsURL: p.ModelsURL, ListOff: p.ListsOff(), TakesListOff: p.Account == nil && !p.IsPlugin() && !p.DecideOnly(), TakesModelHeaders: p.Account == nil, DecideAPIKind: p.DecideAPIKind(),
+		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountWindowAmounts: p.AccountWindowAmounts, AccountNames: p.AccountNames, Headers: p.Headers, ExtraBody: p.ExtraBody, ReplyHeaders: p.ReplyHeaders, PassHeaders: p.PassHeaders, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, CountFree: p.CountFree, Billing: p.Billing, BillingKind: p.BillingKind(), InsecureTLS: p.InsecureTLS, TakesInsecureTLS: p.TakesInsecureTLS(), HTTP1: p.HTTP1, ClientCert: tilde(p.ClientCert), ClientKey: tilde(p.ClientKey), ServerCA: tilde(p.ServerCA), TakesClientCert: p.TakesClientCert(), ServerPin: p.ServerPin, TakesServerPin: p.TakesServerPin(), Resolve: p.Resolve, TakesResolve: p.TakesResolve(), Addresses: p.Addresses, Socket: p.Socket, TakesSocket: p.TakesSocket(), LimitRestOff: p.LimitRestOff, UpstreamProviders: p.UpstreamProviders, ImageFilesOff: p.ImageFilesOff, TakesImageFiles: p.TakesImageFiles(), NativeCompaction: p.NativeCompaction, CarriesCompaction: p.CarriesCompaction(), PassUserAgent: !p.MagpieUserAgent, OwnClient: p.OwnClient(), PassErrors: p.PassErrors, TakesPassErrors: p.TakesPassErrors(), AuthHeader: p.AuthHeader, BothAuth: p.BothAuth(), BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, BalanceMethod: p.BalanceMethod, NoBalanceProbe: p.NoBalanceProbe, ModelsURL: p.ModelsURL, MediaURL: p.MediaURL, MediaAPI: p.MediaAPI, ListOff: p.ListsOff(), TakesListOff: p.Account == nil && !p.IsPlugin() && !p.DecideOnly(), TakesModelHeaders: p.Account == nil, DecideAPIKind: p.DecideAPIKind(),
 		Ready: p.Ready(), Chosen: p.PicksOf(avail), Agents: make([]providerAgent, 0, len(agents)),
 		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, UseFirst: p.UseFirst, NoStandIn: p.NoStandIn, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, SwitchOnly: p.SwitchOnly, RestartApp: p.RestartApp, AutoSwitch: p.AutoSwitch, Self: p.SelfAnswered(), KeepSelf: p.KeepSelf, ThisDevice: p.ThisDevice, CapStop: p.CapStop, CapCareful: p.CapCareful, Unlisted: p.Unlisted, NoModels: p.ServesNone(), BestInFamily: p.BestInFamily && len(p.Models) == 0 && !p.NoModels, FreeOnly: p.FreeOnly && len(p.Models) == 0 && !p.NoModels, Off: p.Off, Contexts: p.Contexts,
 		MaxConcurrency: p.MaxConcurrency, PluginConcurrency: p.PluginConcurrency(), MaxAccounts: p.MaxAccounts, PluginAccounts: p.PluginAtOnce(), PriceRate: p.PriceRate, KeyPriceRates: p.KeyPriceRates, TopUpRate: p.TopUpRate, RateReadHours: p.RateReadHours, KeyGroupRates: keyGroupRatesOf(p), KeyRateFactors: p.KeyRateFactors, AgentAccounts: p.AgentAccounts,
@@ -2202,6 +2206,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// router a Library server (library.SetRemoteMCP); left out,
 			// it stays as it is
 			LibraryMCP *bool `json:"libraryMCP"`
+			// MediaURL and MediaAPI are a custom provider's Image and
+			// video URL and its format (moreurls.js), sent once changed;
+			// left out, they are kept
+			MediaURL *string `json:"mediaURL"`
+			MediaAPI *string `json:"mediaAPI"`
 			// LibraryShared, on a Remote magpie, is the switch for its
 			// Library's skills and prompts (library.SetBorrow)
 			LibraryShared *bool `json:"libraryShared"`
@@ -2635,6 +2644,12 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			if req.AccessKeyID != nil {
 				in.AccessKeyID = strings.TrimSpace(*req.AccessKeyID)
 			}
+			if req.MediaURL != nil {
+				in.MediaURL = *req.MediaURL
+			}
+			if req.MediaAPI != nil {
+				in.MediaAPI = *req.MediaAPI
+			}
 			in.SecretAccessKey = strings.TrimSpace(in.SecretAccessKey)
 			in.SessionToken = strings.TrimSpace(in.SessionToken)
 			var old *provider.Provider
@@ -2969,6 +2984,12 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 						in.BalancePath = cmp.Or(in.BalancePath, old.BalancePath)
 						in.BalanceMethod = cmp.Or(in.BalanceMethod, old.BalanceMethod)
 						in.ModelsURL = cmp.Or(in.ModelsURL, old.ModelsURL)
+					}
+					if req.MediaURL == nil {
+						in.MediaURL = old.MediaURL
+					}
+					if req.MediaAPI == nil {
+						in.MediaAPI = old.MediaAPI
 					}
 				}
 				// the Base URL's API, as picked in the editor; a save that

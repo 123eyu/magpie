@@ -25,6 +25,7 @@ package gateway
 // (axelburks on Discord); stream is turned away, its events being Ark's.
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -44,6 +45,27 @@ var isArk = func(p provider.Provider) bool {
 		}
 	}
 	return false
+}
+
+// arkMedia is whether p's images and videos are asked in Volcengine Ark's
+// format: the user picked it (provider.MediaArk), or left the format on
+// auto and p is at Ark's own host (isArk). A relay's host never makes it
+// Ark, and one set to OpenAI's format is never asked in Ark's.
+func arkMedia(p provider.Provider) bool {
+	switch p.MediaAPI {
+	case provider.MediaArk:
+		return !p.IsRemoteMagpie()
+	case provider.MediaOpenAI:
+		return false
+	}
+	return isArk(p)
+}
+
+// arkRoot is the root Ark's images and video tasks are under at p: the
+// images and videos URL the user gave (provider.MediaBase), else its
+// Responses or chat base, as Ark serves them beside its chat.
+func arkRoot(p provider.Provider) string {
+	return cmp.Or(p.MediaBase(), strings.TrimRight(p.Base(provider.Responses), "/"), strings.TrimRight(p.Base(provider.Chat), "/"))
 }
 
 // arkRatioSizes are the 2K sizes Ark's doc lists for each ratio (Seedream
@@ -147,11 +169,7 @@ func (s *Server) drawArk(ctx context.Context, p provider.Provider, model string,
 	if err != nil {
 		return drawn{}, http.StatusBadRequest, err
 	}
-	url := strings.TrimRight(p.Base(provider.Chat), "/")
-	if url == "" {
-		url = strings.TrimRight(p.Base(provider.Responses), "/")
-	}
-	url += "/images/generations"
+	url := cmp.Or(p.MediaBase(), strings.TrimRight(p.Base(provider.Chat), "/"), strings.TrimRight(p.Base(provider.Responses), "/")) + "/images/generations"
 	return s.eachDrawing(max(d.N, 1), func() (drawn, int, error) {
 		b, code, err := s.send(ctx, p, url, "application/json", body, true)
 		if err != nil {

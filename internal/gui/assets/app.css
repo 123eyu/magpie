@@ -4031,9 +4031,9 @@ body:not(.side-nav) #addSheet > .row-head.stuck::before { opacity: 1; box-shadow
 .editor .pair { display: flex; gap: 8px; align-items: center; }
 .editor .pair input:first-child { flex: 1; }
 /* the method then the URL; where the column is narrow the URL takes a line of its own */
-.editor .pair.bal-ask { flex-wrap: wrap; }
-.editor .pair.bal-ask input { flex: 1 1 160px; min-width: 0; }
-.editor .pair.bal-ask .segs { flex: none; align-self: center; }
+.editor .pair.bal-ask, .editor .pair.media-ask { flex-wrap: wrap; }
+.editor .pair.bal-ask input, .editor .pair.media-ask input { flex: 1 1 160px; min-width: 0; }
+.editor .pair.bal-ask .segs, .editor .pair.media-ask .segs { flex: none; align-self: center; }
 .editor .pair.bal-ask > .tick { flex-basis: 100%; }
 .editor .bal-found { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 12px; line-height: 1.45; color: var(--muted); }
 .editor .bal-found span { overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }

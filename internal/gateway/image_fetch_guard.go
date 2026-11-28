@@ -145,10 +145,11 @@ func hostOf(u string) string {
 }
 
 // vendorClient downloads what a vendor answered with by URL: from public
-// addresses, and the hosts its own endpoints are at.
+// addresses, and the hosts its own endpoints are at (its images and videos
+// URL among them).
 func vendorClient(p provider.Provider) *http.Client {
 	var own []string
-	for _, u := range []string{p.Chat, p.Responses, p.Anthropic, p.Gemini} {
+	for _, u := range []string{p.Chat, p.Responses, p.Anthropic, p.Gemini, p.MediaURL} {
 		if h := hostOf(u); h != "" {
 			own = append(own, h)
 		}
