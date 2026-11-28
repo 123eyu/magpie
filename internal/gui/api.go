@@ -2551,6 +2551,20 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
+	// how many hours before a used-up week renews no Codex reset is spent
+	// by itself for it, 0 for never (the default; Steve055s on X)
+	mux.HandleFunc("POST /api/settings/codex-reset-wait", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Hours int }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := provider.SetCodexResetWait(in.Hours); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
 	// whether a Codex account spends its credits once its allowance is
 	// used up, the Usage card's toggle, set on its own, and with Last
 	// whether only after everything else (left as it is when not sent)

@@ -40,6 +40,11 @@ type ResetCredits struct {
 	// lists them, where it only said the first). Empty when the vendor
 	// didn't say.
 	Each []ResetCard `json:"each,omitempty"`
+	// WeekEnds is when the account's week, used up at the reading,
+	// renews (weekUsedUp): the GUI says a reset used by itself waits for
+	// it when that is within the hours set (settings' ResetWait). Nil
+	// while the week isn't used up.
+	WeekEnds *time.Time `json:"weekEnds,omitempty"`
 	// untilUnread: when they run out couldn't be read, so a nil Until is
 	// not known, not "never" — the reset about to run out is looked at
 	// again soon rather than left for hours (SpendExpiringCodexResets)
@@ -228,6 +233,11 @@ func codexResets(ctx context.Context, base, token, accountID string, count int) 
 // (settings' ResetDays), so none was spent.
 const resetNoneInDays = "none_in_days"
 
+// resetWeekRenews is magpie's own outcome too: the used-up week renews
+// within the hours set to wait for it (settings' ResetWait), and the reset
+// that would be spent is still there after, so none was (waitsForWeek).
+const resetWeekRenews = "week_renews"
+
 // ResetOutcome is what spending a reset did: Code is the vendor's word for
 // it (reset, nothing_to_reset, no_credit, already_redeemed) and Windows
 // how many windows started again. Claude's resets are gone (9bf6d4352,
@@ -253,6 +263,8 @@ func (o ResetOutcome) Text() string {
 		return "that reset was already used"
 	case resetNoneInDays:
 		return "no reset has the days left set for one used by itself, so none was used"
+	case resetWeekRenews:
+		return "the week renews within the hours set to wait for it, and the reset is still there after, so none was used"
 	}
 	return o.Code
 }
@@ -305,6 +317,19 @@ func useCodexReset(ctx context.Context, user, why string) (ResetOutcome, error) 
 // spendCodexReset spends user's reset credit, the one that runs out first
 // when credit is "", the use kept as made for why.
 func spendCodexReset(ctx context.Context, user, credit, why string) (ResetOutcome, error) {
+	return spendCodexResetFor(ctx, user, credit, why, nil)
+}
+
+// spendWeekReset spends one of user's resets for its week, used up until
+// week: none while the week renews soon and the reset would outlast it
+// (waitsForWeek).
+func spendWeekReset(ctx context.Context, user string, week *time.Time) (ResetOutcome, error) {
+	return spendCodexResetFor(ctx, user, "", ResetUsedWeek, week)
+}
+
+// spendCodexResetFor is spendCodexReset, and for a week used up until week
+// (nil: not known), none spent while the week is waited for.
+func spendCodexResetFor(ctx context.Context, user, credit, why string, week *time.Time) (ResetOutcome, error) {
 	user, tok, accountID, err := codexUserToken(ViaLogin(ctx, "codex", user), user)
 	if err != nil {
 		return ResetOutcome{}, err
@@ -336,6 +361,10 @@ func spendCodexReset(ctx context.Context, user, credit, why string) (ResetOutcom
 	if why != ResetUsedByHand && !resetInDays(w.expiresOf(credit), time.Now()) {
 		// judged again here, at the spend: by itself, never one out of range
 		return ResetOutcome{Code: resetNoneInDays}, nil
+	}
+	if why == ResetUsedWeek && waitsForWeek(week, w.expiresOf(credit), time.Now()) {
+		// judged here, on the reset this spend picked, read just now
+		return ResetOutcome{Code: resetWeekRenews}, nil
 	}
 	out, err := consumeCodexReset(ctx, base, tok, accountID, credit, newRedeemID())
 	if err != nil {

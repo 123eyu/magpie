@@ -583,6 +583,10 @@
       <div class="who"><div class="name" data-t>Days left for one used by itself</div><div class="sub wraps" data-t>Only a reset with this many days left before it expires is used by itself, the soonest first. Empty is any; using one by hand isn't held to it.</div></div>
       <div id="codexResetDaysPick"></div>
     </div>
+    <div class="row pref" id="codexResetWaitRow" hidden>
+      <div class="who"><div class="name" data-t>Wait for a week about to renew</div><div class="sub wraps" data-t>For every account with "when its week runs out" on: no reset is used for a used-up week that renews this soon anyway, unless the reset would expire by then. Until it renews, requests go on the account's credits or are refused.</div></div>
+      <div id="codexResetWaitPick"></div>
+    </div>
   </div>
   <div class="list prefs" id="codexWarmList" data-feature="warmups">
     <div class="row pref">

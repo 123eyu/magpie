@@ -171,6 +171,31 @@ func SetCodexResetDays(least, most int) error {
 	return settings.Save(s)
 }
 
+// SetCodexResetWait sets how many hours before a used-up week renews by
+// itself no reset is spent for it (settings' CodexResetWait), for every
+// account: from 1 to settings.CodexResetWaitMost, or 0 for never.
+func SetCodexResetWait(hours int) error {
+	if hours < 0 || hours > settings.CodexResetWaitMost {
+		return fmt.Errorf("a used-up week is waited for from 1 to %d hours before it renews, or 0 for never, not %d", settings.CodexResetWaitMost, hours)
+	}
+	s := settings.Load()
+	s.CodexResetWait = hours
+	return settings.Save(s)
+}
+
+// waitsForWeek says whether the reset that runs out at until (nil: never)
+// is kept, not spent by itself, for a used-up week that renews at week:
+// the week renews within the hours set (settings' ResetWait; Steve055s on
+// X) and the reset is still there after it. One that runs out by the
+// renewal is lost unused anyway, so it is spent.
+func waitsForWeek(week, until *time.Time, now time.Time) bool {
+	wait := settings.Shared().ResetWait()
+	if wait <= 0 || week == nil || week.Round(0).Sub(now.Round(0)) > wait {
+		return false
+	}
+	return until == nil || until.After(*week)
+}
+
 var autoReset = autoResets{file: "codex-autoreset.json"}
 
 type autoResets struct {
@@ -214,6 +239,7 @@ func AutoUseCodexReset(ctx context.Context, user string) (ResetOutcome, error) {
 		return ResetOutcome{}, nil
 	}
 	var who string
+	var week *time.Time
 	return autoReset.use(user, func(now time.Time) (*time.Time, bool, error) {
 		var windows []QuotaWindow
 		var resets *ResetCredits
@@ -222,8 +248,9 @@ func AutoUseCodexReset(ctx context.Context, user string) (ResetOutcome, error) {
 		if err != nil {
 			return nil, false, err
 		}
-		return weekUsedUp(windows, now), resets.anyInDays(now), nil
-	}, func() (ResetOutcome, error) { return useCodexReset(ctx, who, ResetUsedWeek) })
+		week = weekUsedUp(windows, now)
+		return week, resets.anyInDays(now), nil
+	}, func() (ResetOutcome, error) { return spendWeekReset(ctx, who, week) })
 }
 
 // anyInDays says whether r holds a reset that may be used by itself at

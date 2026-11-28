@@ -1281,6 +1281,9 @@ func codexWindowsLeft(ctx context.Context, token, accountID string) (plan string
 			out[i].Credits = true
 		}
 	}
+	if resets != nil {
+		resets.WeekEnds = weekUsedUp(out, time.Now())
+	}
 	return data.PlanType, out, resets, credits, left, codexHeld(data), nil
 }
 

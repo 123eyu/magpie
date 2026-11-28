@@ -18345,12 +18345,16 @@ function resetsWords(r, q) {
     // whether the one that runs out first is kept from going to waste:
     // with Auto-use on it is used shortly before it does (#624, #719)
     // or, the week's alone, when the week runs out (tongzhenbao on X)
-    // and not when its days left are out of those set (ResetDays)
+    // and not when its days left are out of those set (ResetDays), nor
+    // while its used-up week renews within the hours set and it lasts
+    // past then (codexResetWait, waitsForWeek; Steve055s on X)
     if (q && autoResetKept(q)) {
-      const { expiring: o, week: k } = autoResetWhen(q), x = o && resetInDays(resetLeadMinutes() * 6e4), week = k && resetInDays(at - Date.now());
-      w.append(el("span", "resets-kept" + (x || week ? " on" : ""), " · " + t(x ? "auto-used before it expires" : week ? "auto-used when the week runs out" : "not auto-used")));
+      const { expiring: o, week: k } = autoResetWhen(q), x = o && resetInDays(resetLeadMinutes() * 6e4), d = k && resetInDays(at - Date.now()), e = new Date(r.weekEnds || 0) - Date.now();
+      const waits = d && e > 0 && e <= (state?.settings?.codexResetWait || 0) * 36e5 && at - Date.now() > e, week = d && !waits;
+      w.append(el("span", "resets-kept" + (x || d ? " on" : ""), " · " + t(x ? "auto-used before it expires" : week ? "auto-used when the week runs out" : waits ? "waits for the week to renew" : "not auto-used")));
       w.title += "\n" + t(x ? "Auto-use is on: the reset that runs out first is used {lead} before it does, if this account's windows have been used, so what they have left can be used until then and it isn't lost; at once if the account is held up until after then."
         : week ? "Auto-use is on for a used-up week: a reset is used by itself when this account's week is used up, before its credits are spent. One about to run out is otherwise lost unless it's used by hand or the week runs out before then."
+        : waits ? "Auto-use is on for a used-up week, but this account's week renews soon anyway, within the time set to wait for it, and the reset lasts past then: none is used by itself before the week renews."
         : o || k ? "Auto-use is on, but the reset that runs out first has more or fewer days left than those set for one used by itself: it's lost unless it's used by hand before then."
         : "Auto-use is off: the reset that runs out first is lost unless it's used by hand before then.", resetLeadVars());
     }

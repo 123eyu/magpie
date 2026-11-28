@@ -19,6 +19,7 @@ const quotaUsage = `usage: magpie quota [<provider>…] [--json]
        magpie quota auto-reset [<codex account>] [week|expiring] [on|off]
        magpie quota auto-reset lead [<minutes or hours, like 30m or 3h>|default]
        magpie quota auto-reset days [<least>-<most>, like 0-7|default]
+       magpie quota auto-reset wait [<hours, like 24h>|off]
        magpie quota credits [<codex account>] [on|first|last|off]
        magpie quota alert [<percent>|off] [--balance <amount>|off]
        magpie quota wait <provider|account> [--timeout <duration>] [--quiet]
@@ -54,6 +55,12 @@ const quotaUsage = `usage: magpie quota [<provider>…] [--json]
   one that never expires only with no most. It is for every account, a reset spent
   by hand isn't held to it, default lets every one again, and alone it says what
   is set.
+  quota auto-reset wait 24h spends no reset for a used-up week that renews within
+  24 hours anyway: requests are refused, or go on the account's credits, until it
+  does. A reset that runs out before the week renews is still spent, as it would
+  be lost. It is for every account, from 1h to 168h, the one about to expire and
+  one spent by hand aren't held to it, off (the default) spends one however soon
+  the week renews, and alone it says what is set.
   quota credits off keeps a Codex account from spending its credits: once one of
   its windows is used up, by magpie's latest reading (refreshed about every
   minute), routing holds it as used up until that window renews and the request
@@ -339,6 +346,9 @@ func quotaAutoResetCmd(args []string) error {
 	if len(args) > 0 && strings.EqualFold(args[0], "days") {
 		return quotaResetDaysCmd(args[1:])
 	}
+	if len(args) > 0 && strings.EqualFold(args[0], "wait") {
+		return quotaResetWaitCmd(args[1:])
+	}
 	user, when, set, on := "", "", false, false
 	for _, a := range args {
 		switch strings.ToLower(a) {
@@ -445,6 +455,53 @@ func quotaResetLeadCmd(args []string) error {
 	}
 	fmt.Println(green.Render("✓"), "a reset about to expire unused is used", leadWords(settings.Load().ResetLead()), "before it does, for every account with auto-reset's expiring on")
 	return nil
+}
+
+// quotaResetWaitCmd: magpie quota auto-reset wait [<hours>|off] — how
+// near its renewal a used-up week is waited for instead of spending a
+// reset, for every account (Steve055s on X).
+func quotaResetWaitCmd(args []string) error {
+	switch {
+	case len(args) > 1:
+		return fmt.Errorf("one wait at a time, like: magpie quota auto-reset wait 24h")
+	case len(args) == 0:
+		fmt.Println(resetWaitWords())
+		return nil
+	}
+	a := strings.ToLower(strings.TrimSpace(args[0]))
+	hours := 0
+	switch a {
+	case "help", "-h", "--help":
+		fmt.Println(quotaUsage)
+		return nil
+	case "off", "default", "0", "never":
+	default:
+		d, err := time.ParseDuration(a)
+		if err != nil {
+			n, nerr := strconv.Atoi(a)
+			if nerr != nil {
+				return fmt.Errorf("a wait looks like 24h, or off, not %q", args[0])
+			}
+			d = time.Duration(n) * time.Hour
+		}
+		if d%time.Hour != 0 || d <= 0 || d > settings.CodexResetWaitMost*time.Hour {
+			return fmt.Errorf("a wait is whole hours from 1h to %dh, or off, not %q", settings.CodexResetWaitMost, args[0])
+		}
+		hours = int(d / time.Hour)
+	}
+	if err := provider.SetCodexResetWait(hours); err != nil {
+		return err
+	}
+	fmt.Println(green.Render("✓"), resetWaitWords()+", for every account with auto-reset's week on")
+	return nil
+}
+
+// resetWaitWords says how near its renewal a used-up week is waited for.
+func resetWaitWords() string {
+	if h := settings.Load().ResetWait() / time.Hour; h > 0 {
+		return fmt.Sprintf("no reset is used by itself for a used-up week that renews within %dh, unless it would expire by then", h)
+	}
+	return "a reset is used by itself for a used-up week however soon it renews (the default)"
 }
 
 // quotaResetDaysCmd: magpie quota auto-reset days [<least>-<most>|default]

@@ -469,6 +469,17 @@ type Settings struct {
 	// through ResetDays.
 	CodexResetDaysLeast int `json:"codexResetDaysLeast,omitempty"`
 	CodexResetDaysMost  int `json:"codexResetDaysMost,omitempty"`
+	// CodexResetWait is how many hours before a used-up week renews by
+	// itself no reset is spent for it (Steve055s on X: 重置前24h阻止自动使用
+	// 重置卡): the week comes back soon anyway, and a reset spent then is
+	// mostly wasted. Unless the reset that would be spent runs out by the
+	// renewal too, which costs nothing to spend now. It holds every route
+	// of the week's case (AutoUseCodexReset), never the one about to run
+	// out, nor one used by hand. 0, the default, is never: holding one
+	// back leaves the requests refused, or on the account's credits, until
+	// the week renews, which nobody who turned the week's case on asked
+	// for. From 1 to CodexResetWaitMost; read through ResetWait.
+	CodexResetWait int `json:"codexResetWait,omitempty"`
 	// CodexNoCredits are the ChatGPT accounts (lower-case) that don't
 	// spend their credits: once a usage window is used up, routing holds
 	// the account as used up and goes on to the user's other accounts,
@@ -1625,6 +1636,17 @@ const CodexResetDaysLimit = 365
 func (s Settings) ResetDays() (least, most time.Duration) {
 	day := func(n int) time.Duration { return time.Duration(min(max(n, 0), CodexResetDaysLimit)) * 24 * time.Hour }
 	return day(s.CodexResetDaysLeast), day(s.CodexResetDaysMost)
+}
+
+// CodexResetWaitMost is the most hours CodexResetWait can be set to: a
+// week, the longest a used-up week can still have to run.
+const CodexResetWaitMost = 7 * 24
+
+// ResetWait is how long before a used-up week renews no Codex reset is
+// spent by itself for it (CodexResetWait): 0, none, when it is unset; one
+// written by hand below 0 counts as 0, and past CodexResetWaitMost as it.
+func (s Settings) ResetWait() time.Duration {
+	return time.Duration(min(max(s.CodexResetWait, 0), CodexResetWaitMost)) * time.Hour
 }
 
 // ResetInDays says whether a Codex reset that runs out at until (nil:

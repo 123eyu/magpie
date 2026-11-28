@@ -73,7 +73,53 @@ window.autoResetOwnPaint = function (s) {
   }
   renderResetLead(s, head.hidden);
   renderResetDays(s, head.hidden);
+  renderResetWait(s, head.hidden);
 };
+
+// renderResetWait: how near its renewal a used-up week is waited for
+// instead of using a reset (settings/codex-reset-wait; Steve055s on X),
+// for every account; Off, the default, never waits. A pick from the app's
+// menu; a value set outside the choices (the CLI) is shown and kept.
+const RESET_WAITS = [0, 3, 6, 12, 24, 48, 72];
+function renderResetWait(s, hidden) {
+  const row = $("#codexResetWaitRow");
+  if (!row) return;
+  row.hidden = hidden;
+  const cur = s.codexResetWait || 0;
+  const waits = RESET_WAITS.includes(cur) ? RESET_WAITS : [...RESET_WAITS, cur].sort((a, b) => a - b);
+  const name = (h) => h ? t("Within {lead}", { lead: resetLeadWords(h * 60) }) : t("Off");
+  const b = el("button", "sess-pick reset-wait");
+  b.type = "button";
+  b.setAttribute("aria-haspopup", "menu");
+  b.setAttribute("aria-label", t("Wait for a week about to renew") + ": " + name(cur));
+  // every choice in one cell, the current one seen, as the lead's button
+  const say = el("span", "rl-say");
+  for (const h of waits) {
+    const w = el("span", h === cur ? "on" : "", name(h));
+    if (h !== cur) w.setAttribute("aria-hidden", "true");
+    say.append(w);
+  }
+  b.append(say, svg(CHEV, 11, 1.6));
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    const opts = waits.map((h) => ({ v: String(h), name: name(h), note: h ? "" : "Default", literalName: true }));
+    openProtoMenu(b, opts, String(cur), (v) => set(Number(v)), "Wait for a week about to renew", "sess-menu", "right");
+  };
+  const set = async (h) => {
+    if (h === cur) return renderSettings();
+    try {
+      prefs = await writingPrefs(api("settings/codex-reset-wait", { hours: h }));
+      if (state) state.settings = prefs;
+      renderSettings();
+      if (quotas) renderQuotas(); // the cards' words say it too
+    } catch (err) {
+      statusTErr(err);
+      renderSettings();
+    }
+  };
+  $("#codexResetWaitPick").replaceChildren(b);
+}
 
 // renderResetDays: the days a reset may have left before it expires to be
 // used by itself, from and to, for every account (settings/codex-reset-days;
