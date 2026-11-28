@@ -701,6 +701,58 @@ export function wall(commits, opts = {}) {
   return people;
 }
 
+// What a person's card calls them (cards.js names it, playfully, in each
+// language): the part of magpie most of their lines are about, and for
+// agents and providers the one product most of those were for, when one is. A line's own prefix
+// ("gateway: …") decides it; a line without one is read for its words, a
+// tie shared. Someone whose work spreads over four parts or more, none of
+// them close to half, at five lines or more, is a polymath; nothing read
+// at all, a builder.
+export const ROLES = [
+  ["privacy", /^(redact|pii|masking|privacy|guard)\b/, /\b(redact\w*|mask|masked|unmasked|pii|privacy|secrets?|email address|phone number)\b/g],
+  ["plugins", /^(plugins?|plugin host|plugin pages|zcode|devin|workbuddy|factory|grok|cursor|qoder|kiro|commandcode|zen|agentplug)\b/, /\b(plugins?|npm|opencode)\b/g],
+  ["routing", /^(routing|router|groups?|classify|warmup|steady|tune|models|catalog|codexcat|fallback)\b/, /\b(routing|route|routed|fallback|groups?|catalog|failover|models?)\b/g],
+  ["usage", /^(usage|budget|quotas?|otel|remote quotas|balance|checkin|cost)\b/, /\b(usage|quotas?|costs?|price|priced|budget|balance|spend|spent|check-in|limits?)\b/g],
+  ["library", /^(library|memory|mcpauth|filememo|artifacts|search|skills?|mcp)\b/, /\b(mcp|skills?|library|memory|artifacts?)\b/g],
+  ["sessions", /^(sessions|context|edit)\b/, /\b(sessions?|transcript|history|conversation|resume|turn|message)\b/g],
+  ["agents", /^(agents?|claude|codex|claudetui|claude-desktop|claude bridge|hermes|goose|pi|dsh|omp|crush|opencode|gemini)\b/, /\b(agents?|claude code|codex|crush|gemini cli|hermes|goose|bridge)\b/g],
+  ["providers", /^(providers?|accounts|signin|subscription|copilot|antigravity|zhipu|kimi|minimax)\b/, /\b(providers?|accounts?|sign-?in|signed|subscriptions?|oauth|keys?)\b/g],
+  ["gateway", /^(gateway|gateway keys|gateway tests|netproxy|serve|proxy|stream)\b/, /\b(gateway|requests?|streams?|streamed|tools?|tool_\w+|responses?|sse|headers?|proxy|429|retry|retries|effort)\b/g],
+  ["interface", /^(gui|gui tests|panel|tray|settings|ui|icons|i18n|draw|web|tui)\b/, /\b(gui|page|button|menu|panel|tray|window|sidebar|dark|theme|scroll|dialog|sheet|tooltip|click|drag|layout|icon|label)\b/g],
+  ["platform", /^(update|proc|cli|wsl|windows|docker|daemon|autostart|uninstall|install\.sh|appdir|native|awake|backup|davsync|sync|remote magpie|release|linux|macos|import)\b/, /\b(windows|linux|macos|wsl|docker|install|installer|update|updates|startup|daemon|backup|sync|cli|scheme)\b/g],
+  ["quality", /^(tests?|testenv|provider tests|lessons|perf|ci)\b/, /\b(tests?|flaky|race|faster|slow|leak|crash|panic)\b/g],
+  ["docs", /^(docs|contributors|site|readme|github)\b/, /\b(docs|readme|documentation|translation|templates?)\b/g],
+];
+const PRODUCTS = { codex: "Codex", codexcat: "Codex", claude: "Claude", claudetui: "Claude", "claude-desktop": "Claude", "claude bridge": "Claude", hermes: "Hermes", goose: "Goose", crush: "Crush", gemini: "Gemini", opencode: "OpenCode", copilot: "Copilot", antigravity: "Antigravity", kimi: "Kimi", zhipu: "Zhipu", minimax: "MiniMax" };
+export function role(lines) {
+  const score = new Map(), add = (k, n) => score.set(k, (score.get(k) || 0) + n);
+  const made = new Map();
+  for (const l of lines) {
+    const t = String((l && l.t) || "").toLowerCase();
+    const m = /^([a-z][\w .+/-]{0,24}):\s/.exec(t);
+    const own = m && ROLES.find(([, p]) => p.test(m[1]));
+    if (own) {
+      add(own[0], 1);
+      const p = PRODUCTS[m[1].trim()];
+      if (p && (own[0] === "agents" || own[0] === "providers")) made.set(`${own[0]}/${p}`, (made.get(`${own[0]}/${p}`) || 0) + 1);
+      continue;
+    }
+    const body = m ? t.slice(m[0].length) : t;
+    const read = ROLES.map(([k, , w]) => [k, (body.match(w) || []).length]);
+    const top = Math.max(...read.map(([, n]) => n));
+    if (!top) continue;
+    const best = read.filter(([, n]) => n === top);
+    for (const [k] of best) add(k, 1 / best.length);
+  }
+  const at = (k) => ROLES.findIndex((r) => r[0] === k);
+  const ranked = [...score].sort((a, b) => b[1] - a[1] || at(a[0]) - at(b[0]));
+  if (!ranked.length) return { role: "builder" };
+  if (lines.length >= 5 && ranked.length >= 4 && ranked[0][1] < lines.length * 0.4) return { role: "polymath" };
+  const [k, n] = ranked[0];
+  const of = [...made].filter(([key, c]) => key.startsWith(k + "/") && c >= n / 2).sort((a, b) => b[1] - a[1])[0];
+  return of ? { role: k, focus: of[0].slice(k.length + 1) } : { role: k };
+}
+
 // Each person's contributor card (cards.js serves it at /c/<id>): who they
 // are, their number among everyone in the order they were first credited
 // (a release's time; one with no time known goes after those with one,
@@ -735,6 +787,7 @@ export function cards(people, times, plugins = {}) {
     if (pic) out.pic = pic;
     if (first[i]) out.since = { v: mark(first[i].v, plugins).text, ...(Number.isFinite(first[i].t) ? { t: first[i].t } : {}) };
     out.lines = (p.releases || []).flatMap((r) => { const k = mark(r.v, plugins); return r.what.map((t) => ({ v: k.text, href: k.href, t })); });
+    Object.assign(out, role(out.lines));
     return out;
   });
 }

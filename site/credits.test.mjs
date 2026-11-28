@@ -2,7 +2,7 @@
 // one from yetone/magpie's own history, word for word.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parse, parseBody, bodyRefs, commitRefs, credit, everyone, thanks, what, wall, renderWall, logins, slug, anchors, PAGE_IDS, checkedX, avatar, replay, cards } from "./credits.mjs";
+import { role, parse, parseBody, bodyRefs, commitRefs, credit, everyone, thanks, what, wall, renderWall, logins, slug, anchors, PAGE_IDS, checkedX, avatar, replay, cards } from "./credits.mjs";
 import { authors, excluded, xAccounts, aliases, toLookUp, honoured, xOfLink } from "./credits-cli.mjs";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -691,6 +691,26 @@ test("each card is numbered by the person's first credited release, and lists ev
   assert.match(by.Late.pic, /^https:\/\/avatars\.githubusercontent\.com\//);
   assert.equal(by.early.x, "early_x");
   assert.equal(by.Bee.pic, undefined);
+  // lines that name no part of magpie: a builder
+  assert.equal(by.early.role, "builder");
+});
+
+test("role: the part of magpie most of a person's lines are about", () => {
+  const L = (...t) => t.map((t) => ({ t }));
+  assert.deepEqual(role(L("gateway: a", "gateway: b", "gui: c")), { role: "gateway" });
+  assert.deepEqual(role(L("GUI: a", "providers: b", "gui tests: c")), { role: "interface" });
+  // for agents and providers, the product most of them were for
+  assert.deepEqual(role(L("codex: a", "agent: b", "codex: c")), { role: "agents", focus: "Codex" });
+  assert.deepEqual(role(L("codex: a", "agent: b", "claude: c")), { role: "agents" });
+  assert.deepEqual(role(L("kimi: a", "provider: b")), { role: "providers", focus: "Kimi" });
+  // a line with no prefix is read for its words
+  assert.deepEqual(role(L("a streamed response keeps its headers")), { role: "gateway" });
+  assert.deepEqual(role(L("fix: a masked phone number stays masked")), { role: "privacy" });
+  assert.deepEqual(role(L("something else entirely"), []), { role: "builder" });
+  assert.deepEqual(role([]), { role: "builder" });
+  // spread over four parts or more, none near half: a polymath, at five lines or more
+  assert.deepEqual(role(L("gateway: a", "gui: b", "usage: c", "routing: d", "library: e")), { role: "polymath" });
+  assert.deepEqual(role(L("gateway: a", "gui: b", "usage: c", "routing: d")), { role: "routing" });
 });
 
 // a git repository shaped like magpie-community/plugins, each commit at a

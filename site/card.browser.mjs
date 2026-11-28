@@ -10,7 +10,7 @@
 // network: a red square for GitHub, nothing for X (the card falls back to
 // a letter).
 import { createServer } from "node:http";
-import { readFile, mkdir } from "node:fs/promises";
+import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { deflateSync } from "node:zlib";
 import assert from "node:assert/strict";
@@ -147,11 +147,41 @@ for (const [ename, engine] of [["chromium", chromium], ["webkit", webkit]]) {
           let seen = await side();
           assert.equal(seen, "front", `at first the screen shows the ${seen}`);
           // turns over, and back
+          // every frame of the turn, to see the light follow it
+          await page.evaluate(() => {
+            const f = window.__frames = [], q = (s) => document.querySelector(s);
+            const t0 = performance.now();
+            const tick = () => {
+              const m = new DOMMatrix(getComputedStyle(q(".cc-flip")).transform);
+              const v = (s, k) => +q(s).style.getPropertyValue(k);
+              f.push({ m11: m.m11, lift: m.m43, past: q(".cc-card").classList.contains("cc-past"), dimBack: v(".cc-back", "--dim"), glareFront: v(".cc-front", "--glare"), sx: v(".cc-ground", "--sx") });
+              if (performance.now() - t0 < 1500) requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+          });
           await page.click(".cc-card");
           assert.equal(await page.getAttribute(".cc-card", "aria-pressed"), "true");
+          if (shots) {
+            await page.waitForFunction(() => Math.abs(new DOMMatrix(getComputedStyle(document.querySelector(".cc-flip")).transform).m11) < 0.4, null, { polling: "raf", timeout: 2000 });
+            await page.locator(".cc-stage").screenshot({ path: `${shots}/${ename}-${width}-${lang}-${who.id}-mid.png` });
+          }
           await page.waitForTimeout(650);
           const turned = await page.$eval(".cc-flip", (el) => new DOMMatrix(getComputedStyle(el).transform).m11);
           assert.ok(turned < -0.99, `not turned over: ${turned}`);
+          // the light follows the turn: the card lifts and its shadow narrows,
+          // a glare crosses the front as it swings toward the light (above
+          // right), and the back comes round dark, turned from it, and lights
+          // up as it faces the screen
+          await page.waitForFunction(() => window.__frames.length && window.__frames.at(-1).m11 < -0.999, null, { timeout: 2000 });
+          const fr = await page.evaluate(() => window.__frames);
+          // (the turn is fastest edge-on, so a frame may never land within a few
+          // degrees of it: look at the first part of the back's way round)
+          const edge = fr.filter((f) => f.past && f.m11 > -0.8);
+          assert.ok(edge.length && Math.max(...edge.map((f) => f.dimBack)) > 0.2, `the back doesn't come round dark: ${edge.map((f) => f.dimBack)}`);
+          assert.ok(fr.at(-1).dimBack < 0.1, `the back stays dark: ${fr.at(-1).dimBack}`);
+          assert.ok(Math.max(...fr.map((f) => f.glareFront)) > 0.15, "no glare crosses the front");
+          assert.ok(Math.min(...fr.map((f) => f.sx)) < 0.5, "the shadow doesn't narrow");
+          assert.ok(Math.max(...fr.map((f) => f.lift)) > 10, "the card doesn't lift to turn");
           if (shots) await page.screenshot({ path: `${shots}/${ename}-${width}-${lang}-${who.id}-back.png` });
           seen = await side();
           assert.equal(seen, "back", `turned over, the screen shows the ${seen}`);
@@ -186,7 +216,7 @@ for (const [ename, engine] of [["chromium", chromium], ["webkit", webkit]]) {
           assert.deepEqual(errors, []);
         } catch (e) {
           fails++;
-          console.log(`FAIL ${name}: ${e.message.split("\n")[0]}${errors.length ? ` (page: ${errors.join(" | ")})` : ""}`);
+          console.log(`FAIL ${name}: ${e.message.replace(/\s+/g, " ").slice(0, 400)}${errors.length ? ` (page: ${errors.join(" | ")})` : ""}`);
           await ctx.close();
           continue;
         }
@@ -229,12 +259,55 @@ for (const [ename, engine] of [["chromium", chromium], ["webkit", webkit]]) {
         assert.match(page.url(), new RegExp(`/c/${GH.id}$`));
       } catch (e) {
         fails++;
-        console.log(`FAIL ${name}: ${e.message.split("\n")[0]}`);
+        console.log(`FAIL ${name}: ${e.message.replace(/\s+/g, " ").slice(0, 400)}`);
         await ctx.close();
         continue;
       }
       await ctx.close();
       console.log(`ok ${name}`);
+    }
+  }
+
+  // the link preview's picture, as headless Chrome on Cloudflare reads it
+  // (cards.js browserShot): ?og leaves a 2400x1260 JPEG in window.__og
+  for (const who of [GH, CJK]) {
+    const name = `${ename} preview picture ${who.id}`;
+    runs++;
+    try {
+      // a link preview's reader asks for English, whatever the machine's language
+      const ctx = await browser.newContext({ locale: "en-US" });
+      await fakePictures(ctx);
+      const page = await ctx.newPage();
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.goto(`${base}/c/${encodeURIComponent(who.id)}`);
+      const meta = await page.getAttribute('meta[property="og:image"]', "content");
+      assert.match(meta, new RegExp(`^https://usemagpie\\.ai/c/${encodeURIComponent(who.id).replace(/%/g, "%")}/og\\.jpg\\?lang=en&v=[0-9a-f]{12}$`));
+      assert.equal(await page.getAttribute('meta[name="twitter:card"]', "content"), "summary_large_image");
+      await page.goto(`${base}/c/${encodeURIComponent(who.id)}?og=1&lang=zh`);
+      await page.waitForFunction(() => typeof window.__og === "string", null, { timeout: 15000 });
+      const got = await page.evaluate(async () => {
+        const im = new Image();
+        im.src = window.__og;
+        await im.decode();
+        const cv = document.createElement("canvas");
+        cv.width = im.naturalWidth; cv.height = im.naturalHeight;
+        const x = cv.getContext("2d");
+        x.drawImage(im, 0, 0);
+        const at = (px, py) => Array.from(x.getImageData(px, py, 1, 1).data.slice(0, 3));
+        return { w: im.naturalWidth, h: im.naturalHeight, corner: at(20, 20), middle: at(im.width / 2, im.height / 2), type: window.__og.slice(0, 23) };
+      });
+      assert.equal(got.type, "data:image/jpeg;base64,");
+      assert.deepEqual([got.w, got.h], [2400, 1260]);
+      assert.ok(got.corner.every((v) => v > 225), `the ground is light: ${got.corner}`);
+      assert.ok(got.middle.every((v) => v < 60), `the card is black: ${got.middle}`);
+      assert.deepEqual(errors, []);
+      if (shots) await writeFile(`${shots}/${ename}-og-${who.id}.jpg`, Buffer.from((await page.evaluate(() => window.__og)).split(",")[1], "base64"));
+      await ctx.close();
+      console.log(`ok ${name}`);
+    } catch (e) {
+      fails++;
+      console.log(`FAIL ${name}: ${e.message.replace(/\s+/g, " ").slice(0, 400)}`);
     }
   }
 
@@ -269,7 +342,7 @@ for (const [ename, engine] of [["chromium", chromium], ["webkit", webkit]]) {
     } catch (e) {
       fails++;
       ok = false;
-      console.log(`FAIL ${name}: ${e.message.split("\n")[0]}`);
+      console.log(`FAIL ${name}: ${e.message.replace(/\s+/g, " ").slice(0, 400)}`);
     }
     if (ok) console.log(`ok ${name}`);
   }

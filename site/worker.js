@@ -35,6 +35,8 @@
 //                          wall, at each deploy)
 //   /c/<id>                a contributor's card (cards.js), from
 //                          public/contributors/c/<id>.json
+//   /c/<id>/og.jpg         its link preview's picture, drawn by headless
+//                          Chrome (BROWSER) and kept in R2 (CARDS)
 //   /download              the Apple Silicon dmg
 //   /download/mac-arm64    the same;  /download/mac-intel  the Intel dmg
 //   /download/windows      the Windows app (x64);  /download/windows-arm64
@@ -78,7 +80,7 @@ import { handle as pluginStats, prune as prunePlugins } from "./pluginstats.js";
 import { api as shareAPI, page as sharePage, content as shareContent, prune as pruneShares, CONTENT as SHARE_HOST } from "./shares.js";
 import { api as groupAPI, page as groupPage, prune as pruneGroups } from "./groups.js";
 import { api as liveAPI, ShareLive } from "./live.js";
-import { page as cardPage } from "./cards.js";
+import { page as cardPage, ogImage as cardPicture } from "./cards.js";
 
 // each shared page's data and room (live.js)
 export { ShareLive };
@@ -134,7 +136,7 @@ export default {
       if (got) return got;
     }
     if (url.pathname.startsWith("/c/")) {
-      const got = await cardPage(req, env);
+      const got = (await cardPicture(req, env, ctx)) || (await cardPage(req, env, ctx));
       if (got) return got;
     }
     if (url.pathname === "/api/plugins/tagged") return taggedPlugins(ctx);

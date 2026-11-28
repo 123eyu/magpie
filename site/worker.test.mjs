@@ -4,6 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import worker, { served, goTarget, sponsorTarget } from "./worker.js";
 import { bucket, sha } from "./r2stub.mjs";
+import { ogImage, page as cardPage, titleOf, NAMES } from "./cards.js";
 
 const EN = "### Features\n\n- One thing (#1)\n\n### Install\n\nDownload it.";
 const ZH = "### 新功能\n\n- 一件事 (#1)";
@@ -1029,6 +1030,105 @@ test("plugins/readme: a plugin's kept README passed on, from jsDelivr when raw f
   }
 });
 
+test("contributor card: the link preview shows the card itself, drawn once and kept", async () => {
+  const card = { id: "ada", name: "Ada", no: 7, n: 1, role: "gateway", lines: [{ v: "0.1.2", t: "gateway: x" }] };
+  let look = '"look1"';
+  const asked = [];
+  const env = { CARDS: bucket(), ASSETS: { fetch: async (r) => {
+    const p = new URL(r.url).pathname;
+    asked.push(p);
+    if (p === "/contributors/c/ada.json") return Response.json(card);
+    if (p === "/card.js") return new Response("js", { headers: { ETag: look } });
+    return new Response("nf", { status: 404 });
+  } } };
+  const shots = [];
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 1, 2, 3]);
+  const shoot = async (_, at) => { shots.push(at); return jpeg; };
+  const waits = [];
+  const ctx = { waitUntil: (p) => { waits.push(p); } };
+  const v = async (path) => (await (await cardPage(new Request("https://usemagpie.ai" + path), env, ctx, shoot)).text()).match(/og\.jpg\?lang=\w+&amp;v=([0-9a-f]{12})"/)[1];
+
+  // a view of the page draws its picture in the background, once
+  const v1 = await v("/c/ada?lang=zh");
+  await Promise.all(waits);
+  assert.deepEqual(shots, ["https://usemagpie.ai/c/ada?og=1&lang=zh"]);
+  assert.equal(env.CARDS.objs.size, 1);
+  // the preview's fetch gets it from R2, not drawn again
+  let res = await ogImage(new Request(`https://usemagpie.ai/c/ada/og.jpg?lang=zh&v=${v1}`), env, ctx, shoot);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("Content-Type"), "image/jpeg");
+  assert.match(res.headers.get("Cache-Control"), /max-age=86400/);
+  assert.deepEqual(new Uint8Array(await res.arrayBuffer()), jpeg);
+  assert.equal(shots.length, 1);
+  // another language is another picture, drawn when first asked for
+  res = await ogImage(new Request("https://usemagpie.ai/c/ADA/og.jpg?lang=ja"), env, ctx, shoot);
+  assert.equal(res.status, 200);
+  assert.deepEqual(shots.slice(1), ["https://usemagpie.ai/c/ada?og=1&lang=ja"]);
+  // the same again, asked twice at once, is drawn once
+  await Promise.all([1, 2].map(() => ogImage(new Request("https://usemagpie.ai/c/ada/og.jpg?lang=en"), env, ctx, shoot)));
+  assert.equal(shots.length, 3);
+  // a new card.js is a new picture, with a new address
+  look = '"look2"';
+  assert.notEqual(await v("/c/ada?lang=zh"), v1);
+  // the drawing's own load of the page, and a HEAD, draw nothing
+  waits.length = 0;
+  await cardPage(new Request("https://usemagpie.ai/c/ada?og=1&lang=zh"), env, ctx, shoot);
+  await cardPage(new Request("https://usemagpie.ai/c/ada", { method: "HEAD" }), env, ctx, shoot);
+  assert.equal(waits.length, 0);
+  // no such card: 404, nothing drawn
+  const before = shots.length;
+  res = await ogImage(new Request("https://usemagpie.ai/c/nobody/og.jpg"), env, ctx, shoot);
+  assert.equal(res.status, 404);
+  assert.equal(shots.length, before);
+  // when it can't be drawn, the site's own picture, and nothing kept
+  const n = env.CARDS.objs.size;
+  res = await ogImage(new Request("https://usemagpie.ai/c/ada/og.jpg?lang=ja"), env, ctx, async () => { throw new Error("no browser"); });
+  assert.equal(res.status, 302);
+  assert.equal(res.headers.get("Location"), "https://usemagpie.ai/img/og.png");
+  assert.equal(res.headers.get("Cache-Control"), "no-store");
+  assert.equal(env.CARDS.objs.size, n);
+  env.CARDS.fail = true;
+  res = await ogImage(new Request("https://usemagpie.ai/c/ada/og.jpg?lang=en"), env, ctx, shoot);
+  assert.equal(res.status, 302);
+  // the worker routes it; a deploy with no bucket or browser bound gives the site's picture
+  res = await worker.fetch(new Request("https://usemagpie.ai/c/ada/og.jpg"), { ASSETS: env.ASSETS }, ctx);
+  assert.equal(res.status, 302);
+});
+
+test("contributor card: its title is a joke that names what they built", async () => {
+  const c = (role, n, extra = {}) => ({ id: "ada", role, lines: Array.from({ length: n }, () => ({ t: "x" })), ...extra });
+  for (const [role, set] of Object.entries(NAMES)) {
+    for (const lang of ["en", "zh", "ja"]) assert.equal(set[lang].length, 3, `${role} ${lang}`);
+    // one person gets the same joke in every language
+    const at = set.en.indexOf(titleOf(c(role, 1), "en"));
+    assert.ok(at >= 0, role);
+    assert.equal(titleOf(c(role, 1), "zh"), set.zh[at]);
+    assert.equal(titleOf(c(role, 1), "ja"), set.ja[at]);
+  }
+  // ids spread over all three
+  assert.equal(new Set("abcdefghijklmnop".split("").map((id) => titleOf({ ...c("gateway", 1), id }, "en"))).size, 3);
+  assert.match(titleOf(c("gateway", 10), "en"), /^Chief Gateway /);
+  assert.match(titleOf(c("gateway", 50), "zh"), /^传奇网关/);
+  assert.match(titleOf(c("polymath", 12), "zh"), /^首席 ?(magpie |全栈)/);
+  assert.match(titleOf(c("agents", 1, { focus: "Codex" }), "zh"), /^Codex /);
+  assert.match(titleOf(c("providers", 1, { focus: "Kimi" }), "en"), /^Kimi /);
+  // the page shows it, and what to post says it
+  const card = { id: "ada", name: "Ada", no: 7, n: 1, role: "agents", focus: "Codex", lines: [{ v: "0.1.2", t: "codex: x" }] };
+  const env = { ASSETS: { fetch: async (r) => (new URL(r.url).pathname === "/contributors/c/ada.json" ? Response.json(card) : new Response("nf", { status: 404 })) } };
+  const html = await (await worker.fetch(new Request("https://usemagpie.ai/c/ada?lang=zh"), env, ctx)).text();
+  const t = titleOf({ ...card }, "zh");
+  assert.ok(html.includes(`<strong>${t}</strong>`));
+  assert.ok(html.includes(encodeURIComponent(`我是 magpie 的第 0007 号贡献者：${t}。`)));
+  assert.ok(html.includes(`"role":"${t}"`));
+  // a role or product the file shouldn't have is dropped
+  for (const bad of [{ role: "__proto__" }, { role: "constructor" }, { role: "agents", focus: "<b>x</b>" }]) {
+    Object.assign(card, bad);
+    const page = await (await worker.fetch(new Request("https://usemagpie.ai/c/ada"), env, ctx)).text();
+    assert.ok(!page.includes("<b>x"), JSON.stringify(bad));
+    assert.match(page, /<strong>[^<]+<\/strong>/, JSON.stringify(bad));
+  }
+});
+
 test("contributor card: /c/<id> serves the card in the reader's language, escaped", async () => {
   const card = { id: "ada", name: "Ada <b>", no: 7, of: 9, n: 2, github: "ada", pic: "https://avatars.githubusercontent.com/ada?s=400", since: { v: "0.1.2", t: 2000 },
     lines: [{ v: "0.1.2", href: "https://github.com/yetone/magpie/releases/tag/v0.1.2", t: "gateway: </script><script>alert(1)</script>" }, { v: "0.1.3", href: "javascript:alert(1)", t: "two" }] };
@@ -1050,7 +1150,10 @@ test("contributor card: /c/<id> serves the card in the reader's language, escape
   assert.ok(!html.includes("<b>"), "the name is escaped");
   assert.ok(!html.includes("</script><script>alert"), "a line can't end the data script");
   assert.ok(!html.includes("javascript:"), "a link that isn't https is dropped");
-  assert.match(html, /<meta property="og:image" content="https:\/\/avatars\.githubusercontent\.com\/ada\?s=400">/);
+  assert.match(html, /<meta property="og:image" content="https:\/\/usemagpie\.ai\/c\/ada\/og\.jpg\?lang=en&amp;v=[0-9a-f]{12}">/);
+  assert.match(html, /<meta name="twitter:card" content="summary_large_image">/);
+  // no role in the file: a builder
+  assert.ok(NAMES.builder.en.some((t) => html.includes(`<strong>${t}</strong>`)), "no title");
   assert.equal((html.match(/<li>/g) || []).length, 2);
 
   html = await (await get("/c/ada", { "Accept-Language": "zh-CN,zh;q=0.9" })).text();

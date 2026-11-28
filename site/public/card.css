@@ -8,7 +8,9 @@
 .cc-stage[hidden] { display: none; }
 @keyframes cc-in { from { opacity: 0; transform: translateY(10px) scale(.97); } }
 .cc-card {
-  --rx: 0deg; --ry: 0deg; --mx: 50%; --my: 50%;
+  /* at rest the card sits a little turned, so its edge and depth show;
+     a mouse tilts it from there (card.js) */
+  --rx: 7deg; --ry: -9deg; --mx: 50%; --my: 50%; --t: 2px;
   position: relative; width: min(500px, 100%); aspect-ratio: 1000 / 631;
   padding: 0; border: 0; background: none; cursor: pointer; color: inherit;
   border-radius: 3.8% / 6.02%;
@@ -19,40 +21,64 @@
 }
 .cc-card.cc-lit { transition-duration: .12s; }
 .cc-card:focus-visible { outline: none; }
-.cc-card:focus-visible .cc-face { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ink3), 0 28px 50px -24px rgba(0, 0, 0, .55); }
-.cc-flip { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform .46s cubic-bezier(.77, 0, .175, 1); }
-.cc-flipped .cc-flip { transform: rotateY(180deg); }
+.cc-card:focus-visible .cc-face { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ink3); }
+/* the shadow on the ground: narrows as the card goes edge-on, and spreads
+   as it lifts to turn (card.js sets --sx, --lift) */
+.cc-ground {
+  position: absolute; left: 6%; right: 6%; top: 14%; bottom: -5%;
+  border-radius: 8% / 14%; background: rgba(0, 0, 0, .42); filter: blur(22px);
+  transform: translateZ(-40px) scaleX(var(--sx, 1)); opacity: calc(1 - var(--lift, 0) * .35);
+  pointer-events: none;
+}
+:root[data-theme="dark"] .cc-ground { background: rgba(0, 0, 0, .8); }
+/* card.js turns it (rotateY), lifting it on the way */
+.cc-flip { position: absolute; inset: 0; transform-style: preserve-3d; }
+.cc-face, .cc-edge { position: absolute; inset: 0; border-radius: 3.8% / 6.02%; }
 .cc-face {
-  position: absolute; inset: 0; border-radius: 3.8% / 6.02%; overflow: hidden;
-  background: #121214;
+  overflow: hidden; background: #121214;
   -webkit-backface-visibility: hidden; backface-visibility: hidden;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, .25), 0 28px 50px -24px rgba(0, 0, 0, .55);
+  /* the bevel: a lit top rim, a darker bottom one */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), inset 0 -1px 0 rgba(0, 0, 0, .5);
 }
 .cc-face canvas { display: block; width: 100%; height: 100%; }
+/* the card's thickness: slices of metal between the faces, lit by how far
+   the card has turned toward the light (--edge) */
+.cc-edge { background: var(--edge, #2a2a2e); transform: translateZ(calc(var(--t) * var(--z, 0))); }
+.cc-front { transform: translateZ(var(--t)); }
 /* WebKit puts each canvas in a layer of its own that ignores its face's
-   backface-visibility, so the hidden side is also made invisible, swapped
-   halfway through the turn, when the card is edge-on (the curve is
-   symmetric) */
-.cc-face { transition: visibility 0s .23s; }
-.cc-back { transform: rotateY(180deg); visibility: hidden; }
-.cc-flipped .cc-back { visibility: visible; }
-.cc-flipped .cc-front { visibility: hidden; }
+   backface-visibility, so the side turned away is hidden too (card.js
+   swaps them as the card passes edge-on) */
+.cc-back { transform: rotateY(180deg) translateZ(var(--t)); visibility: hidden; }
+.cc-past .cc-back { visibility: visible; }
+.cc-past .cc-front { visibility: hidden; }
+/* each face's light as it turns: a shade as it faces away from the light,
+   a glare crossing it where the light glances off (--dim, --glare, --gx) */
+.cc-shade, .cc-glare { position: absolute; inset: 0; pointer-events: none; }
+.cc-shade { background: #000; opacity: var(--dim, 0); }
+.cc-glare {
+  opacity: var(--glare, 0); mix-blend-mode: screen;
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) calc(var(--gx, 50%) - 22%), rgba(255, 255, 255, .5) var(--gx, 50%), rgba(255, 255, 255, 0) calc(var(--gx, 50%) + 22%));
+}
 .cc-sheen {
   position: absolute; inset: 0; border-radius: 3.8% / 6.02%; pointer-events: none;
-  transform: translateZ(1px);
+  transform: translateZ(calc(var(--t) + 1px));
   background: radial-gradient(circle at var(--mx) var(--my), rgba(255, 255, 255, .13), rgba(255, 255, 255, 0) 46%);
   mix-blend-mode: screen; opacity: 0; transition: opacity .3s ease;
 }
 .cc-lit .cc-sheen { opacity: 1; }
+.cc-turning .cc-sheen { opacity: 0; transition-duration: .1s; }
 @media (hover: hover) and (pointer: fine) {
   .cc-card:active { transform: rotateX(var(--rx)) rotateY(var(--ry)) scale(.985); }
 }
 @media (prefers-reduced-motion: reduce) {
   .cc-stage { animation-name: cc-fade; }
   .cc-card, .cc-card:active { transform: none; }
-  .cc-flip, .cc-flipped .cc-flip { transform: none; transition: none; }
-  .cc-back { transform: none; opacity: 0; }
-  .cc-face, .cc-flipped .cc-face { visibility: visible; transition: opacity .2s ease; }
+  .cc-flip { transform: none !important; }
+  .cc-ground { transform: translateZ(-40px); }
+  .cc-edge { display: none; }
+  .cc-front, .cc-back, .cc-past .cc-front, .cc-past .cc-back { transform: none; visibility: visible; }
+  .cc-back { opacity: 0; }
+  .cc-face { transition: opacity .2s ease; }
   .cc-flipped .cc-front { opacity: 0; }
   .cc-flipped .cc-back { opacity: 1; }
 }
@@ -66,6 +92,7 @@
 .cc-list h1 a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .cc-list h1 span { margin-left: 8px; color: var(--ink3); font: 500 15px ui-monospace, "SF Mono", Menlo, monospace; vertical-align: 3px; }
 .cc-sub { margin: 8px 0 20px; color: var(--ink2); font-size: 14px; }
+.cc-sub strong { color: var(--ink); font-weight: 600; }
 .cc-list ul { margin: 0; padding: 0; list-style: none; }
 .cc-list li { display: grid; grid-template-columns: auto 1fr; align-items: baseline; padding: 9px 0; border-top: 1px solid var(--line); font-size: 14.5px; line-height: 1.5; color: var(--ink); }
 .cc-list li:first-child { border-top: 0; }

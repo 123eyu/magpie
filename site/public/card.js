@@ -1,6 +1,7 @@
 // A contributor's card (cards.js serves the page, its data in #cc-data):
 // a black metal card drawn on two canvases, front and back. The front has
-// the bird, the person's picture where a chip would be, their number by
+// the bird, the person's picture where a chip would be and what magpie
+// calls them beside it (cards.js titleOf), their number by
 // when they were first credited, their name and since when; the back what
 // they built, newest first. The fine lines and the rosette are made from
 // the person's id, so no two cards are cut alike. It tilts under a mouse,
@@ -168,6 +169,12 @@
     x.strokeStyle = "rgba(255,255,255,0.28)";
     x.lineWidth = 1.5;
     x.stroke();
+    // what magpie calls them, beside their picture
+    if (w.role) {
+      x.font = `600 28px ${SANS}`;
+      x.fillStyle = "#d2d2d5";
+      x.fillText(fit(x, w.role, W - M - (ax + as + 30)), ax + as + 30, ay + as / 2 + 10);
+    }
     // the number, set as a card's is
     x.font = `500 50px ${MONO}`;
     emboss(x, () => { spaced(x, "No.", M, 392, 2); spaced(x, no, M + 128, 392, 10); }, "#cfcfd2");
@@ -244,6 +251,8 @@
   function draw() {
     const scale = (card.clientWidth / W) * (window.devicePixelRatio || 1);
     if (!scale) return;
+    // half the card's thickness, a little more than a real card's
+    card.style.setProperty("--t", `${(card.clientWidth * 0.0055).toFixed(2)}px`);
     canvases.forEach((cv, i) => {
       cv.width = Math.round(W * scale);
       cv.height = Math.round(H * scale);
@@ -294,32 +303,128 @@
     c.pic ? load(c.pic, true).then((im) => { if (im) assets.face = grey(im); }) : null,
   ]).then(() => { draw(); card.dataset.ready = "1"; });
 
-  // turn over
+  // the link preview's picture (cards.js has headless Chrome load this page
+  // with ?og and read window.__og): the front on a quiet light ground,
+  // 1200x630 at twice that
+  if (/[?&]og=/.test(location.search)) {
+    ready.then(() => {
+      const OW = 1200, OH = 630, k = 2, s = (OH * 0.8) / H;
+      const o = document.createElement("canvas");
+      o.width = OW * k;
+      o.height = OH * k;
+      const x = o.getContext("2d");
+      x.setTransform(k, 0, 0, k, 0, 0);
+      x.fillStyle = "#ececee";
+      x.fillRect(0, 0, OW, OH);
+      x.translate((OW - W * s) / 2, (OH - H * s) / 2);
+      x.scale(s, s);
+      x.save();
+      x.shadowColor = "rgba(0, 0, 0, .3)";
+      x.shadowBlur = 90;
+      x.shadowOffsetY = 44;
+      round(x, 0, 0, W, H, R);
+      x.fillStyle = "#121214";
+      x.fill();
+      x.restore();
+      front(x);
+      window.__og = o.toDataURL("image/jpeg", 0.92);
+    });
+  }
+
+  // turn over. The turn is played here, not by a CSS transition, so the
+  // light can follow it: the card lifts a little to turn, its edge shows,
+  // each face darkens as it turns from the light (above right, in front),
+  // a glare crosses it where the light glances off, and the shadow under
+  // it narrows as it goes edge-on.
+  const still = matchMedia("(prefers-reduced-motion: reduce)");
+  const mouse = matchMedia("(hover: hover) and (pointer: fine)");
+  const flip = card.querySelector(".cc-flip"), ground = card.querySelector(".cc-ground");
+  const faces = [card.querySelector(".cc-front"), card.querySelector(".cc-back")];
+  const RX = 7, RY = -9, TURN = 560, D = Math.PI / 180;
+  const unit = (x, y, z) => { const l = Math.hypot(x, y, z); return [x / l, y / l, z / l]; };
+  const L = unit(0.4, -0.5, 0.77), HALF = unit(L[0], L[1], L[2] + 1);
+  // cubic-bezier(.77, 0, .175, 1), the turn's ease-in-out
+  const ease = (p) => {
+    const bz = (t, a, b) => 3 * a * t * (1 - t) * (1 - t) + 3 * b * t * t * (1 - t) + t * t * t;
+    let lo = 0, hi = 1, t = p;
+    for (let i = 0; i < 24; i++) { t = (lo + hi) / 2; if (bz(t, 0.77, 0.175) < p) lo = t; else hi = t; }
+    return bz(t, 0, 1);
+  };
+  let a = 0, tx = RX, ty = RY, anim = 0;
+  function light() {
+    const b = (a + ty) * D, x = tx * D;
+    // the front's normal under rotateX(x) rotateY(b); the back's is opposite
+    const n = [Math.sin(b), -Math.cos(b) * Math.sin(x), Math.cos(b) * Math.cos(x)];
+    faces.forEach((f, i) => {
+      const m = i ? n.map((v) => -v) : n;
+      const d = m[0] * L[0] + m[1] * L[1] + m[2] * L[2];
+      const dx = m[0] - HALF[0], dy = m[1] - HALF[1];
+      f.style.setProperty("--dim", Math.min(0.62, 0.62 * (1 - Math.max(0, d) / L[2])).toFixed(3));
+      // brushed metal: the highlight is a band, long across the turn
+      f.style.setProperty("--glare", (0.3 * Math.exp(-(dx * dx) / 0.05 - (dy * dy) / 0.25)).toFixed(3));
+      f.style.setProperty("--gx", `${(50 + (i ? 1 : -1) * dx * 260).toFixed(1)}%`);
+    });
+    // the edge that shows is the one turned toward the screen
+    const e = Math.sin(b) > 0 ? [-Math.cos(b), 0, Math.sin(b)] : [Math.cos(b), 0, -Math.sin(b)];
+    const k = Math.max(0, e[0] * L[0] + e[2] * L[2]);
+    const v = Math.round(30 + k * 120);
+    flip.style.setProperty("--edge", `rgb(${v}, ${v}, ${v + 4})`);
+    card.classList.toggle("cc-past", Math.cos(b) < 0);
+    ground.style.setProperty("--sx", Math.max(0.05, Math.abs(Math.cos(a * D))).toFixed(3));
+    ground.style.setProperty("--lift", Math.abs(Math.sin(a * D)).toFixed(3));
+  }
+  function pose() {
+    const s = Math.sin(a * D);
+    flip.style.transform = a % 180 ? `translateZ(${(s * card.clientWidth * 0.07).toFixed(2)}px) rotateY(${a.toFixed(2)}deg)` : `rotateY(${a}deg)`;
+    light();
+  }
+  function turn(to) {
+    cancelAnimationFrame(anim);
+    if (still.matches) { a = to; light(); flip.style.transform = ""; return; }
+    const from = a, ms = TURN * Math.max(0.4, Math.abs(to - from) / 180);
+    let t0 = 0;
+    card.classList.add("cc-turning");
+    const step = (now) => {
+      if (!t0) t0 = now;
+      const p = Math.min(1, (now - t0) / ms);
+      a = p < 1 ? from + (to - from) * ease(p) : to;
+      pose();
+      if (p < 1) anim = requestAnimationFrame(step);
+      else card.classList.remove("cc-turning");
+    };
+    anim = requestAnimationFrame(step);
+  }
   card.setAttribute("aria-pressed", "false");
   card.addEventListener("click", () => {
     const on = !card.classList.contains("cc-flipped");
     card.classList.toggle("cc-flipped", on);
     card.setAttribute("aria-pressed", String(on));
+    turn(on ? 180 : 0);
   });
+  light();
 
   // tilt under a mouse, the light following it
-  const still = matchMedia("(prefers-reduced-motion: reduce)");
-  const mouse = matchMedia("(hover: hover) and (pointer: fine)");
   stage.addEventListener("pointermove", (e) => {
     if (still.matches || !mouse.matches || e.pointerType !== "mouse") return;
     const r = card.getBoundingClientRect();
     const px = Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width) * 2 - 1));
     const py = Math.max(-1, Math.min(1, ((e.clientY - r.top) / r.height) * 2 - 1));
-    card.style.setProperty("--rx", `${(-py * 7).toFixed(2)}deg`);
-    card.style.setProperty("--ry", `${(px * 9).toFixed(2)}deg`);
+    tx = -py * 7;
+    ty = px * 9;
+    card.style.setProperty("--rx", `${tx.toFixed(2)}deg`);
+    card.style.setProperty("--ry", `${ty.toFixed(2)}deg`);
     card.style.setProperty("--mx", `${((px + 1) * 50).toFixed(1)}%`);
     card.style.setProperty("--my", `${((py + 1) * 50).toFixed(1)}%`);
     card.classList.add("cc-lit");
+    light();
   });
   stage.addEventListener("pointerleave", () => {
+    tx = RX;
+    ty = RY;
     card.style.removeProperty("--rx");
     card.style.removeProperty("--ry");
     card.classList.remove("cc-lit");
+    light();
   });
 
   // both sides, one picture, at twice the card's units

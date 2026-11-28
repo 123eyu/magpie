@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "usemagpie.ai's worker: what it bundles beyond its own files",
+  "dependencies": {
+    "@cloudflare/puppeteer": "2.0.1"
+  }
+}

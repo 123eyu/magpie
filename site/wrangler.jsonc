@@ -4,9 +4,12 @@
   "name": "usemagpie",
   "main": "worker.js",
   "compatibility_date": "2026-09-01",
+  // @cloudflare/puppeteer (the card's link preview, cards.js) needs it
+  "compatibility_flags": ["nodejs_compat"],
   // the contributors page's list, from git history (credits-cli.mjs); a
-  // build that can't read git or GitHub keeps the last list, or none
-  "build": { "command": "node credits-cli.mjs wall" },
+  // build that can't read git or GitHub keeps the last list, or none;
+  // then package.json's @cloudflare/puppeteer
+  "build": { "command": "npm ci --no-audit --no-fund --silent && node credits-cli.mjs wall" },
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
@@ -27,8 +30,13 @@
   "r2_buckets": [
     { "binding": "RELEASES", "bucket_name": "magpie-releases" },
     // SHARES: shared artifacts' files, SHARES_DB the shares (shares.js)
-    { "binding": "SHARES", "bucket_name": "magpie-shares" }
+    { "binding": "SHARES", "bucket_name": "magpie-shares" },
+    // CARDS: each contributor card's link-preview picture, og/<hash>.jpg
+    // (cards.js), drawn once by BROWSER
+    { "binding": "CARDS", "bucket_name": "magpie-cards" }
   ],
+  // headless Chrome, to draw a card's link-preview picture (cards.js)
+  "browser": { "binding": "BROWSER" },
   // PLUGINS: Discover's counts, each plugin's users and likes
   // (pluginstats.js)
   "d1_databases": [
