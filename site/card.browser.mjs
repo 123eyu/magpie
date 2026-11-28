@@ -268,6 +268,48 @@ for (const [ename, engine] of [["chromium", chromium], ["webkit", webkit]]) {
     }
   }
 
+  // the card's shadow on the ground stays off the buttons under it, in
+  // either theme, at rest and tilted toward them: the buttons' row looks
+  // the same with the shadow as without it
+  for (const width of [1280, 390]) {
+    for (const theme of ["light", "dark"]) {
+      const name = `${ename} ${width} ${theme} shadow`;
+      runs++;
+      const ctx = await browser.newContext({ viewport: { width, height: 900 }, deviceScaleFactor: 2 });
+      await fakePictures(ctx);
+      const page = await ctx.newPage();
+      try {
+        await page.goto(`${base}/c/${encodeURIComponent(GH.id)}`, { waitUntil: "load" });
+        await page.waitForSelector(".cc-card[data-ready]");
+        await page.evaluate((t) => { document.documentElement.dataset.theme = t; }, theme);
+        const settled = () => page.waitForFunction(() => !document.querySelector(".cc-stage").getAnimations({ subtree: true }).length);
+        await settled();
+        const acts = await page.locator(".cc-acts").boundingBox();
+        const card = await page.locator(".cc-card").boundingBox();
+        const clip = { x: 0, y: acts.y, width, height: acts.height };
+        const ground = (on) => page.evaluate((on) => { document.querySelector(".cc-ground").style.visibility = on ? "" : "hidden"; }, on);
+        for (const [how, at] of [["at rest", [2, 2]], ["tilted", [card.x + card.width / 2, card.y + card.height + 20]]]) {
+          await page.mouse.move(...at);
+          await settled();
+          const withIt = await page.screenshot({ clip });
+          await ground(false);
+          const without = await page.screenshot({ clip });
+          await ground(true);
+          if (shots && !withIt.equals(without)) await writeFile(`${shots}/${ename}-${width}-${theme}-shadow-${how.replace(" ", "-")}.png`, withIt);
+          assert.ok(withIt.equals(without), `the card's shadow falls on the buttons ${how}`);
+        }
+        if (shots) await page.screenshot({ path: `${shots}/${ename}-${width}-${theme}-shadow.png` });
+      } catch (e) {
+        fails++;
+        console.log(`FAIL ${name}: ${e.message.replace(/\s+/g, " ").slice(0, 400)}`);
+        await ctx.close();
+        continue;
+      }
+      await ctx.close();
+      console.log(`ok ${name}`);
+    }
+  }
+
   // the link preview's picture, as headless Chrome on Cloudflare reads it
   // (cards.js browserShot): ?og leaves a 2400x1260 JPEG in window.__og
   for (const who of [GH, CJK]) {

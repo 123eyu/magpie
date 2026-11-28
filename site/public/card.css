@@ -4,7 +4,7 @@
 .cc-top a:hover { color: var(--ink); }
 :root[data-theme="dark"] .cc-top .bird { filter: invert(1); }
 .cc { max-width: 760px; width: 100%; margin: 0 auto; padding: 0 24px 72px; box-sizing: border-box; }
-.cc-stage { display: flex; justify-content: center; padding: 44px 0 30px; perspective: 1600px; animation: cc-in .3s cubic-bezier(.23, 1, .32, 1); }
+.cc-stage { display: flex; justify-content: center; padding: 44px 0 52px; perspective: 1600px; animation: cc-in .3s cubic-bezier(.23, 1, .32, 1); }
 .cc-stage[hidden] { display: none; }
 @keyframes cc-in { from { opacity: 0; transform: translateY(10px) scale(.97); } }
 .cc-card {
@@ -23,10 +23,11 @@
 .cc-card:focus-visible { outline: none; }
 .cc-card:focus-visible .cc-face { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ink3); }
 /* the shadow on the ground: narrows as the card goes edge-on, and spreads
-   as it lifts to turn (card.js sets --sx, --lift) */
+   as it lifts to turn (card.js sets --sx, --lift). Held close under the
+   card, so it fades out above the buttons, even with the card tilted */
 .cc-ground {
-  position: absolute; left: 6%; right: 6%; top: 14%; bottom: -5%;
-  border-radius: 8% / 14%; background: rgba(0, 0, 0, .42); filter: blur(22px);
+  position: absolute; left: 7%; right: 7%; top: 14%; bottom: 1%;
+  border-radius: 8% / 14%; background: rgba(0, 0, 0, .42); filter: blur(16px);
   transform: translateZ(-40px) scaleX(var(--sx, 1)); opacity: calc(1 - var(--lift, 0) * .35);
   pointer-events: none;
 }
@@ -83,7 +84,8 @@
   .cc-flipped .cc-back { opacity: 1; }
 }
 @keyframes cc-fade { from { opacity: 0; } }
-.cc-acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+/* over the stage, so no shadow of the card ever lies on them */
+.cc-acts { position: relative; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
 .cc-acts .btn { height: 38px; font-size: 14px; padding: 0 16px; }
 .cc-acts .btn:active { transform: scale(.97); }
 .cc-list { margin-top: 52px; border-top: 1px solid var(--line); padding-top: 28px; }
@@ -100,6 +102,7 @@
 .cc-list li a { text-decoration: none; }
 .cc-gone { max-width: 560px; margin: 18vh auto; padding: 0 24px; text-align: center; color: var(--ink2); }
 @media (max-width: 520px) {
-  .cc-stage { padding: 28px 0 22px; }
+  .cc-stage { padding: 28px 0 42px; }
+  .cc-ground { filter: blur(12px); }
   .cc-list h1 { font-size: 22px; }
 }
